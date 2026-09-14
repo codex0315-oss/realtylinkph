@@ -1,0 +1,56 @@
+# ─── Secrets ────────────────────────────────────────────────────────────────
+# Never commit these. They hold the DB password, Google OAuth secret, Brevo
+# SMTP password, and the Gemini / Groq / Geoapify API keys.
+.env
+.env.*
+!.env.example
+**/.env
+**/.env.*
+!**/.env.example
+
+# ─── Database dumps ─────────────────────────────────────────────────────────
+# Contain real user emails and bcrypt password hashes.
+*.sql
+*.dump
+
+# ─── Uploaded user files ────────────────────────────────────────────────────
+# Laravel's own .gitignore does NOT cover this path, and it holds agents'
+# government IDs, licence cards and live face scans plus listing photos.
+# The folders are kept (via .gitkeep) so a fresh clone still works.
+realtylinkph-backend/storage/app/public/**
+!realtylinkph-backend/storage/app/public/.gitkeep
+!realtylinkph-backend/storage/app/public/**/.gitkeep
+
+# ─── Dependencies & build output ────────────────────────────────────────────
+node_modules/
+vendor/
+.nuxt/
+.output/
+.data/
+dist/
+realtylinkph-backend/public/build/
+realtylinkph-backend/public/hot
+realtylinkph-backend/public/storage
+
+# ─── Laravel runtime ────────────────────────────────────────────────────────
+realtylinkph-backend/storage/framework/cache/*
+realtylinkph-backend/storage/framework/sessions/*
+realtylinkph-backend/storage/framework/testing/*
+realtylinkph-backend/storage/framework/views/*
+realtylinkph-backend/storage/logs/*
+realtylinkph-backend/storage/*.key
+realtylinkph-backend/bootstrap/cache/*
+!**/.gitignore
+!**/.gitkeep
+
+# ─── Editor / OS / junk ─────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+*.stackdump
+.sixth/
+.idea/
+.vscode/*
+!.vscode/extensions.json
+*.log
+npm-debug.log*
+yarn-error.log*
