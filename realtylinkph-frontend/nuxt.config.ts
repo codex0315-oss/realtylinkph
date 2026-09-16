@@ -68,6 +68,10 @@ export default defineNuxtConfig({
       reverbHost: process.env.NUXT_PUBLIC_REVERB_HOST || '127.0.0.1',
       reverbPort: process.env.NUXT_PUBLIC_REVERB_PORT || '8080',
       reverbKey:  process.env.NUXT_PUBLIC_REVERB_KEY  || '',
+      // Setting both of these switches real-time onto hosted Pusher instead of
+      // a self-hosted Reverb; leave them unset for local development.
+      pusherKey:     process.env.NUXT_PUBLIC_PUSHER_KEY     || '',
+      pusherCluster: process.env.NUXT_PUBLIC_PUSHER_CLUSTER || '',
     },
   },
 

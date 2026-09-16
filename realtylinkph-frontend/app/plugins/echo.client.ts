@@ -25,14 +25,38 @@ export default defineNuxtPlugin(() => {
    */
   const secure = import.meta.client && window.location.protocol === 'https:'
 
+  /*
+   * Two possible websocket backends, chosen by configuration alone.
+   *
+   * Reverb speaks the Pusher protocol, so hosted Pusher is a drop-in for it.
+   * Production uses Pusher because a self-hosted Reverb on a free host sleeps
+   * when idle, and a socket that takes ~50s to wake reads as "chat is broken".
+   * Local development keeps using Reverb, so nothing about `npm run dev`
+   * changes: leave NUXT_PUBLIC_PUSHER_* unset and this branch is skipped.
+   */
+  const pusherKey     = config.public.pusherKey as string
+  const pusherCluster = config.public.pusherCluster as string
+  const usePusher     = Boolean(pusherKey && pusherCluster)
+
+  const transport = usePusher
+    ? {
+        broadcaster: 'pusher' as const,
+        key:         pusherKey,
+        cluster:     pusherCluster,
+        forceTLS:    true,
+      }
+    : {
+        broadcaster:       'reverb' as const,
+        key:               config.public.reverbKey as string,
+        wsHost:            config.public.reverbHost as string,
+        wsPort:            Number(config.public.reverbPort),
+        wssPort:           Number(config.public.reverbPort),
+        forceTLS:          secure,
+        enabledTransports: secure ? ['wss'] : ['ws', 'wss'],
+      }
+
   const echo = new Echo({
-    broadcaster:       'reverb',
-    key:               config.public.reverbKey as string,
-    wsHost:            config.public.reverbHost as string,
-    wsPort:            Number(config.public.reverbPort),
-    wssPort:           Number(config.public.reverbPort),
-    forceTLS:          secure,
-    enabledTransports: secure ? ['wss'] : ['ws', 'wss'],
+    ...transport,
 
     /*
      * Custom authorizer so the bearer token is read at the moment a channel is

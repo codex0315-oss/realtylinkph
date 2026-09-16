@@ -1,9 +1,28 @@
 # Deploying RealtyLink PH
 
-Frontend → **Vercel**. Backend → **Render**. Database → Render PostgreSQL.
-Uploads → **Cloudflare R2 or AWS S3** (not the app's disk — see below).
+Frontend → **Vercel**. Backend → **Render** (Docker). Database → Render PostgreSQL.
+Real-time → **Pusher**. Uploads → **Cloudflare R2 or AWS S3**.
 
 > Work top to bottom. Steps 1–3 are the ones that break a demo if skipped.
+
+---
+
+## 0. Two things about Render that shape everything below
+
+**Render has no native PHP runtime.** It builds Node, Python, Ruby, Go, Rust
+and Elixir. PHP has to go through Docker — hence `realtylinkph-backend/Dockerfile`.
+Choose **Docker** as the language when creating the service; there is no
+build/start command to type.
+
+**The free tier has no Background Workers and no Cron Jobs.** They are paid-only.
+The queue (emails, the AI auto-reply, geocoding) and the hourly scheduled
+commands therefore run *inside the web service container*, started by
+`docker-entrypoint.sh` when `RUN_WORKER` / `RUN_SCHEDULER` are set.
+
+That is not how you would scale this, and it is worth saying out loud in a
+demo. The alternative — `QUEUE_CONNECTION=sync` — is worse: on the sync driver
+a failing job throws into the HTTP request, so one rejected email turns a
+successful registration into a 500.
 
 ---
 
@@ -36,72 +55,97 @@ private bucket and signed URLs.
 Nothing in the code needs changing: every upload goes through
 `App\Support\Uploads`, which reads `config('filesystems.uploads')`.
 
----
-
-## 2. Render — you need TWO services, not one
-
-The app runs four processes. On Render:
-
-### Web Service (the API)
-
-- **Build:** `composer install --no-dev --optimize-autoloader && php artisan config:cache && php artisan route:cache`
-- **Start:** `php artisan serve --host 0.0.0.0 --port $PORT`
-  (or `heroku-php-apache2 public/` if you prefer a real web server)
-- **Health check path:** `/up`
-
-### Background Worker (queue + scheduler)
-
-Emails, the AI auto-reply, and the document-purge job all run here. Without it
-they simply never happen.
-
-- **Start:** `php artisan queue:work --tries=3 --timeout=90`
-
-> Use `queue:work` in production (long-lived, faster). `queue:listen` is the dev
-> choice because it reloads code per job — see the README.
-
-For the hourly jobs (`properties:score-featured`,
-`agents:purge-rejected-documents`), add a **Render Cron Job**:
-
-- **Schedule:** `*/5 * * * *`
-- **Command:** `php artisan schedule:run`
-
-### Reverb (websockets) — optional but recommended
-
-Real-time chat, typing indicators and live notifications need it.
-
-- Separate **Web Service**, start: `php artisan reverb:start --host 0.0.0.0 --port $PORT`
-- Render terminates TLS, so the browser connects over **WSS on port 443**
-
-Set on the backend:
-
-```
-REVERB_HOST=realtylinkph-reverb.onrender.com
-REVERB_PORT=443
-REVERB_SCHEME=https
-```
-
-If you skip Reverb the app still works — messages just need a refresh.
+If you skip this step the app still runs — uploads just don't survive a
+redeploy. Everything else works.
 
 ---
 
-## 3. Environment — production values
+## 2. Pusher — real-time without a second service
 
-On the **Render web service and worker** (both need the full set):
+Reverb speaks the Pusher protocol, so hosted Pusher is a drop-in replacement.
+Use it in production: a self-hosted Reverb on a free instance sleeps when idle,
+and a socket that takes ~50s to wake reads as "chat is broken".
+
+1. Create a free app at **pusher.com** → Channels. Pick a cluster near you
+   (`ap1` is Singapore).
+2. From the app's **App Keys** tab, set on Render:
 
 ```
+BROADCAST_CONNECTION=pusher
+PUSHER_APP_ID=...
+PUSHER_APP_KEY=...
+PUSHER_APP_SECRET=...
+PUSHER_APP_CLUSTER=ap1
+PUSHER_SCHEME=https
+PUSHER_PORT=443
+```
+
+3. And on Vercel:
+
+```
+NUXT_PUBLIC_PUSHER_KEY=<same as PUSHER_APP_KEY>
+NUXT_PUBLIC_PUSHER_CLUSTER=<same as PUSHER_APP_CLUSTER>
+```
+
+Setting **both** Vercel variables is what switches the frontend's transport
+(see `app/plugins/echo.client.ts`). Leave them unset locally and development
+keeps using Reverb, unchanged.
+
+Skipping Pusher is survivable — messages then need a refresh to appear.
+
+---
+
+## 3. Render — create the services in this order
+
+### 3a. PostgreSQL first
+
+**New → Postgres.** Free instance. Once it is up, copy the **Internal Database
+URL** — the internal one is faster and doesn't count against bandwidth.
+
+Render gives a single URL; split it into the parts Laravel wants, or set
+`DATABASE_URL` and let Laravel parse it.
+
+### 3b. Web Service
+
+**New → Web Service** → connect the `realtylinkph` repo.
+
+| Setting | Value |
+|---|---|
+| **Language** | `Docker` |
+| **Root Directory** | `realtylinkph-backend` |
+| **Dockerfile Path** | `./Dockerfile` (relative to root directory) |
+| **Health Check Path** | `/up` |
+
+There is no build or start command — the Dockerfile and its entrypoint define
+both.
+
+---
+
+## 4. Environment — production values
+
+On the Render **web service**:
+
+```
+APP_NAME=RealtyLinkPH
 APP_ENV=production
 APP_DEBUG=false                 # ← critical: true leaks stack traces publicly
 APP_KEY=<php artisan key:generate --show>
 APP_URL=https://realtylinkph-api.onrender.com
+APP_TIMEZONE=Asia/Manila
 FRONTEND_URL=https://realtylinkph.vercel.app
+LOG_CHANNEL=stack
 LOG_LEVEL=warning
 
-DB_CONNECTION=pgsql             # Render gives you these in the DB dashboard
+DB_CONNECTION=pgsql             # from the Render Postgres dashboard
 DB_HOST=... DB_PORT=5432 DB_DATABASE=... DB_USERNAME=... DB_PASSWORD=...
 
 QUEUE_CONNECTION=database
 SESSION_DRIVER=database
 CACHE_STORE=database
+
+# Free-tier substitutes for a Background Worker and a Cron Job (see §0).
+RUN_WORKER=true
+RUN_SCHEDULER=true
 
 CORS_ALLOWED_ORIGINS=https://realtylinkph.vercel.app
 # Vercel preview deploys get generated subdomains — allow them if you use them:
@@ -111,9 +155,23 @@ GOOGLE_REDIRECT_URI=https://realtylinkph.vercel.app/google/callback
 GOOGLE_LOGIN_REDIRECT_URI=https://realtylinkph.vercel.app/auth/google/callback
 ```
 
+Generate a **fresh** `APP_KEY` for production rather than reusing the local one:
+
+```bash
+cd realtylinkph-backend && php artisan key:generate --show
+```
+
+Plus the storage block from §1, the Pusher block from §2, and your
+`GROQ_API_KEY`, `GEMINI_API_KEY`, `GEOAPIFY_KEY`, `GOOGLE_CLIENT_ID`,
+`GOOGLE_CLIENT_SECRET` and `MAIL_*` values.
+
 ⚠️ **Both Google redirect URIs must also be added to the Google Cloud console**
 (APIs & Services → Credentials → your OAuth client), or sign-in fails with
 `redirect_uri_mismatch`.
+
+⚠️ **If Brevo is not activated yet, set `MAIL_MAILER=log`.** Emails then go to
+the log instead of failing. With a real worker a failed send only fails that
+job, but it still fills the log with noise on every registration.
 
 On **Vercel**:
 
@@ -121,9 +179,8 @@ On **Vercel**:
 NUXT_PUBLIC_API_BASE=https://realtylinkph-api.onrender.com/api
 NUXT_PUBLIC_APP_URL=https://realtylinkph.vercel.app
 NUXT_PUBLIC_GEOAPIFY_KEY=...
-NUXT_PUBLIC_REVERB_HOST=realtylinkph-reverb.onrender.com
-NUXT_PUBLIC_REVERB_PORT=443
-NUXT_PUBLIC_REVERB_KEY=<same as backend REVERB_APP_KEY>
+NUXT_PUBLIC_PUSHER_KEY=...
+NUXT_PUBLIC_PUSHER_CLUSTER=ap1
 ```
 
 Vercel settings: **Root Directory** `realtylinkph-frontend`, framework Nuxt
@@ -131,25 +188,44 @@ Vercel settings: **Root Directory** `realtylinkph-frontend`, framework Nuxt
 
 ---
 
-## 4. First deploy
+## 5. First deploy — migrations
 
-```bash
-php artisan migrate --force
-php artisan db:seed --force        # optional: demo accounts + listings
-```
+Set **`RUN_MIGRATIONS=true`** on the web service before the first deploy. The
+entrypoint runs `php artisan migrate --force` on boot.
 
-Render can run these in the build command, or via a one-off Shell.
+Optionally set `RUN_SEEDERS=true` for demo accounts and listings.
 
-`php artisan storage:link` is **not** needed when `UPLOAD_DISK=s3`.
+**Remove both afterwards.** They are opt-in precisely so a routine redeploy
+never re-runs them — re-seeding duplicates data.
+
+There is no Shell on Render's free tier, which is why these exist as flags.
+
+`php artisan storage:link` is handled by the entrypoint and is a no-op when
+`UPLOAD_DISK=s3`.
 
 ---
 
-## 5. Rotate your keys
+## 6. Point the two halves at each other
+
+After Render gives you the API URL:
+
+1. Update `NUXT_PUBLIC_API_BASE` on Vercel → redeploy.
+2. Confirm `CORS_ALLOWED_ORIGINS` on Render exactly matches the Vercel domain,
+   scheme included and **no trailing slash**.
+
+A mismatch here is the single most confusing failure in this stack: the API
+answers fine in Postman and every browser request fails. Check the browser
+console for a CORS message before suspecting anything else.
+
+---
+
+## 7. Rotate your keys
 
 Every credential that has lived in a local `.env` — or been pasted into a chat
 or screenshot — should be regenerated before it protects a public service:
 Groq, Gemini, Geoapify, Google OAuth client secret, Brevo SMTP, and the
-database password.
+database password. Restrict the Geoapify key to your Vercel domain; it ships to
+the browser and is readable by anyone who opens devtools.
 
 ---
 
@@ -159,8 +235,9 @@ database password.
       idle and takes ~50s to wake.** A cold start mid-presentation looks broken.
 - [ ] Upload one listing photo and confirm it still loads after a redeploy —
       that proves S3/R2 is actually wired up.
-- [ ] Send a message between two accounts to confirm Reverb is connected.
-- [ ] Check the worker service is running (queue jobs = emails + AI replies).
+- [ ] Send a message between two accounts to confirm Pusher is connected.
+- [ ] Check the logs say `==> Starting queue worker` (queue jobs = emails +
+      AI replies).
 - [ ] Confirm `APP_DEBUG=false`: visit a bad URL and check you get a plain
       error page, not a stack trace.
 
@@ -169,6 +246,8 @@ database password.
 ## Known limitations (be ready to say these out loud)
 
 - **No automated tests.** Everything has been verified by hand.
+- **Queue and scheduler run inside the web container** because the free tier
+  has no worker. They stop while the instance is asleep.
 - **Free-tier cold starts** make the first request slow.
 - **Agent documents share the public bucket** — fine for a demo, would need a
   private bucket with signed URLs for real use.
