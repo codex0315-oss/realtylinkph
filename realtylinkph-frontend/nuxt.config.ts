@@ -24,6 +24,9 @@ export default defineNuxtConfig({
 
   app: {
     head: {
+      // Fallback title. Without one the tab shows the bare hostname; pages that
+      // call useHead({ title }) still override this.
+      title: 'RealtyLink PH — Verified real estate in the Philippines',
       link: [
         // Warm up the font origins before the stylesheet is even parsed.
         { rel: 'preconnect', href: 'https://fonts.googleapis.com' },
@@ -32,6 +35,13 @@ export default defineNuxtConfig({
           rel: 'stylesheet',
           href: 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Sora:wght@400;500;600;700;800&display=swap',
         },
+        // Brand icons — the R monogram cropped out of the full logo, since the
+        // wordmark is unreadable at 16px. `sizes: 'any'` stops Chrome from
+        // preferring a PNG over the multi-resolution .ico.
+        { rel: 'icon', href: '/favicon.ico', sizes: 'any' },
+        { rel: 'icon', type: 'image/png', sizes: '192x192', href: '/icon-192.png' },
+        { rel: 'icon', type: 'image/png', sizes: '512x512', href: '/icon-512.png' },
+        { rel: 'apple-touch-icon', sizes: '180x180', href: '/apple-touch-icon.png' },
       ],
       script: [
         {
