@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\AgentProfile;
+use App\Support\Uploads;
 use App\Models\User;
 use App\Notifications\AgentApplicationApproved;
 use App\Notifications\AgentApplicationRejected;
@@ -46,7 +47,7 @@ class AgentVerificationService
             $payload = [
                 'applicant_type'     => $type,
                 'prc_number'         => $data['prc_number'],
-                'face_image'         => Storage::disk('public')->put('agent-faces', $files['face_image']),
+                'face_image'         => Uploads::disk()->put('agent-faces', $files['face_image']),
                 'status'             => 'pending',
                 'admin_note'         => null,
                 'ai_comment'         => null,
@@ -60,10 +61,10 @@ class AgentVerificationService
             ];
 
             if ($type === 'broker') {
-                $payload['license_doc'] = Storage::disk('public')->put('agent-docs', $files['license_doc']);
+                $payload['license_doc'] = Uploads::disk()->put('agent-docs', $files['license_doc']);
             } else {
-                $payload['accreditation_doc']  = Storage::disk('public')->put('agent-docs', $files['accreditation_doc']);
-                $payload['valid_id']           = Storage::disk('public')->put('agent-docs', $files['valid_id']);
+                $payload['accreditation_doc']  = Uploads::disk()->put('agent-docs', $files['accreditation_doc']);
+                $payload['valid_id']           = Uploads::disk()->put('agent-docs', $files['valid_id']);
                 $payload['supervising_broker'] = $data['supervising_broker'] ?? null;
             }
 

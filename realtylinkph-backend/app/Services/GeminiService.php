@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Property;
+use App\Support\Uploads;
 use App\Models\User;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
@@ -392,14 +393,20 @@ class GeminiService
 
         $parts = [['text' => 'Application documents follow, each labeled:']];
         foreach ($documents as $doc) {
-            $abs = Storage::disk('public')->path($doc['path']);
-            if (! is_file($abs)) {
+            // Read through the disk, not a filesystem path: on S3/R2 there is
+            // no local file to stat, so `->path()` would have skipped every
+            // document and the AI would have reviewed an empty application.
+            if (! Uploads::disk()->exists($doc['path'])) {
+                continue;
+            }
+            $bytes = Uploads::disk()->get($doc['path']);
+            if ($bytes === null || $bytes === '') {
                 continue;
             }
             $parts[] = ['text' => "Label: {$doc['label']}"];
             $parts[] = ['inline_data' => [
-                'mime_type' => $this->mimeForPath($abs),
-                'data'      => base64_encode((string) file_get_contents($abs)),
+                'mime_type' => $this->mimeForPath($doc['path']),
+                'data'      => base64_encode($bytes),
             ]];
         }
 

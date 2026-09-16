@@ -20,6 +20,15 @@ export interface Appointment {
   can_review?: boolean
   gcal_event_id: string | null
   notes: string | null
+  /** Cancellation record — why, by whom, and whether it counted as late. */
+  cancel_reason_code?: string | null
+  cancel_reason?: string | null
+  cancel_reason_note?: string | null
+  cancelled_by_id?: number | null
+  cancelled_at?: string | null
+  late_cancellation?: boolean
+  /** True when cancelling right now would count against the canceller. */
+  cancel_is_late?: boolean
   created_at: string
   property?: Property
   buyer?: User

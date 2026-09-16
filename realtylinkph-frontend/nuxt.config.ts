@@ -15,9 +15,11 @@ export default defineNuxtConfig({
   routeRules: {
     '/dashboard/**': { ssr: false },
     '/admin/**':     { ssr: false },
-    // Proxy uploaded media so it's same-origin — lets the WebGL 360° viewer
-    // load panoramas without cross-origin (CORS) texture errors.
-    '/storage/**':   { proxy: 'http://127.0.0.1:8000/storage/**' },
+    // Proxy locally-served uploads so they're same-origin — the WebGL 360°
+    // viewer can't use a cross-origin texture. Only applies when the backend
+    // serves files itself; with UPLOAD_DISK=s3 the URLs point at the bucket
+    // and CORS on the bucket is what allows the texture (see DEPLOYMENT.md).
+    '/storage/**':   { proxy: `${process.env.NUXT_STORAGE_PROXY || 'http://127.0.0.1:8000'}/storage/**` },
   },
 
   app: {

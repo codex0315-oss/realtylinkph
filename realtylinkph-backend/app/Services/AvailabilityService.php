@@ -12,6 +12,18 @@ use Carbon\CarbonImmutable;
 
 class AvailabilityService
 {
+    /**
+     * How long a viewing takes, and therefore how far apart bookable slots are.
+     *
+     * This MUST match the Google Calendar event length — the picker offered
+     * 30-minute slots while the calendar event was created as a full hour, so
+     * 10:00 and 10:30 were both bookable and the two events overlapped in the
+     * agent's real calendar. One constant, used by both.
+     */
+    public const SLOT_MINUTES   = 60;
+    public const DAY_START_HOUR = 8;
+    public const DAY_END_HOUR   = 18;
+
     public function getAvailableSlots(User $agent, string $date): array
     {
         $day = CarbonImmutable::parse($date);
@@ -97,12 +109,12 @@ class AvailabilityService
     private function generateTimeSlots(CarbonImmutable $day): array
     {
         $slots = [];
-        $start = $day->setTime(8, 0);
-        $end   = $day->setTime(18, 0);
+        $start = $day->setTime(self::DAY_START_HOUR, 0);
+        $end   = $day->setTime(self::DAY_END_HOUR, 0);
 
         while ($start < $end) {
             $slots[] = $start->format('H:i');
-            $start   = $start->addMinutes(30);
+            $start   = $start->addMinutes(self::SLOT_MINUTES);
         }
 
         return $slots;

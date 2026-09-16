@@ -33,7 +33,9 @@ class GoogleCalendarService
         try {
             $token = $this->getAccessToken($owner);
             $start = $appointment->preferred_datetime;
-            $end   = $start->copy()->addHour();
+            // Same length as a bookable slot — a hard-coded hour against
+            // 30-minute slots produced overlapping events in the real calendar.
+            $end   = $start->copy()->addMinutes(AvailabilityService::SLOT_MINUTES);
 
             $response = Http::withToken($token)->post(
                 self::CALENDAR_API . '/calendars/primary/events',

@@ -8,8 +8,15 @@ const props = defineProps<{ src: string }>()
 const el = ref<HTMLElement | null>(null)
 let viewer: Viewer | null = null
 
-// Strip the backend origin so the panorama is loaded same-origin via the
-// /storage proxy — WebGL textures from a different origin are CORS-blocked.
+/**
+ * WebGL refuses a cross-origin texture unless the server sends CORS headers.
+ *
+ * Two cases:
+ *  - backend-served (`…/storage/…`) → strip the origin so it loads through this
+ *    app's /storage proxy, i.e. same-origin.
+ *  - bucket-served (S3/R2) → there is no proxy; the URL is used as-is and the
+ *    bucket's own CORS policy must allow this origin (see DEPLOYMENT.md).
+ */
 function sameOrigin(url: string): string {
   const i = url.indexOf('/storage/')
   return i >= 0 ? url.slice(i) : url

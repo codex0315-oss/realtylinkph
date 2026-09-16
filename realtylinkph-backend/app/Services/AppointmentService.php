@@ -42,14 +42,25 @@ class AppointmentService
                 throw new \RuntimeException('You already have a scheduled viewing for this property.');
             }
 
-            $appointment = Appointment::create([
-                'property_id'        => $property->id,
-                'buyer_id'           => $buyer->id,
-                'agent_id'           => $agent->id,
-                'preferred_datetime' => $datetime,
-                'status'             => 'pending',
-                'notes'              => $data['notes'] ?? null,
-            ]);
+            /*
+             * The availability check above can be passed by two requests at
+             * once — both read "free" before either writes. A partial unique
+             * index on (agent_id, preferred_datetime) for live bookings is the
+             * real guard; catch its violation and report it the same way as a
+             * slot that was already taken, rather than surfacing a 500.
+             */
+            try {
+                $appointment = Appointment::create([
+                    'property_id'        => $property->id,
+                    'buyer_id'           => $buyer->id,
+                    'agent_id'           => $agent->id,
+                    'preferred_datetime' => $datetime,
+                    'status'             => 'pending',
+                    'notes'              => $data['notes'] ?? null,
+                ]);
+            } catch (\Illuminate\Database\UniqueConstraintViolationException) {
+                throw new \RuntimeException('Someone just booked that time slot. Please pick another.');
+            }
 
             $this->notificationService->send($agent, 'new_appointment', [
                 'appointment_id' => $appointment->id,
@@ -110,15 +121,38 @@ class AppointmentService
         return $appointment->fresh(['property', 'buyer', 'agent']);
     }
 
-    public function cancel(Appointment $appointment, ?string $reason = null, ?User $canceller = null): Appointment
-    {
+    /**
+     * Cancel a viewing, on the record.
+     *
+     * The reason is stored, not discarded, and a CONFIRMED viewing dropped
+     * inside Appointment::LATE_WINDOW_HOURS is flagged as a late cancellation —
+     * that flag is what feeds the canceller's reliability figure and, past
+     * User::STRIKE_LIMIT in a rolling month, a temporary booking lockout.
+     */
+    public function cancel(
+        Appointment $appointment,
+        ?string $reasonCode = null,
+        ?User $canceller = null,
+        ?string $reasonNote = null,
+    ): Appointment {
         $byBuyer = $canceller !== null && $canceller->id === $appointment->buyer_id;
+        $isLate  = $canceller !== null && $appointment->wouldBeLateCancellation();
 
-        $appointment = DB::transaction(function () use ($appointment, $byBuyer): Appointment {
+        $appointment = DB::transaction(function () use ($appointment, $byBuyer, $canceller, $reasonCode, $reasonNote, $isLate): Appointment {
             $appointment->loadMissing(['agent', 'buyer', 'property']);
-            $appointment->update(['status' => 'cancelled']);
+            $appointment->update([
+                'status'             => 'cancelled',
+                'cancel_reason_code' => $reasonCode,
+                'cancel_reason_note' => $reasonNote,
+                'cancelled_by_id'    => $canceller?->id,
+                'cancelled_at'       => now(),
+                'late_cancellation'  => $isLate,
+            ]);
 
-            $title = $appointment->property->title;
+            $title  = $appointment->property->title;
+            $labels = Appointment::reasonsFor(! $byBuyer);
+            $why    = $reasonCode ? ($labels[$reasonCode] ?? $reasonCode) : null;
+            $suffix = $why ? " Reason: {$why}." : '';
 
             if ($byBuyer) {
                 // Buyer cancelled — tell the buyer + the agent.
@@ -130,19 +164,33 @@ class AppointmentService
                 $this->notificationService->send($appointment->agent, 'appointment_cancelled', [
                     'appointment_id' => $appointment->id,
                     'property_title' => $title,
-                    'message'        => "{$appointment->buyer->name} cancelled their viewing for {$title}.",
+                    'message'        => "{$appointment->buyer->name} cancelled their viewing for {$title}.{$suffix}",
                 ]);
             } else {
                 // Agent (or system) cancelled — make sure the buyer is informed.
                 $this->notificationService->send($appointment->buyer, 'appointment_cancelled', [
                     'appointment_id' => $appointment->id,
                     'property_title' => $title,
-                    'message'        => "Your viewing for {$title} was cancelled.",
+                    'message'        => "Your viewing for {$title} was cancelled.{$suffix}",
                 ]);
             }
 
             return $appointment;
         });
+
+        // Tell the canceller plainly that this one counted, and where they stand.
+        if ($isLate && $canceller !== null) {
+            $strikes = $canceller->recentStrikes();
+            $left    = max(0, User::STRIKE_LIMIT - $strikes);
+
+            $this->notificationService->send($canceller, 'late_cancellation_recorded', [
+                'appointment_id' => $appointment->id,
+                'strikes'        => $strikes,
+                'message'        => $left > 0
+                    ? "That viewing was cancelled within " . Appointment::LATE_WINDOW_HOURS . " hours of the slot, so it counts toward your reliability ({$strikes} in the last " . User::STRIKE_WINDOW_DAYS . " days). {$left} more and booking is paused for " . User::LOCKOUT_DAYS . " days."
+                    : "That was your {$strikes}th late cancellation in " . User::STRIKE_WINDOW_DAYS . " days, so booking viewings is paused for " . User::LOCKOUT_DAYS . " days.",
+            ]);
+        }
 
         // Email both parties — only when the buyer cancels (queued, outside the transaction).
         if ($byBuyer && $canceller !== null) {

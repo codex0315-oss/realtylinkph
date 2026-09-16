@@ -17,6 +17,23 @@ return [
 
     /*
     |--------------------------------------------------------------------------
+    | Uploads disk
+    |--------------------------------------------------------------------------
+    |
+    | Where user uploads live — listing photos, avatars, and agent documents.
+    | Local disk for development; an S3-compatible bucket (AWS S3, Cloudflare
+    | R2) in production, because hosts like Render have an EPHEMERAL filesystem
+    | that is wiped on every deploy, restart and sleep/wake. Anything written
+    | to local disk there is gone by the next deploy.
+    |
+    | Code must never hardcode 'public' — use config('filesystems.uploads').
+    |
+    */
+
+    'uploads' => env('UPLOAD_DISK', 'public'),
+
+    /*
+    |--------------------------------------------------------------------------
     | Filesystem Disks
     |--------------------------------------------------------------------------
     |

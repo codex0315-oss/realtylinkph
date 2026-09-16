@@ -140,6 +140,21 @@ function goBack() {
             </span>
             <span v-if="profile.agent_profile?.prc_number">PRC: {{ profile.agent_profile.prc_number }}</span>
           </div>
+
+          <!-- Viewing reliability. An agent is a business, so how reliably they
+               honour confirmed viewings is fair for a buyer to see. Hidden until
+               there are enough viewings to mean anything. -->
+          <p
+            v-if="profile.reliability?.has_enough"
+            class="mt-2.5 inline-flex items-center gap-1.5 text-xs font-semibold px-2.5 py-1 rounded-full"
+            :class="(profile.reliability.rate ?? 100) >= 80
+              ? 'bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
+              : 'bg-amber-50 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'"
+          >
+            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+            Kept {{ profile.reliability.kept }} of
+            {{ profile.reliability.kept + profile.reliability.missed }} confirmed viewings
+          </p>
         </div>
 
         <!-- Rate this agent -->

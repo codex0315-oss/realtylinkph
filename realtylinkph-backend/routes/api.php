@@ -28,14 +28,14 @@ use Illuminate\Support\Facades\Route;
 
 // ─── Public routes ───────────────────────────────────────────────────────────
 
-Route::post('/register', [AuthController::class, 'register']);
-Route::post('/login', [AuthController::class, 'login']);
+Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:10,1');
+Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
 
 // Google sign-in / sign-up (find-or-create, buyer accounts)
 Route::get('/auth/google/redirect', [GoogleAuthController::class, 'redirect']);
-Route::post('/auth/google/callback', [GoogleAuthController::class, 'callback']);
-Route::post('/forgot-password', [AuthController::class, 'forgotPassword']);
-Route::post('/reset-password', [AuthController::class, 'resetPassword']);
+Route::post('/auth/google/callback', [GoogleAuthController::class, 'callback'])->middleware('throttle:20,1');
+Route::post('/forgot-password', [AuthController::class, 'forgotPassword'])->middleware('throttle:5,1');
+Route::post('/reset-password', [AuthController::class, 'resetPassword'])->middleware('throttle:10,1');
 
 // Email verification link (clicked from the verification email). Public but
 // protected by Laravel's signed-URL signature. Defining this named route is
@@ -62,7 +62,7 @@ Route::get('/properties', [PropertyController::class, 'index']);
 Route::get('/properties/featured', [PropertyController::class, 'featured']); // before {property}
 Route::get('/properties/home-rows', [PropertyController::class, 'homeRows']); // before {property}
 Route::get('/properties/{property}', [PropertyController::class, 'show']);
-Route::post('/properties/{property}/inquiries', [InquiryController::class, 'submit']);
+Route::post('/properties/{property}/inquiries', [InquiryController::class, 'submit'])->middleware('throttle:5,1');
 
 // Public agent directory (homepage top agents + agent profile page)
 Route::get('/agents', [AgentController::class, 'index']);
@@ -76,7 +76,7 @@ Route::get('/agents/{agent}/availability', [AvailabilityController::class, 'slot
 Route::get('/agents/{agent}/unavailable-dates', [AvailabilityController::class, 'unavailableDates']);
 
 // Gemini Q&A (public — no auth needed to ask a question about a listing)
-Route::post('/properties/{property}/ask', [GeminiController::class, 'askQuestion']);
+Route::post('/properties/{property}/ask', [GeminiController::class, 'askQuestion'])->middleware('throttle:10,1');
 
 // ─── Authenticated routes ────────────────────────────────────────────────────
 

@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Property;
+use App\Support\Uploads;
 use App\Models\PropertyPhoto;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
@@ -16,7 +17,7 @@ class PropertyPhotoService
     {
         return DB::transaction(function () use ($property, $file, $is360): PropertyPhoto {
             // Store the uploaded image as-is (no GD/Imagick driver available in this env).
-            $filename = $file->store('properties/' . $property->id, 'public');
+            $filename = $file->store('properties/' . $property->id, Uploads::name());
 
             $nextOrder = $property->photos()->max('sort_order') + 1;
 
@@ -40,7 +41,7 @@ class PropertyPhotoService
 
     public function delete(PropertyPhoto $photo): void
     {
-        Storage::disk('public')->delete($photo->url);
+        Uploads::disk()->delete($photo->url);
         $photo->delete();
     }
 }

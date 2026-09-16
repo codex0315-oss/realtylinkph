@@ -17,14 +17,22 @@ export default defineNuxtPlugin(() => {
   // (/broadcasting/auth), NOT under the /api prefix — strip /api so we don't 404.
   const authEndpoint = `${(config.public.apiBase as string).replace(/\/api\/?$/, '')}/broadcasting/auth`
 
+  /*
+   * TLS is decided by the page, not hardcoded. `forceTLS: false` meant the
+   * client always tried ws:// — which a browser on an HTTPS page (Vercel)
+   * refuses outright as mixed content, silently killing all real-time.
+   * Locally the page is http:// so this stays false, exactly as before.
+   */
+  const secure = import.meta.client && window.location.protocol === 'https:'
+
   const echo = new Echo({
     broadcaster:       'reverb',
     key:               config.public.reverbKey as string,
     wsHost:            config.public.reverbHost as string,
     wsPort:            Number(config.public.reverbPort),
     wssPort:           Number(config.public.reverbPort),
-    forceTLS:          false,
-    enabledTransports: ['ws', 'wss'],
+    forceTLS:          secure,
+    enabledTransports: secure ? ['wss'] : ['ws', 'wss'],
 
     /*
      * Custom authorizer so the bearer token is read at the moment a channel is

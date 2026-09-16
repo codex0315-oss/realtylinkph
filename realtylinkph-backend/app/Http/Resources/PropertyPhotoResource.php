@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
+use App\Support\Uploads;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 class PropertyPhotoResource extends JsonResource
@@ -14,7 +15,7 @@ class PropertyPhotoResource extends JsonResource
         return [
             'id'          => $this->id,
             'property_id' => $this->property_id,
-            'url'         => asset('storage/' . $this->url),
+            'url'         => Uploads::url($this->url),
             'is_360'      => $this->is_360,
             'sort_order'  => $this->sort_order,
         ];

@@ -83,6 +83,94 @@ class User extends Authenticatable implements MustVerifyEmail
         return $this->last_seen_at !== null && $this->last_seen_at->gt(now()->subMinutes(2));
     }
 
+    // ─── Viewing reliability ─────────────────────────────────────────────────
+    //
+    // Cancelling a confirmed viewing at short notice wastes the other party's
+    // day. It isn't always bad faith, so a single one costs nothing visible —
+    // what counts is a pattern. Strikes expire after STRIKE_WINDOW_DAYS, so a
+    // bad month doesn't follow someone forever.
+
+    /** Late cancellations inside the rolling window before a lockout applies. */
+    public const STRIKE_WINDOW_DAYS = 30;
+    public const STRIKE_LIMIT       = 5;
+    public const LOCKOUT_DAYS       = 7;
+
+    /** Reliability is only meaningful once there's a sample this size. */
+    public const RELIABILITY_MIN_SAMPLE = 3;
+
+    /** Late cancellations by this user in the rolling window (waived ones excluded). */
+    public function recentStrikes(): int
+    {
+        return Appointment::where('cancelled_by_id', $this->id)
+            ->where('late_cancellation', true)
+            ->whereNull('strike_waived_at')
+            ->where('cancelled_at', '>=', now()->subDays(self::STRIKE_WINDOW_DAYS))
+            ->count();
+    }
+
+    /**
+     * When this user may book/accept viewings again, or null if not locked out.
+     * Dated from their most recent strike, so the clock starts at the offence
+     * rather than at the moment they hit the limit.
+     */
+    public function bookingLockedUntil(): ?\Illuminate\Support\Carbon
+    {
+        if ($this->recentStrikes() < self::STRIKE_LIMIT) {
+            return null;
+        }
+
+        $last = Appointment::where('cancelled_by_id', $this->id)
+            ->where('late_cancellation', true)
+            ->whereNull('strike_waived_at')
+            ->max('cancelled_at');
+
+        if (! $last) {
+            return null;
+        }
+
+        $until = \Illuminate\Support\Carbon::parse($last)->addDays(self::LOCKOUT_DAYS);
+
+        return $until->isFuture() ? $until : null;
+    }
+
+    public function isBookingLocked(): bool
+    {
+        return $this->bookingLockedUntil() !== null;
+    }
+
+    /**
+     * How reliably this user honours confirmed viewings.
+     *
+     * kept   — viewings that reached "completed"
+     * missed — confirmed viewings they cancelled late
+     * rate   — kept / (kept + missed), or null below the minimum sample, so a
+     *          first-timer is never shown as "0% reliable" on one data point.
+     *
+     * @return array{kept:int, missed:int, rate:?int, has_enough:bool}
+     */
+    public function viewingReliability(): array
+    {
+        $isAgent = $this->role_type === 'agent';
+        $column  = $isAgent ? 'agent_id' : 'buyer_id';
+
+        $kept = Appointment::where($column, $this->id)->where('status', 'completed')->count();
+
+        $missed = Appointment::where($column, $this->id)
+            ->where('cancelled_by_id', $this->id)
+            ->where('late_cancellation', true)
+            ->whereNull('strike_waived_at')
+            ->count();
+
+        $total = $kept + $missed;
+
+        return [
+            'kept'       => $kept,
+            'missed'     => $missed,
+            'rate'       => $total >= self::RELIABILITY_MIN_SAMPLE ? (int) round($kept / $total * 100) : null,
+            'has_enough' => $total >= self::RELIABILITY_MIN_SAMPLE,
+        ];
+    }
+
     public function hasGoogleCalendar(): bool
     {
         return $this->google_access_token !== null;

@@ -62,9 +62,16 @@ export const useAppointment = () => {
     }
   }
 
-  async function cancel(appointmentId: number, reason?: string): Promise<boolean> {
+  /**
+   * Cancel a viewing. A reason category is required by the API — a confirmed
+   * viewing can no longer be dropped without one.
+   */
+  async function cancel(appointmentId: number, reasonCode: string, reasonNote?: string): Promise<boolean> {
     try {
-      await api.post(`/appointments/${appointmentId}/cancel`, { reason })
+      await api.post(`/appointments/${appointmentId}/cancel`, {
+        reason_code: reasonCode,
+        reason_note: reasonNote || undefined,
+      })
       return true
     } catch (e) {
       error.value = extractError(e)
@@ -87,7 +94,13 @@ export const useAppointment = () => {
 
 function extractError(e: unknown): string {
   if (typeof e === 'object' && e !== null) {
-    const data = (e as { data?: { message?: string } }).data
+    const data = (e as { data?: { message?: string; errors?: Record<string, string[]> } }).data
+    // Prefer the field message — the API wraps validation in a generic
+    // "Validation failed.", which wouldn't say which field was wrong.
+    if (data?.errors) {
+      const first = Object.values(data.errors).flat().filter(Boolean)[0]
+      if (first) return first
+    }
     if (data?.message) return data.message
   }
   return 'Something went wrong.'
