@@ -133,8 +133,11 @@ APP_KEY=<php artisan key:generate --show>
 APP_URL=https://realtylinkph-api.onrender.com
 APP_TIMEZONE=Asia/Manila
 FRONTEND_URL=https://realtylinkph.vercel.app
-LOG_CHANNEL=stack
-LOG_LEVEL=warning
+LOG_CHANNEL=stderr              # ← not `stack`: that writes to a file inside the
+LOG_LEVEL=warning               #   container, invisible in Render's log viewer
+
+MAIL_FROM_ADDRESS=you@example.com
+MAIL_FROM_NAME=RealtyLinkPH
 
 DB_CONNECTION=pgsql             # from the Render Postgres dashboard
 DB_HOST=... DB_PORT=5432 DB_DATABASE=... DB_USERNAME=... DB_PASSWORD=...
