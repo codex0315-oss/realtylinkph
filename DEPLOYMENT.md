@@ -1,6 +1,6 @@
 # Deploying RealtyLink PH
 
-Frontend → **Vercel**. Backend → **Render** (Docker). Database → Render PostgreSQL.
+Frontend → **Vercel**. Backend → **Render** (Docker). Database → **Neon** Postgres.
 Real-time → **Pusher**. Uploads → **Cloudflare R2 or AWS S3**.
 
 > Work top to bottom. Steps 1–3 are the ones that break a demo if skipped.
@@ -124,13 +124,21 @@ Skipping Pusher is survivable — messages then need a refresh to appear.
 
 ## 3. Render — create the services in this order
 
-### 3a. PostgreSQL first
+### 3a. Database first — Neon, not Render Postgres
 
-**New → Postgres.** Free instance. Once it is up, copy the **Internal Database
-URL** — the internal one is faster and doesn't count against bandwidth.
+**Render's free Postgres is deleted 30 days after creation.** Ours would have
+expired on the day of the defense. Neon's free tier has no expiry.
 
-Render gives a single URL; split it into the parts Laravel wants, or set
-`DATABASE_URL` and let Laravel parse it.
+1. **neon.tech** → New project → region **AWS US West 2 (Oregon)** — the same
+   region as the Render web service, so queries don't cross the Pacific.
+2. **Connect** → turn **Connection pooling OFF** (Laravel's prepared statements
+   and the pooler don't always agree) → Show password → copy the values.
+3. Set on Render: `DB_HOST`, `DB_PORT=5432`, `DB_DATABASE=neondb`,
+   `DB_USERNAME`, `DB_PASSWORD`, and **`DB_SSLMODE=require`** — Neon refuses
+   plaintext connections.
+
+The compute suspends after 5 idle minutes and wakes in ~1–2 s on the next
+query; behind Render's own cold start it isn't noticeable.
 
 ### 3b. Web Service
 
@@ -166,8 +174,10 @@ LOG_LEVEL=warning               #   container, invisible in Render's log viewer
 MAIL_FROM_ADDRESS=you@example.com
 MAIL_FROM_NAME=RealtyLinkPH
 
-DB_CONNECTION=pgsql             # from the Render Postgres dashboard
-DB_HOST=... DB_PORT=5432 DB_DATABASE=... DB_USERNAME=... DB_PASSWORD=...
+DB_CONNECTION=pgsql             # from the Neon Connect panel (pooling OFF)
+DB_HOST=ep-....us-west-2.aws.neon.tech
+DB_PORT=5432 DB_DATABASE=neondb DB_USERNAME=neondb_owner DB_PASSWORD=...
+DB_SSLMODE=require
 
 QUEUE_CONNECTION=database
 SESSION_DRIVER=database
