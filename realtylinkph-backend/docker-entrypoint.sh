@@ -21,9 +21,13 @@ php artisan route:cache
 # and tolerated if it fails so a missing symlink can't take the service down.
 php artisan storage:link --force >/dev/null 2>&1 || true
 
-# Opt-in, so an ordinary redeploy never silently migrates the database.
-# Set RUN_MIGRATIONS=true for the first deploy, then remove it.
-if [ "${RUN_MIGRATIONS}" = "true" ]; then
+# Always. `migrate` only applies migrations that haven't run yet, so this is a
+# no-op on a routine deploy and exactly what's needed after a schema change.
+# It used to be opt-in behind RUN_MIGRATIONS, which meant every new migration
+# required remembering to flip a flag — and forgetting produced 500s with
+# "column does not exist" until someone worked out why. Set
+# SKIP_MIGRATIONS=true to opt out for a specific deploy.
+if [ "${SKIP_MIGRATIONS}" != "true" ]; then
     echo "==> Running migrations"
     php artisan migrate --force
 fi

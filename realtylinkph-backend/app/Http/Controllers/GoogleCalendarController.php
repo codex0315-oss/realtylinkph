@@ -20,7 +20,11 @@ class GoogleCalendarController extends Controller
             'client_id'     => config('services.google.client_id'),
             'redirect_uri'  => config('services.google.redirect'),
             'response_type' => 'code',
-            'scope'         => 'https://www.googleapis.com/auth/calendar.events',
+            // Non-sensitive scope: only calendars this app creates, never the
+            // user's own. `calendar.events` (write to primary) is classed as
+            // sensitive and shows an "unverified app" wall until Google's
+            // verification review — weeks, and needs a hosted privacy policy.
+            'scope'         => 'https://www.googleapis.com/auth/calendar.app.created',
             'access_type'   => 'offline',
             'prompt'        => 'consent',
         ]);
@@ -48,7 +52,18 @@ class GoogleCalendarController extends Controller
             return ApiResponse::error('Failed to exchange Google authorization code.', [], 400);
         }
 
-        $this->service->storeTokens($request->user(), $response->json());
+        $user = $request->user();
+        $this->service->storeTokens($user, $response->json());
+
+        // Create the app's calendar now rather than on the first viewing, so
+        // `has_gcal` is only ever true when sync will actually work. A token
+        // that can't produce a calendar is a broken connection, not a
+        // connection — unwind it and let the user retry.
+        if ($this->service->ensureCalendar($user) === null) {
+            $this->service->disconnect($user);
+
+            return ApiResponse::error('Google signed in, but the RealtyLink calendar could not be created. Please try again.', [], 502);
+        }
 
         return ApiResponse::success(null, 'Google Calendar connected.', 200);
     }

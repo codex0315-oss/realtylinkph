@@ -164,7 +164,7 @@ onMounted(() => {
   // card reflects reality even after client-side navigation.
   fetchMe()
 
-  if (route.query.gcal === 'connected') { gcalMsg.value = 'Google Calendar connected — your viewings will sync automatically.'; gcalErr.value = false }
+  if (route.query.gcal === 'connected') { gcalMsg.value = 'Google Calendar connected — confirmed viewings will appear in a "RealtyLink PH Viewings" calendar in your Google account.'; gcalErr.value = false }
   else if (route.query.gcal === 'error') { gcalMsg.value = 'Could not connect Google Calendar. Please try again.'; gcalErr.value = true }
   if (route.query.gcal) {
     const q = { ...route.query }
@@ -421,7 +421,7 @@ const memberSince = computed(() =>
     <!-- ── Google Calendar ── -->
     <div class="bg-white dark:bg-[#10264D] rounded-2xl border border-gray-200 dark:border-white/10 p-6 sm:p-8 transition-colors">
       <h2 class="font-bold text-brand-navy dark:text-white mb-1">Google Calendar</h2>
-      <p class="text-xs text-gray-500 dark:text-white/40 mb-5">Automatically add your confirmed property viewings to your Google Calendar.</p>
+      <p class="text-xs text-gray-500 dark:text-white/40 mb-5">Confirmed viewings are added to a dedicated "RealtyLink PH Viewings" calendar in your Google account — it never touches your other calendars.</p>
 
       <div v-if="gcalMsg" class="mb-4 text-sm rounded-xl px-4 py-3 border" :class="gcalErr ? 'text-red-600 bg-red-50 border-red-200' : 'text-emerald-700 bg-emerald-50 border-emerald-200'">
         {{ gcalMsg }}

@@ -229,17 +229,20 @@ Vercel settings: **Root Directory** `realtylinkph-frontend`, framework Nuxt
 
 ---
 
-## 5. First deploy — migrations
+## 5. Migrations and seeding
 
-Set **`RUN_MIGRATIONS=true`** on the web service before the first deploy. The
-entrypoint runs `php artisan migrate --force` on boot.
+**Migrations run on every boot.** The entrypoint calls
+`php artisan migrate --force`, which only applies migrations that haven't run
+yet — a no-op on a routine deploy, and exactly right after a schema change.
+Set `SKIP_MIGRATIONS=true` to opt out of a specific deploy.
 
-Optionally set `RUN_SEEDERS=true` for demo accounts and listings.
+**Seeding is opt-in.** Set `RUN_SEEDERS=true` for one deploy to create the
+demo admin (`admin@realtylinkph.test` / `password123`), demo agents and
+listings, then remove it. The seeder is idempotent — it checks for the demo
+admin and does nothing if present — so leaving it on is wasteful, not
+dangerous.
 
-**Remove both afterwards.** They are opt-in precisely so a routine redeploy
-never re-runs them — re-seeding duplicates data.
-
-There is no Shell on Render's free tier, which is why these exist as flags.
+There is no Shell on Render's free tier, which is why these are boot flags.
 
 `php artisan storage:link` is handled by the entrypoint and is a no-op when
 `UPLOAD_DISK=s3`.
