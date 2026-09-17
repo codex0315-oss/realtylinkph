@@ -16,6 +16,7 @@ const roleFilter = ref('')      // '' = all
 const search     = ref('')
 const page       = ref(1)
 const busy       = ref<number | null>(null)
+const selected   = ref<Set<number>>(new Set())
 
 const FILTERS = [
   { key: '',      label: 'All' },
@@ -26,6 +27,9 @@ const FILTERS = [
 
 async function load() {
   await fetchUsers({ page: page.value, role: roleFilter.value || undefined, search: search.value || undefined })
+  // A selection only ever refers to rows on screen; once the rows change it
+  // would be a hidden list of ids the admin can no longer see or verify.
+  selected.value = new Set()
 }
 await Promise.all([load(), fetchStats()])
 
@@ -92,6 +96,70 @@ async function remove(u: User) {
   } else {
     toast.error(error.value || 'Could not remove this user.')
   }
+}
+
+// ── Bulk delete ──
+//
+// Sequential, one request per account, on purpose: the existing endpoint's
+// guards (not yourself, not the last admin) stay in force, one failure
+// doesn't abort the rest, and the progress bar reports work actually done
+// rather than an animation.
+
+/** Rows that can be bulk-selected. Admins are excluded — they're removed one
+ *  at a time via their own button, where the last-admin rule is explained.
+ *  Bulk delete exists for clearing dummy buyers and agents. */
+const selectable    = computed(() => users.value.filter(u => u.id !== me.value && !isAdminRole(u.role_type)))
+const allSelected   = computed(() => selectable.value.length > 0 && selectable.value.every(u => selected.value.has(u.id)))
+const someSelected  = computed(() => selected.value.size > 0 && !allSelected.value)
+const selectedUsers = computed(() => users.value.filter(u => selected.value.has(u.id)))
+
+function toggleAll() {
+  const next = new Set(selected.value)
+  if (allSelected.value) selectable.value.forEach(u => next.delete(u.id))
+  else                   selectable.value.forEach(u => next.add(u.id))
+  selected.value = next
+}
+function toggleOne(id: number) {
+  const next = new Set(selected.value)
+  if (next.has(id)) next.delete(id)
+  else next.add(id)
+  selected.value = next
+}
+function clearSelection() { selected.value = new Set() }
+
+const bulk = reactive({ open: false, running: false, finished: false, total: 0, done: 0, failed: 0, current: '' })
+const bulkProgress = computed(() => bulk.total ? Math.round(((bulk.done + bulk.failed) / bulk.total) * 100) : 0)
+
+function openBulk() {
+  if (!selected.value.size) return
+  Object.assign(bulk, { open: true, running: false, finished: false, total: selected.value.size, done: 0, failed: 0, current: '' })
+}
+/** The modal can't be dismissed mid-run — closing it wouldn't stop the deletes. */
+function closeBulk() {
+  if (bulk.running) return
+  bulk.open = false
+}
+
+async function runBulk() {
+  // Snapshot so the selection can't shift under us while requests are in flight.
+  const targets = selectedUsers.value.map(u => ({ id: u.id, name: u.name }))
+  bulk.total   = targets.length
+  bulk.running = true
+
+  for (const t of targets) {
+    bulk.current = t.name
+    const ok = await deleteUser(t.id)
+    if (ok) bulk.done++
+    else    bulk.failed++
+  }
+
+  bulk.running  = false
+  bulk.finished = true
+  bulk.current  = ''
+  await Promise.all([load(), fetchStats()])
+
+  if (bulk.failed === 0) toast.success(`${bulk.done} account${bulk.done === 1 ? '' : 's'} deleted`)
+  else                   toast.error(`${bulk.done} deleted · ${bulk.failed} could not be removed`)
 }
 
 // ── Create admin ──
@@ -169,6 +237,25 @@ async function submitCreate() {
       </div>
     </div>
 
+    <!-- Selection bar — only exists while something is selected -->
+    <Transition name="bar">
+      <div
+        v-if="selected.size"
+        class="flex items-center justify-between gap-3 mb-3 px-4 py-2.5 rounded-xl bg-brand-navy text-white"
+      >
+        <p class="text-sm font-semibold">
+          {{ selected.size }} account{{ selected.size === 1 ? '' : 's' }} selected
+        </p>
+        <div class="flex items-center gap-2">
+          <button class="text-xs font-semibold text-white/70 hover:text-white px-3 py-1.5 transition-colors" @click="clearSelection">Clear</button>
+          <button
+            class="text-xs font-bold bg-red-500 hover:bg-red-600 text-white rounded-lg px-3.5 py-1.5 transition-colors"
+            @click="openBulk"
+          >Delete selected</button>
+        </div>
+      </div>
+    </Transition>
+
     <!-- Table -->
     <div class="bg-white rounded-2xl border border-gray-200 overflow-hidden">
       <div v-if="loading" class="p-4 space-y-2">
@@ -180,15 +267,40 @@ async function submitCreate() {
       <table v-else class="w-full text-sm">
         <thead>
           <tr class="text-left text-[11px] font-bold uppercase tracking-wide text-gray-400 border-b border-gray-100">
-            <th class="px-4 py-3">User</th>
+            <th class="pl-4 pr-1 py-3 w-8">
+              <input
+                type="checkbox"
+                class="h-4 w-4 rounded border-gray-300 text-brand-navy focus:ring-brand-gold/40 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                :checked="allSelected"
+                :indeterminate.prop="someSelected"
+                :disabled="!selectable.length"
+                :title="selectable.length ? 'Select all on this page' : 'Nothing on this page can be bulk-deleted'"
+                @change="toggleAll"
+              />
+            </th>
+            <th class="px-3 py-3">User</th>
             <th class="px-4 py-3 hidden sm:table-cell">Role</th>
             <th class="px-4 py-3 hidden md:table-cell">Joined</th>
             <th class="px-4 py-3 text-right">Actions</th>
           </tr>
         </thead>
         <tbody>
-          <tr v-for="u in users" :key="u.id" class="border-b border-gray-50 last:border-0 hover:bg-gray-50/60 transition-colors">
-            <td class="px-4 py-3">
+          <tr
+            v-for="u in users"
+            :key="u.id"
+            class="border-b border-gray-50 last:border-0 transition-colors"
+            :class="selected.has(u.id) ? 'bg-brand-gold/[0.07]' : 'hover:bg-gray-50/60'"
+          >
+            <td class="pl-4 pr-1 py-3">
+              <input
+                v-if="u.id !== me && !isAdminRole(u.role_type)"
+                type="checkbox"
+                class="h-4 w-4 rounded border-gray-300 text-brand-navy focus:ring-brand-gold/40 cursor-pointer"
+                :checked="selected.has(u.id)"
+                @change="toggleOne(u.id)"
+              />
+            </td>
+            <td class="px-3 py-3">
               <div class="flex items-center gap-3 min-w-0">
                 <div class="relative flex-shrink-0">
                   <AppAvatar :name="u.name" :src="u.avatar" size="sm" />
@@ -258,5 +370,97 @@ async function submitCreate() {
         </div>
       </div>
     </AppModal>
+
+    <!-- Bulk delete: confirm → progress → summary, in one dialog -->
+    <AppModal :open="bulk.open" size="sm" @close="closeBulk">
+      <div class="p-6">
+
+        <!-- 1. Confirm -->
+        <template v-if="!bulk.running && !bulk.finished">
+          <div class="flex items-start gap-3 mb-4">
+            <div class="h-10 w-10 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0">
+              <svg class="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
+              </svg>
+            </div>
+            <div>
+              <h3 class="font-bold text-brand-navy text-base leading-snug">
+                Delete {{ bulk.total }} account{{ bulk.total === 1 ? '' : 's' }}?
+              </h3>
+              <p class="text-sm text-gray-500 mt-1">This permanently deletes each account and everything attached to it.</p>
+            </div>
+          </div>
+
+          <ul class="max-h-40 overflow-y-auto rounded-xl bg-gray-50 border border-gray-100 divide-y divide-gray-100 mb-4 text-sm">
+            <li v-for="u in selectedUsers" :key="u.id" class="flex items-center justify-between px-3 py-2">
+              <span class="font-medium text-brand-navy truncate">{{ u.name }}</span>
+              <span class="text-xs text-gray-400 truncate ml-3">{{ u.email }}</span>
+            </li>
+          </ul>
+
+          <ul class="text-xs text-gray-500 space-y-1 mb-5">
+            <li class="flex gap-2"><span class="text-red-400">•</span> Their listings, photos, viewings, messages and reviews are deleted</li>
+            <li class="flex gap-2"><span class="text-red-400">•</span> This cannot be undone</li>
+          </ul>
+
+          <div class="flex gap-3">
+            <AppButton variant="ghost" full-width @click="closeBulk">Cancel</AppButton>
+            <button
+              class="w-full rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-bold py-2.5 transition-colors"
+              @click="runBulk"
+            >Delete {{ bulk.total }} account{{ bulk.total === 1 ? '' : 's' }}</button>
+          </div>
+        </template>
+
+        <!-- 2. Progress -->
+        <template v-else-if="bulk.running">
+          <h3 class="font-bold text-brand-navy text-base mb-1">Deleting accounts…</h3>
+          <p class="text-sm text-gray-500 mb-4 truncate">
+            {{ Math.min(bulk.done + bulk.failed + 1, bulk.total) }} of {{ bulk.total }}<span v-if="bulk.current"> · {{ bulk.current }}</span>
+          </p>
+
+          <div class="flex items-center justify-between text-xs font-semibold text-gray-500 mb-1.5">
+            <span>Progress</span>
+            <span class="text-brand-navy tabular-nums">{{ bulkProgress }}%</span>
+          </div>
+          <div class="h-2.5 w-full rounded-full bg-gray-100 overflow-hidden" role="progressbar" :aria-valuenow="bulkProgress" aria-valuemin="0" aria-valuemax="100">
+            <div class="h-full rounded-full bg-red-500 transition-[width] duration-300 ease-out" :style="{ width: bulkProgress + '%' }" />
+          </div>
+
+          <p class="text-[11px] text-gray-400 mt-4">Please keep this window open until it finishes.</p>
+        </template>
+
+        <!-- 3. Summary -->
+        <template v-else>
+          <div class="flex items-start gap-3 mb-4">
+            <div class="h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0" :class="bulk.failed ? 'bg-amber-50' : 'bg-emerald-50'">
+              <svg v-if="!bulk.failed" class="h-5 w-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+              <svg v-else class="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M12 5a7 7 0 100 14 7 7 0 000-14z" /></svg>
+            </div>
+            <div>
+              <h3 class="font-bold text-brand-navy text-base leading-snug">
+                {{ bulk.failed ? 'Finished with some failures' : 'All done' }}
+              </h3>
+              <p class="text-sm text-gray-500 mt-1">
+                <span class="font-semibold text-brand-navy">{{ bulk.done }}</span> deleted<template v-if="bulk.failed">,
+                <span class="font-semibold text-amber-700">{{ bulk.failed }}</span> could not be removed — they're still in the list</template>.
+              </p>
+            </div>
+          </div>
+
+          <div class="h-2.5 w-full rounded-full bg-gray-100 overflow-hidden mb-5">
+            <div class="h-full rounded-full transition-[width] duration-300" :class="bulk.failed ? 'bg-amber-500' : 'bg-emerald-500'" style="width: 100%" />
+          </div>
+
+          <AppButton variant="primary" full-width @click="closeBulk">Done</AppButton>
+        </template>
+
+      </div>
+    </AppModal>
   </div>
 </template>
+
+<style scoped>
+.bar-enter-active, .bar-leave-active { transition: opacity 0.15s ease, transform 0.15s ease; }
+.bar-enter-from, .bar-leave-to { opacity: 0; transform: translateY(-4px); }
+</style>
