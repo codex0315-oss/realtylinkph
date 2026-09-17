@@ -14,8 +14,8 @@ use App\Models\Message;
 use App\Models\Property;
 use App\Models\PropertyPhoto;
 use App\Models\User;
+use App\Support\Uploads;
 use Illuminate\Database\Seeder;
-use Illuminate\Support\Facades\Storage;
 
 /**
  * Demo dataset for RealtyLink PH.
@@ -414,7 +414,10 @@ class DatabaseSeeder extends Seeder
             }
 
             $path = "properties/{$property->id}/{$key}.jpg";
-            Storage::disk('public')->put($path, (string) file_get_contents($source));
+            // Uploads::disk(), not disk('public'): in production uploads live on
+            // S3/R2, and the app builds photo URLs against that disk. Writing to
+            // the local disk here would seed listings whose images all 404.
+            Uploads::disk()->put($path, (string) file_get_contents($source));
 
             PropertyPhoto::create([
                 'property_id' => $property->id,
@@ -428,7 +431,7 @@ class DatabaseSeeder extends Seeder
         $pano = "{$this->assets}/pano-360-01.jpg";
         if ($withPanorama && is_file($pano)) {
             $path = "properties/{$property->id}/pano-360-01.jpg";
-            Storage::disk('public')->put($path, (string) file_get_contents($pano));
+            Uploads::disk()->put($path, (string) file_get_contents($pano));
 
             PropertyPhoto::create([
                 'property_id' => $property->id,
