@@ -42,15 +42,20 @@ class GeminiService
      * PHP's max_execution_time (which previously caused a fatal error + CORS failure).
      * Returns the model's text, or null on failure.
      */
-    private function call(array $payload): ?string
+    /**
+     * @param  int  $timeout  Per-model seconds. The default suits a web request
+     *                        (2 models × 12s stays under the 60s limit); queued
+     *                        jobs pass more, since multi-megabyte document
+     *                        payloads routinely need it.
+     */
+    private function call(array $payload, int $timeout = 12): ?string
     {
-        // At most 2 models × 12s ≈ 24s worst case — safely under the 60s web limit.
         $models = array_slice($this->models(), 0, 2);
 
         foreach ($models as $i => $model) {
             try {
                 $response = Http::withQueryParameters(['key' => config('services.gemini.api_key')])
-                    ->timeout(12)
+                    ->timeout($timeout)
                     ->post($this->endpoint($model), $payload);
 
                 if ($response->successful()) {
@@ -372,7 +377,7 @@ class GeminiService
      * @param  string  $applicantType  'salesperson' | 'broker'
      * @param  array<int, array{label:string,path:string}>  $documents  storage-relative paths
      */
-    public function assessAgentApplication(string $applicantType, array $documents): string
+    public function assessAgentApplication(string $applicantType, array $documents, int $timeout = 12): string
     {
         if ($applicantType === 'broker') {
             $instruction = 'You are RealtyLink AI assisting a human admin who reviews real estate AGENT (Broker) applications in the Philippines. '
@@ -414,7 +419,7 @@ class GeminiService
             'systemInstruction' => ['parts' => [['text' => $instruction]]],
             'contents'          => [['parts' => $parts]],
             'generationConfig'  => ['temperature' => 0.3],
-        ]);
+        ], $timeout);
 
         return $text ?? 'AI assessment unavailable — please review this application manually.';
     }

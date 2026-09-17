@@ -48,5 +48,41 @@ export const useApi = () => {
     return $fetch<T>(path, { baseURL: config.public.apiBase, method: 'POST', headers: h, body: formData })
   }
 
-  return { get, post, put, patch, del, postForm }
+  /**
+   * Multipart POST that reports upload progress. `$fetch` (and fetch itself)
+   * expose no upload progress, so this one goes through XMLHttpRequest. The
+   * percentage is bytes-on-the-wire — real, not an animation — which matters
+   * for the agent application: several photos from a phone on mobile data.
+   *
+   * Rejects with the same `{ data: { message, errors } }` shape $fetch uses,
+   * so callers' existing error extraction keeps working.
+   */
+  function postFormWithProgress<T>(
+    path: string,
+    formData: FormData,
+    onProgress: (percent: number) => void,
+  ): Promise<T> {
+    return new Promise<T>((resolve, reject) => {
+      const xhr = new XMLHttpRequest()
+      xhr.open('POST', `${config.public.apiBase}${path}`)
+      for (const [k, v] of Object.entries(headers())) xhr.setRequestHeader(k, v)
+
+      xhr.upload.onprogress = (e) => {
+        if (e.lengthComputable) onProgress(Math.round((e.loaded / e.total) * 100))
+      }
+
+      xhr.onload = () => {
+        let data: unknown = null
+        try { data = JSON.parse(xhr.responseText) } catch { /* non-JSON body */ }
+        if (xhr.status >= 200 && xhr.status < 300) resolve(data as T)
+        else reject({ status: xhr.status, data })
+      }
+      xhr.onerror   = () => reject({ status: 0, data: { message: 'Network error — check your connection and try again.' } })
+      xhr.ontimeout = () => reject({ status: 0, data: { message: 'The upload timed out. Please try again.' } })
+
+      xhr.send(formData)
+    })
+  }
+
+  return { get, post, put, patch, del, postForm, postFormWithProgress }
 }

@@ -4,25 +4,24 @@ declare(strict_types=1);
 
 namespace App\Services;
 
+use App\Jobs\AssessAgentApplication;
 use App\Models\AgentProfile;
-use App\Support\Uploads;
 use App\Models\User;
 use App\Notifications\AgentApplicationApproved;
 use App\Notifications\AgentApplicationRejected;
+use App\Support\Uploads;
 use Illuminate\Support\Facades\DB;
-use Illuminate\Support\Facades\Storage;
 use RuntimeException;
 
 class AgentVerificationService
 {
     public function __construct(
-        private readonly GeminiService $gemini,
         private readonly NotificationService $notifications,
     ) {}
 
     /**
-     * Submit (or re-submit) an agent application for either applicant type,
-     * then run RealtyLink AI's advisory pre-screen.
+     * Submit (or re-submit) an agent application for either applicant type.
+     * RealtyLink AI's advisory pre-screen is queued for the admin.
      *
      * @param  array<string, \Illuminate\Http\UploadedFile>  $files
      */
@@ -71,9 +70,11 @@ class AgentVerificationService
             return AgentProfile::updateOrCreate(['user_id' => $user->id], $payload);
         });
 
-        // Run the (slow, external) AI assessment OUTSIDE the DB transaction.
-        $comment = $this->gemini->assessAgentApplication($type, $this->documentsForAi($type, $profile));
-        $profile->update(['ai_comment' => $comment, 'ai_assessed_at' => now()]);
+        // The AI pre-check is for the admin, not the applicant, and it takes
+        // longer than a web request should. Queue it; the admin's pending list
+        // shows "in progress" until it lands. afterCommit so the job can't run
+        // before the row it reads is visible.
+        AssessAgentApplication::dispatch($profile->id)->afterCommit();
 
         // In-app alert: tell the applicant review takes up to 24 hours.
         $this->notifications->send($user, 'agent_application_submitted', [
@@ -91,25 +92,6 @@ class AgentVerificationService
         });
 
         return $profile->fresh(['user']);
-    }
-
-    /**
-     * @return array<int, array{label:string,path:string}>
-     */
-    private function documentsForAi(string $type, AgentProfile $profile): array
-    {
-        if ($type === 'broker') {
-            return [
-                ['label' => 'Broker license card', 'path' => $profile->license_doc],
-                ['label' => 'Live selfie',         'path' => $profile->face_image],
-            ];
-        }
-
-        return [
-            ['label' => 'Accreditation document (front)', 'path' => $profile->accreditation_doc],
-            ['label' => 'Valid ID',                       'path' => $profile->valid_id],
-            ['label' => 'Live selfie',                    'path' => $profile->face_image],
-        ];
     }
 
     public function approve(AgentProfile $profile): AgentProfile

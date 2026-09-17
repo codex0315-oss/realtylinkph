@@ -21,6 +21,26 @@ async function load() {
   loading.value = false
 }
 
+/* ── AI assessment arrives asynchronously ──
+ * The pre-check is a queued job, so a freshly submitted application shows up
+ * here before its assessment exists. While any card is still waiting, refetch
+ * quietly every few seconds so the text appears without a manual reload; the
+ * polling stops on its own once nothing is pending. */
+const hasAiPanel = (a: AgentProfile) => !!a.ai_comment || !!a.ai_pending
+const anyAiPending = computed(() => agents.value.some(a => a.ai_pending))
+let aiPoll: ReturnType<typeof setInterval> | null = null
+
+watch(anyAiPending, (pending) => {
+  if (pending && !aiPoll) {
+    aiPoll = setInterval(async () => { agents.value = await fetchPendingAgents() }, 5000)
+  } else if (!pending && aiPoll) {
+    clearInterval(aiPoll)
+    aiPoll = null
+  }
+}, { immediate: true })
+
+onUnmounted(() => { if (aiPoll) clearInterval(aiPoll) })
+
 async function approve(userId: number) {
   const ok = await approveAgent(userId)
   if (ok) await load()
@@ -152,7 +172,7 @@ await load()
              Beside an assessment the tiles grow to fill that height with the
              image *contained* — a license card must never be cropped — while
              without one they fall back to fixed 4:3 thumbnails, 4-up. -->
-        <div class="mt-4 grid grid-cols-1 gap-4" :class="agent.ai_comment ? 'lg:grid-cols-2 lg:items-stretch' : ''">
+        <div class="mt-4 grid grid-cols-1 gap-4" :class="hasAiPanel(agent) ? 'lg:grid-cols-2 lg:items-stretch' : ''">
 
         <!-- Submitted documents — selfie first so it sits beside the ID -->
         <div class="flex flex-col">
@@ -161,7 +181,7 @@ await load()
           </p>
           <div
             class="grid grid-cols-2 gap-3"
-            :class="agent.ai_comment ? 'flex-1 auto-rows-fr' : 'sm:grid-cols-4'"
+            :class="hasAiPanel(agent) ? 'flex-1 auto-rows-fr' : 'sm:grid-cols-4'"
           >
             <button
               v-for="(doc, i) in docsFor(agent)"
@@ -174,14 +194,14 @@ await load()
             >
               <div
                 class="relative bg-gray-100 dark:bg-white/5 overflow-hidden"
-                :class="agent.ai_comment ? 'flex-1 min-h-[160px]' : 'aspect-[4/3]'"
+                :class="hasAiPanel(agent) ? 'flex-1 min-h-[160px]' : 'aspect-[4/3]'"
               >
                 <img
                   v-if="!doc.isPdf"
                   :src="doc.url"
                   :alt="doc.label"
                   class="absolute inset-0 h-full w-full group-hover:scale-[1.03] transition-transform duration-300"
-                  :class="agent.ai_comment ? 'object-contain' : 'object-cover'"
+                  :class="hasAiPanel(agent) ? 'object-contain' : 'object-cover'"
                   loading="lazy"
                 />
                 <div v-else class="h-full w-full flex flex-col items-center justify-center gap-1.5 text-brand-navy/50 dark:text-white/50">
@@ -204,16 +224,25 @@ await load()
 
         <!-- RealtyLink AI assessment. Same eyebrow-then-box structure as the
              documents column, so the two boxes start on the same line. -->
-        <div v-if="agent.ai_comment" class="flex flex-col">
+        <div v-if="hasAiPanel(agent)" class="flex flex-col">
           <p class="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-brand-navy/45 dark:text-white/40 mb-2">
             <svg class="h-3.5 w-3.5 text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" /></svg>
             RealtyLink AI assessment
             <span class="normal-case tracking-normal font-medium text-gray-400">· advisory only — you decide</span>
           </p>
           <div class="flex-1 rounded-xl border border-brand-gold/25 bg-brand-gold/5 dark:bg-brand-gold/10 p-4">
+          <!-- Queued job still running: the applicant's documents are being read. -->
+          <div v-if="!agent.ai_comment" class="h-full min-h-[120px] flex flex-col items-center justify-center text-center gap-2">
+            <span class="relative h-8 w-8">
+              <span class="absolute inset-0 rounded-full border-2 border-brand-gold/20" />
+              <span class="absolute inset-0 rounded-full border-t-2 border-brand-gold animate-spin" />
+            </span>
+            <p class="text-sm font-semibold text-brand-navy dark:text-white">RealtyLink AI is reviewing the documents…</p>
+            <p class="text-xs text-gray-400 dark:text-white/40">Usually under a minute. This updates on its own.</p>
+          </div>
           <!-- The model writes light markdown (**headings**, * bullets). Rendered
                as structure rather than shown with the raw asterisks. -->
-          <div class="text-sm text-brand-text-secondary dark:text-white/70 leading-relaxed space-y-1">
+          <div v-else class="text-sm text-brand-text-secondary dark:text-white/70 leading-relaxed space-y-1">
             <template v-for="(line, li) in aiLines(agent.ai_comment)" :key="li">
               <p v-if="line.kind === 'heading'" class="font-bold text-brand-navy dark:text-white pt-2 first:pt-0">{{ line.text }}</p>
               <p v-else-if="line.kind === 'bullet'" class="flex gap-2"><span class="text-brand-gold flex-shrink-0">•</span><span>{{ line.text }}</span></p>

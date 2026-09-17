@@ -23,9 +23,13 @@ class AgentProfileResource extends JsonResource
             'supervising_broker' => $this->supervising_broker,
             'status'             => $this->status,
             'admin_note'         => $this->when($isOwnerOrAdmin, $this->admin_note),
-            // RealtyLink AI advisory note — visible to the applicant and admin.
-            'ai_comment'         => $this->when($isOwnerOrAdmin, $this->ai_comment),
-            'ai_assessed_at'     => $this->ai_assessed_at?->toISOString(),
+            // RealtyLink AI's advisory note is for the reviewing admin only. It
+            // was briefly shown to applicants too, which invited them to argue
+            // with a pre-check that isn't a decision.
+            'ai_comment'         => $this->when($isAdmin, $this->ai_comment),
+            'ai_assessed_at'     => $this->when($isAdmin, $this->ai_assessed_at?->toISOString()),
+            // True while the queued assessment hasn't landed yet.
+            'ai_pending'         => $this->when($isAdmin, $this->status === 'pending' && $this->ai_assessed_at === null),
             'reviewed_at'        => $this->reviewed_at?->toISOString(),
             // When a rejected applicant may re-apply (12h after rejection); null otherwise.
             'reapply_at'         => $this->reapplyAt()?->toISOString(),

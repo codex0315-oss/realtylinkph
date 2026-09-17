@@ -24,11 +24,14 @@ export const useAgent = () => {
     }
   }
 
-  async function submitVerification(form: FormData): Promise<AgentProfile | null> {
+  async function submitVerification(
+    form: FormData,
+    onProgress: (percent: number) => void = () => {},
+  ): Promise<AgentProfile | null> {
     loading.value = true
     error.value   = null
     try {
-      const res = await api.postForm<ApiResponse<AgentProfile>>('/agent/verify', form)
+      const res = await api.postFormWithProgress<ApiResponse<AgentProfile>>('/agent/verify', form, onProgress)
       return res.data
     } catch (e) {
       error.value = extractError(e)

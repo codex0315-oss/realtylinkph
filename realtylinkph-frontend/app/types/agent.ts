@@ -13,6 +13,8 @@ export interface AgentProfile {
   admin_note: string | null
   ai_comment?: string | null
   ai_assessed_at?: string | null
+  /** Admin-only: the queued AI pre-check hasn't produced its note yet. */
+  ai_pending?: boolean
   reviewed_at?: string | null
   reapply_at?: string | null
   license_doc?: string | null

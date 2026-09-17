@@ -29,8 +29,6 @@ const showRejected = computed(() =>
   !reapply.value && submittedProfile.value === null && existing.value?.status === 'rejected',
 )
 
-const aiComment = computed(() => submittedProfile.value?.ai_comment ?? existing.value?.ai_comment ?? null)
-
 // 12h re-apply cool-down for rejected applicants.
 const { inCooldown, text: cooldownText } = useReapplyCooldown(() => existing.value?.reapply_at)
 
@@ -150,32 +148,21 @@ const benefits = [
   'A verified agent badge on your profile',
 ]
 
-/* ── "RealtyLink AI is verifying" overlay — shown while the submit + AI check runs ── */
-const verifyMessages = [
-  'Reading your documents…',
-  'Checking details & name consistency…',
-  'Comparing your live face scan…',
-  'Finalizing the AI pre-check…',
-]
-const verifyMsgIndex = ref(0)
-const verifyMsg = computed(() => verifyMessages[verifyMsgIndex.value] ?? verifyMessages[0])
-let verifyTimer: ReturnType<typeof setInterval> | null = null
+/* ── Submit overlay ──
+   The bar is driven by bytes uploaded, so it's honest: the selfie and
+   documents are the slow part of submitting, especially from a phone. Once
+   the upload completes the server saves the application and answers — that
+   last stretch is short and shown as "Saving". The AI pre-check runs in the
+   background for the admin; the applicant never waits on it. */
+const uploadPercent = ref(0)
+const submitPhase = computed(() => uploadPercent.value < 100 ? 'Uploading your documents…' : 'Saving your application…')
 
 watch(loading, (v) => {
   if (import.meta.client) document.body.style.overflow = v ? 'hidden' : ''
-  if (v) {
-    verifyMsgIndex.value = 0
-    verifyTimer = setInterval(() => {
-      verifyMsgIndex.value = (verifyMsgIndex.value + 1) % verifyMessages.length
-    }, 1800)
-  } else if (verifyTimer) {
-    clearInterval(verifyTimer)
-    verifyTimer = null
-  }
+  if (v) uploadPercent.value = 0
 })
 
 onUnmounted(() => {
-  if (verifyTimer) clearInterval(verifyTimer)
   if (import.meta.client) document.body.style.overflow = ''
 })
 
@@ -206,7 +193,7 @@ async function submit() {
     if (form.supervisingBroker) fd.append('supervising_broker', form.supervisingBroker)
   }
 
-  const profile = await submitVerification(fd)
+  const profile = await submitVerification(fd, (p) => { uploadPercent.value = p })
   if (profile) {
     submittedProfile.value = profile
     reapply.value = false
@@ -226,30 +213,38 @@ function startReapply() {
 <template>
   <div class="max-w-6xl">
 
-    <!-- ░░ RealtyLink AI verifying overlay ░░ -->
+    <!-- ░░ Submit overlay — real upload progress ░░ -->
     <Teleport to="body">
       <Transition name="verify-fade">
         <div
           v-if="loading"
-          class="fixed inset-0 z-[95] flex flex-col items-center justify-center gap-7 px-6 text-center"
+          class="fixed inset-0 z-[95] flex flex-col items-center justify-center gap-6 px-6 text-center"
           style="background: linear-gradient(160deg, #0d1f3c 0%, #08152F 100%)"
         >
-          <div class="relative h-32 w-32 flex items-center justify-center">
+          <div class="relative h-24 w-24 flex items-center justify-center">
             <span class="absolute inset-0 rounded-full border-2 border-brand-gold/20" />
-            <span class="absolute inset-0 rounded-full border-t-2 border-brand-gold animate-spin" />
-            <span class="absolute inset-3 rounded-full border border-brand-gold/10 animate-ping" />
-            <img src="/realtylink-ai1.png" alt="RealtyLink AI" class="h-24 w-24 object-contain drop-shadow-xl" />
+            <span v-if="uploadPercent >= 100" class="absolute inset-0 rounded-full border-t-2 border-brand-gold animate-spin" />
+            <svg class="h-10 w-10 text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
+            </svg>
           </div>
+
           <div class="max-w-md">
-            <h2 class="font-playfair text-2xl font-bold text-white">RealtyLink AI is reviewing your application…</h2>
-            <p class="text-white/60 text-sm mt-2">{{ verifyMsg }}</p>
+            <h2 class="font-playfair text-2xl font-bold text-white">Submitting your application</h2>
+            <p class="text-white/60 text-sm mt-2">{{ submitPhase }}</p>
           </div>
-          <div class="flex items-center gap-1.5">
-            <span class="h-2 w-2 rounded-full bg-brand-gold ai-pulse" style="animation-delay:0ms" />
-            <span class="h-2 w-2 rounded-full bg-brand-gold ai-pulse" style="animation-delay:200ms" />
-            <span class="h-2 w-2 rounded-full bg-brand-gold ai-pulse" style="animation-delay:400ms" />
+
+          <div class="w-full max-w-sm">
+            <div class="flex items-center justify-between text-xs font-semibold text-white/60 mb-2">
+              <span>{{ uploadPercent < 100 ? 'Upload' : 'Upload complete' }}</span>
+              <span class="text-brand-gold tabular-nums">{{ uploadPercent }}%</span>
+            </div>
+            <div class="h-2.5 w-full rounded-full bg-white/10 overflow-hidden" role="progressbar" :aria-valuenow="uploadPercent" aria-valuemin="0" aria-valuemax="100">
+              <div class="h-full rounded-full bg-brand-gold transition-[width] duration-200 ease-out" :style="{ width: uploadPercent + '%' }" />
+            </div>
           </div>
-          <p class="text-white/30 text-[11px]">This usually takes just a few seconds.</p>
+
+          <p class="text-white/30 text-[11px]">Please keep this page open until it finishes.</p>
         </div>
       </Transition>
     </Teleport>
@@ -264,16 +259,6 @@ function startReapply() {
         <p class="text-sm text-gray-500 dark:text-white/50 mt-2 max-w-md mx-auto">
           Your application is now <span class="font-semibold text-amber-600">pending admin review</span>. Our team reviews applications <span class="font-semibold text-brand-navy dark:text-white">within 24 hours</span> — we'll notify you of the outcome.
         </p>
-      </div>
-
-      <!-- AI initial review -->
-      <div v-if="aiComment" class="mt-6 rounded-2xl border border-brand-gold/25 bg-brand-gold/5 p-5">
-        <div class="flex items-center gap-2 mb-2">
-          <svg class="h-4 w-4 text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" /></svg>
-          <p class="text-sm font-bold text-brand-navy dark:text-white">RealtyLink AI — initial review</p>
-        </div>
-        <p class="text-sm text-brand-navy/80 dark:text-white/70 leading-relaxed whitespace-pre-wrap">{{ aiComment }}</p>
-        <p class="text-[11px] text-gray-400 dark:text-white/40 mt-3">This is an automated pre-check to assist the admin — it is not a final decision.</p>
       </div>
     </div>
 
@@ -604,10 +589,4 @@ function startReapply() {
 <style scoped>
 .verify-fade-enter-active, .verify-fade-leave-active { transition: opacity .3s ease; }
 .verify-fade-enter-from, .verify-fade-leave-to { opacity: 0; }
-
-.ai-pulse { animation: ai-pulse 1.1s infinite ease-in-out; }
-@keyframes ai-pulse {
-  0%, 100% { transform: scale(0.7); opacity: 0.4; }
-  50%      { transform: scale(1);   opacity: 1; }
-}
 </style>
