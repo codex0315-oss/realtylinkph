@@ -27,8 +27,32 @@ const bedroomsModel = computed<string | number>({
   set: (v) => { filters.bedrooms = v === '' ? undefined : Number(v) },
 })
 
-const page    = ref(Number(route.query.page ?? 1))
-const showMap = ref(false)
+const page = ref(Number(route.query.page ?? 1))
+
+/*
+ * Map/List lives in the URL (`?view=map`), not component state. A buyer who
+ * opens the map, taps a pin, reads the listing and presses Back should land
+ * on the map they were exploring — with plain `ref(false)` they got a reset
+ * list every time, which on mobile means re-finding the area from scratch.
+ */
+const showMap = computed<boolean>({
+  get: () => route.query.view === 'map',
+  set: (on) => {
+    const query = { ...route.query }
+    if (on) query.view = 'map'
+    else delete query.view
+    router.replace({ query })
+  },
+})
+
+/** Filter values worth keeping in the URL — drops blanks, keeps the view mode. */
+function queryFromFilters(): Record<string, string | number> {
+  const q: Record<string, string | number> = Object.fromEntries(
+    Object.entries(filters).filter(([, v]) => v !== undefined && v !== ''),
+  ) as Record<string, string | number>
+  if (showMap.value) q.view = 'map'
+  return q
+}
 
 async function load() {
   await fetchProperties({
@@ -45,7 +69,7 @@ async function load() {
 async function applyFilters() {
   page.value = 1
   await load()
-  router.replace({ query: Object.fromEntries(Object.entries(filters).filter(([, v]) => v !== undefined && v !== '')) })
+  router.replace({ query: queryFromFilters() })
 }
 
 async function clearFilters() {
@@ -201,9 +225,13 @@ const labelClass = 'block text-[10px] font-bold uppercase tracking-wide text-bra
         </div>
       </div>
 
-      <!-- ── Split: results + map ── -->
+      <!-- ── Results + map ──
+           Desktop (lg+): side by side, map sticky.
+           Mobile: the toggle is a real switch — Map replaces the list at a
+           height you can actually pan around in. A cramped strip above the
+           cards fights with page scroll and shows nothing useful. -->
       <div class="flex gap-5">
-        <div :class="showMap ? 'w-full lg:w-1/2 min-w-0' : 'w-full'">
+        <div :class="showMap ? 'hidden lg:block lg:w-1/2 min-w-0' : 'w-full'">
           <PropertyGrid :properties="properties" :loading="loading" :skeleton-count="showMap ? 4 : 8" :dense="showMap" />
 
           <!-- Empty state -->
@@ -217,46 +245,11 @@ const labelClass = 'block text-[10px] font-bold uppercase tracking-wide text-bra
             <p class="text-sm text-gray-400 dark:text-white/40 mt-1">Try adjusting your filters or search term</p>
             <button class="mt-5 text-sm font-semibold text-brand-gold hover:underline" @click="clearFilters">Clear all filters</button>
           </div>
-
-          <!-- Pagination -->
-          <div v-if="pagination && pagination.last_page > 1" class="flex items-center justify-center gap-2 mt-10">
-            <button
-              class="h-9 w-9 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#10264D] text-brand-navy dark:text-white flex items-center justify-center hover:border-brand-gold hover:text-brand-gold transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
-              :disabled="page <= 1"
-              @click="goPage(page - 1)"
-            >
-              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
-              </svg>
-            </button>
-
-            <button
-              v-for="p in pagination.last_page"
-              :key="p"
-              class="h-9 w-9 rounded-xl text-sm font-semibold transition-all shadow-sm"
-              :class="p === page
-                ? 'bg-brand-navy text-white border border-brand-navy'
-                : 'bg-white dark:bg-[#10264D] text-gray-600 dark:text-white/60 border border-gray-200 dark:border-white/10 hover:border-brand-gold hover:text-brand-gold'"
-              @click="goPage(p)"
-            >
-              {{ p }}
-            </button>
-
-            <button
-              class="h-9 w-9 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#10264D] text-brand-navy dark:text-white flex items-center justify-center hover:border-brand-gold hover:text-brand-gold transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
-              :disabled="page >= pagination.last_page"
-              @click="goPage(page + 1)"
-            >
-              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
-              </svg>
-            </button>
-          </div>
         </div>
 
         <!-- Map panel -->
-        <div v-if="showMap" class="hidden lg:block lg:w-1/2 flex-shrink-0">
-          <div class="sticky top-24" style="height: calc(100vh - 7rem)">
+        <div v-if="showMap" class="w-full lg:w-1/2 flex-shrink-0">
+          <div class="h-[65vh] lg:h-[calc(100vh-7rem)] lg:sticky lg:top-24">
             <ClientOnly>
               <PropertyMap :properties="properties" />
               <template #fallback>
@@ -265,6 +258,42 @@ const labelClass = 'block text-[10px] font-bold uppercase tracking-wide text-bra
             </ClientOnly>
           </div>
         </div>
+      </div>
+
+      <!-- Pagination — outside the split so it's reachable in map mode too;
+           the map only plots the current page, so paging matters there. -->
+      <div v-if="pagination && pagination.last_page > 1" class="flex items-center justify-center gap-2 mt-10">
+        <button
+          class="h-9 w-9 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#10264D] text-brand-navy dark:text-white flex items-center justify-center hover:border-brand-gold hover:text-brand-gold transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+          :disabled="page <= 1"
+          @click="goPage(page - 1)"
+        >
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" />
+          </svg>
+        </button>
+
+        <button
+          v-for="p in pagination.last_page"
+          :key="p"
+          class="h-9 w-9 rounded-xl text-sm font-semibold transition-all shadow-sm"
+          :class="p === page
+            ? 'bg-brand-navy text-white border border-brand-navy'
+            : 'bg-white dark:bg-[#10264D] text-gray-600 dark:text-white/60 border border-gray-200 dark:border-white/10 hover:border-brand-gold hover:text-brand-gold'"
+          @click="goPage(p)"
+        >
+          {{ p }}
+        </button>
+
+        <button
+          class="h-9 w-9 rounded-xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#10264D] text-brand-navy dark:text-white flex items-center justify-center hover:border-brand-gold hover:text-brand-gold transition-all disabled:opacity-40 disabled:cursor-not-allowed shadow-sm"
+          :disabled="page >= pagination.last_page"
+          @click="goPage(page + 1)"
+        >
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" />
+          </svg>
+        </button>
       </div>
 
     </div>

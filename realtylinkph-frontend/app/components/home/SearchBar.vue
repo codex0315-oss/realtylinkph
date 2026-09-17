@@ -28,8 +28,10 @@ const field =
   'w-full border-0 bg-transparent p-0 text-[15px] leading-6 outline-none focus:ring-0 ' +
   'text-brand-navy dark:text-white'
 const labelText = 'text-[11px] font-bold uppercase tracking-wide text-brand-navy/70 dark:text-white/70 mb-0.5'
+// Pill only once the cells sit in a row (sm+). Stacked on a phone, a
+// rounded-full cell is a lozenge whose ends clip the label and value.
 const cell =
-  'relative flex flex-col justify-center px-6 py-3.5 rounded-full transition-colors ' +
+  'relative flex flex-col justify-center px-6 py-3.5 rounded-2xl sm:rounded-full transition-colors ' +
   'hover:bg-brand-navy/[0.04] dark:hover:bg-white/[0.06] ' +
   'focus-within:bg-brand-navy/[0.04] dark:focus-within:bg-white/[0.06]'
 
@@ -43,8 +45,11 @@ function submit() {
 </script>
 
 <template>
+  <!-- rounded-full is a pill when the cells are in a row, but on a phone the
+       cells stack and the same radius turns the whole form into an oval that
+       clips the top and bottom fields. Rounded card below sm, pill from sm. -->
   <form
-    class="relative mx-auto w-full max-w-3xl rounded-full p-1.5
+    class="relative mx-auto w-full max-w-3xl rounded-[1.75rem] sm:rounded-full p-1.5
            bg-white/95 dark:bg-white/[0.08] backdrop-blur-md
            border border-white/70 dark:border-white/15 ring-1 ring-brand-navy/10 dark:ring-white/5
            shadow-[0_16px_40px_-16px_rgba(8,21,47,0.35)]
