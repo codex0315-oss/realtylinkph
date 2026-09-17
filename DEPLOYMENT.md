@@ -32,20 +32,47 @@ successful registration into a 500.
 sleep/wake. Anything written to the app's own disk is gone by the next deploy,
 so listing photos and agent documents would vanish mid-demo.
 
-Create a bucket (Cloudflare R2 has a free tier; AWS S3 works identically), then
-set on the Render service:
+Any S3-compatible bucket works. The live deployment uses **Supabase Storage**
+(free, no card required). Cloudflare R2 and AWS S3 work identically — only
+the env values differ.
+
+### Supabase (what production uses)
+
+1. supabase.com → New project → region Asia-Pacific.
+2. **Storage → New bucket** → name `realtylinkph` → **Public bucket ON**.
+3. **Storage → S3** (left sidebar): confirm "Enable connection via S3
+   protocol" is on; copy the Endpoint and Region; **New access key**.
 
 ```
 UPLOAD_DISK=s3
 FILESYSTEM_DISK=s3
-AWS_ACCESS_KEY_ID=...
-AWS_SECRET_ACCESS_KEY=...
-AWS_DEFAULT_REGION=auto            # 'auto' for R2; a real region for S3
+AWS_ACCESS_KEY_ID=<S3 access key>
+AWS_SECRET_ACCESS_KEY=<S3 secret — shown once>
+AWS_DEFAULT_REGION=<Region from the S3 page, e.g. ap-south-1>
 AWS_BUCKET=realtylinkph
-AWS_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com   # blank for S3
-AWS_URL=https://pub-xxxxxxxx.r2.dev                          # public bucket URL
+AWS_ENDPOINT=https://<project-ref>.storage.supabase.co/storage/v1/s3
+AWS_URL=https://<project-ref>.storage.supabase.co/storage/v1/object/public/realtylinkph
 AWS_USE_PATH_STYLE_ENDPOINT=true
 ```
+
+Note the `.storage.` in the hostname and the bucket name at the end of
+`AWS_URL` — both are Supabase's format. Public objects are served with
+`Access-Control-Allow-Origin: *`, so the 360° viewer needs no CORS policy.
+
+⚠️ **Free Supabase projects pause after 7 days of inactivity.** A paused
+project 404s every photo. Before a demo, check the dashboard says *Active*;
+if not, *Restore* takes about a minute.
+
+### Cloudflare R2 / AWS S3
+
+```
+AWS_DEFAULT_REGION=auto            # 'auto' for R2; a real region for S3
+AWS_ENDPOINT=https://<account-id>.r2.cloudflarestorage.com   # blank for S3
+AWS_URL=https://pub-xxxxxxxx.r2.dev                          # public bucket URL
+```
+
+R2 needs a CORS policy on the bucket allowing `GET` from the Vercel origin,
+or the 360° viewer's WebGL texture load is refused.
 
 Make the bucket's objects publicly readable (listing photos are shown to
 anonymous visitors). Agent documents are only ever linked from admin screens,
@@ -171,6 +198,17 @@ Plus the storage block from §1, the Pusher block from §2, and your
 ⚠️ **Both Google redirect URIs must also be added to the Google Cloud console**
 (APIs & Services → Credentials → your OAuth client), or sign-in fails with
 `redirect_uri_mismatch`.
+
+The OAuth client lives in Google Cloud project **`realtylinkph`** (ID
+`realtylinkph-508915`) under the `ericsonbareno028@gmail.com` account — not
+the `codex0315` account. The client ID's leading number is the *project
+number*, which is how to find the right project if that ever changes again.
+
+To let **any** Google account sign in (not just listed test users), the
+consent screen must be *Published*. Publishing is blocked until Branding has
+an **Authorized domain** (`realtylinkph.vercel.app`); the error message only
+says "complete your Branding configuration" without naming the field. Don't
+upload an app logo — that forces Google's verification review.
 
 ⚠️ **If Brevo is not activated yet, set `MAIL_MAILER=log`.** Emails then go to
 the log instead of failing. With a real worker a failed send only fails that
