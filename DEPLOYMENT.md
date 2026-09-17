@@ -220,9 +220,21 @@ an **Authorized domain** (`realtylinkph.vercel.app`); the error message only
 says "complete your Branding configuration" without naming the field. Don't
 upload an app logo — that forces Google's verification review.
 
-⚠️ **If Brevo is not activated yet, set `MAIL_MAILER=log`.** Emails then go to
-the log instead of failing. With a real worker a failed send only fails that
-job, but it still fills the log with noise on every registration.
+⚠️ **Email must use `MAIL_MAILER=brevo`, not `smtp`.** Render's free tier
+blocks outbound SMTP ports (25, 465, 587): the `smtp` mailer connects fine
+from a laptop and *times out* from Render, and the failure only shows up in
+`failed_jobs` because the send is queued. The `brevo` mailer sends the same
+mail through Brevo's HTTPS API on port 443 instead. It needs the **v3 API key**
+(`xkeysib-…`, from Brevo → SMTP & API → *API Keys* tab), which is a different
+key from the SMTP one:
+
+```
+MAIL_MAILER=brevo
+BREVO_API_KEY=xkeysib-...
+```
+
+`MAIL_MAILER=log` is the fallback if mail needs to be switched off — emails
+then go to the log instead of failing.
 
 On **Vercel**:
 

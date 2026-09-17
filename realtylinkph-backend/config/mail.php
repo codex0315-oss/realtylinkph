@@ -49,6 +49,14 @@ return [
             'local_domain' => env('MAIL_EHLO_DOMAIN', parse_url((string) env('APP_URL', 'http://localhost'), PHP_URL_HOST)),
         ],
 
+        // Brevo over HTTPS rather than SMTP. Render's free tier drops outbound
+        // traffic on 25/465/587, so the smtp mailer above times out there —
+        // this one goes over 443 and works. Same account, same sender. The
+        // transport is registered in AppServiceProvider; key in services.brevo.
+        'brevo' => [
+            'transport' => 'brevo',
+        ],
+
         'ses' => [
             'transport' => 'ses',
         ],

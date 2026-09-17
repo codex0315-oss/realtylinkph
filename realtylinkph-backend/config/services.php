@@ -59,4 +59,10 @@ return [
         'api_key' => env('GEOAPIFY_KEY'),
     ],
 
+    // v3 API key (xkeysib-…) — NOT the SMTP key (xsmtpsib-…). Used by the
+    // `brevo` mailer, which sends over HTTPS; see config/mail.php.
+    'brevo' => [
+        'key' => env('BREVO_API_KEY'),
+    ],
+
 ];
