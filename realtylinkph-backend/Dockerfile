@@ -3,7 +3,9 @@
 #
 # Build context is this directory. On Render, set the service's Root Directory
 # to `realtylinkph-backend` so these paths line up.
-FROM php:8.3-apache
+# 8.4, not 8.3: composer.lock was resolved on PHP 8.4 and pins Symfony 8.x,
+# which requires >= 8.4.1. composer install refuses the lock on anything older.
+FROM php:8.4-apache
 
 # ── System libraries and PHP extensions ──────────────────────────────────────
 # pdo_pgsql/pgsql : Render Postgres.
