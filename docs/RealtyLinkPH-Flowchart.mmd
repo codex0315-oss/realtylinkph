@@ -1,0 +1,932 @@
+%% RealtyLink PH — Developer flowcharts (Mermaid.js)
+%% Seven diagrams, one per module. Paste each block into draw.io via
+%% Arrange → Insert → Advanced → Mermaid (one page per block).
+%% Shapes: ([ ]) start/end · [ ] operation · { } decision · [( )] database/storage · [/ /] input-output
+
+%% ═══════════════ 1 · Application Bootstrap, Session & Role Dispatch ═══════════════
+flowchart TD
+    subgraph FE["Frontend - Nuxt SPA"]
+        start([Start: browser opens realtylinkph.vercel.app])
+        load["Load Nuxt app; run client plugins in filename order"]
+        p00["Plugin 00.auth: read rl token from localStorage"]
+        hasTok{"Token present in localStorage?"}
+        pub["Render public site: home rows, /properties, /properties/:id, /agents"]
+        wantAuth{"User clicks Sign in or Get started?"}
+        gotoAuth["Go to diagram 2: Authentication"]
+        setUser["Store user in Pinia authStore"]
+        role{"authStore.user.role_type?"}
+        dashAdmin["Route /admin: Users, Agents, Listings, Reviews"]
+        dashAgent["Route /dashboard: My Listings, Inquiries, Appointments, Calendar, Reviews"]
+        dashBuyer["Route /dashboard: Browse, Saved, Messages, Appointments, History"]
+        echo["Plugin echo.client: connect Pusher wss with NUXT_PUBLIC_PUSHER_KEY"]
+        authz["Custom authorizer: POST /broadcasting/auth with Bearer token at subscribe time"]
+        subOk{"Private channel subscription accepted?"}
+        rtOn["Realtime ON: listen message.sent, notification, typing whispers"]
+        rtOff["Realtime OFF: console warn; pages still work via refresh"]
+        hb["Heartbeat: POST /api/heartbeat every 60s"]
+        bell["GET /api/notifications -> bell count"]
+        act["User performs actions in the current module"]
+        evt{"Realtime event received?"}
+        apply["Update open screen in place; bump bell count"]
+        logout{"User clicks Sign out?"}
+        clear["Clear token from localStorage; disconnect Echo; stop heartbeat"]
+        fin([End: public site shown])
+    end
+
+    subgraph API["API - Laravel 12 on Render"]
+        me["GET /api/me  (auth:sanctum)"]
+        meValid{"Bearer token found in personal_access_tokens?"}
+        meJson[/"200 UserResource: id, name, role_type, agent_profile, favorites, has_gcal"/]
+        me401[/"401 Unauthenticated"/]
+        hbApi["POST /api/heartbeat: users.last_seen_at = now"]
+        notifApi["GET /api/notifications: unread rows for notifiable_id = user"]
+        logoutApi["POST /api/logout: delete current access token"]
+        bcast["POST /broadcasting/auth: verify Bearer, sign socket_id + channel"]
+    end
+
+    subgraph DB["Database & Storage - Neon Postgres"]
+        users[("users")]
+        pat[("personal_access_tokens")]
+        notifs[("notifications")]
+    end
+
+    subgraph EXT["External Services"]
+        pusher["Pusher Channels ap1"]
+    end
+
+    start --> load --> p00 --> hasTok
+    hasTok -->|"No token"| pub
+    hasTok -->|"Token found"| me
+    me --> meValid
+    meValid -->|"Not found or revoked"| me401
+    me401 -->|"Catch 401"| clear
+    clear -->|"Session cleared"| pub
+    meValid -->|"Valid token"| pat
+    pat -->|"Load owner"| users
+    users -->|"User row"| meJson
+    meJson -->|"200 JSON"| setUser
+    pub --> wantAuth
+    wantAuth -->|"No, keep browsing"| pub
+    wantAuth -->|"Yes"| gotoAuth
+    gotoAuth -->|"Token issued"| me
+    setUser --> role
+    role -->|"admin or super_admin"| dashAdmin
+    role -->|"agent"| dashAgent
+    role -->|"buyer or ghost_buyer"| dashBuyer
+    dashAdmin --> echo
+    dashAgent --> echo
+    dashBuyer --> echo
+    echo -->|"wss connect"| pusher
+    pusher -->|"subscribe private-user.{id}"| authz
+    authz -->|"socket_id, channel_name, Bearer"| bcast
+    bcast -->|"Signed auth or 403"| subOk
+    subOk -->|"200 signed"| rtOn
+    subOk -->|"403 or network error"| rtOff
+    rtOn --> hb
+    rtOff --> hb
+    hb -->|"every 60s"| hbApi
+    hbApi -->|"UPDATE last_seen_at"| users
+    hb --> bell
+    bell --> notifApi
+    notifApi -->|"SELECT unread"| notifs
+    notifs -->|"rows"| bell
+    bell --> act
+    act --> evt
+    evt -->|"message.sent / notification / typing"| apply
+    apply --> act
+    evt -->|"No event"| logout
+    logout -->|"No"| act
+    logout -->|"Yes"| logoutApi
+    logoutApi -->|"DELETE token row"| pat
+    logoutApi -->|"204"| clear
+    clear --> fin
+
+%% ═══════════════ 2 · Authentication ═══════════════
+flowchart TD
+    subgraph FE["Frontend - Nuxt SPA"]
+        start([Start: Sign in or Get started clicked])
+        has{"Has an account?"}
+        regForm[/"Register form: name, email, password"/]
+        regSubmit["POST /api/register"]
+        loginForm[/"Sign in form: email, password"/]
+        loginSubmit["POST /api/login"]
+        gBtn["Click Continue with Google"]
+        gRedirect["GET /api/auth/google/redirect -> browser goes to Google"]
+        gCallbackPage["Page /auth/google/callback receives ?code"]
+        gPost["POST /api/auth/google/callback with code"]
+        forgot{"Forgot password?"}
+        forgotForm[/"Email address"/]
+        forgotSubmit["POST /api/forgot-password"]
+        resetPage["Page /reset-password?token&email"]
+        resetForm[/"New password x2"/]
+        resetSubmit["POST /api/reset-password"]
+        storeTok["Save token to localStorage; authStore.initFromStorage"]
+        toMain["Go to diagram 1: GET /api/me and role dispatch"]
+        showErr[/"Show field or message error"/]
+        verifyPanel["My Profile -> Email status: enter 6-digit code or Resend"]
+        verifyCode["POST /api/email/verify with code"]
+        fin([End: signed in])
+    end
+
+    subgraph API["API - Laravel"]
+        regThr{"Throttle 10/min ok?"}
+        regVal{"Validation: name required, email unique, password min 8?"}
+        regCreate["Create user: role_type=buyer, password bcrypt"]
+        regNotify["Queue VerifyEmail notification (signed URL + 6-digit code)"]
+        regTok["Create Sanctum token"]
+        loginThr{"Throttle 10/min ok?"}
+        loginCheck{"Hash check passes and not is_system?"}
+        loginTok["Create Sanctum token"]
+        gThr{"Throttle 20/min ok?"}
+        gExchange["Exchange code with Google for id_token / profile"]
+        gValid{"Google returned email?"}
+        gFind{"users.email exists?"}
+        gCreate["Create user: role_type=buyer, email_verified_at=now"]
+        gTok["Create Sanctum token"]
+        fThr{"Throttle 5/min ok?"}
+        fExists{"Email registered?"}
+        fBroker{"Broker throttle: requested under 60s ago?"}
+        fToken["Create password_reset_tokens row (60 min)"]
+        fNotify["Queue ResetPasswordLink email with FRONTEND_URL link"]
+        rThr{"Throttle 10/min ok?"}
+        rValid{"Token matches, not expired, password min 8 and confirmed?"}
+        rSave["Update password hash; delete reset token"]
+        vLink["GET /api/email/verify/{id}/{hash} (signed middleware)"]
+        vSig{"Signature and sha1(email) hash valid?"}
+        vMark["Set email_verified_at; fire Verified event; redirect FRONTEND_URL/?verified=1"]
+        vCodeThr{"Throttle 6/min ok?"}
+        vCodeOk{"Code matches?"}
+        e422[/"422 validation errors"/]
+        e429[/"429 Too many attempts"/]
+        e401[/"401 invalid credentials"/]
+        e400[/"400 Google exchange failed"/]
+        e403[/"403 Invalid verification link"/]
+    end
+
+    subgraph DB["Database"]
+        users[("users")]
+        pat[("personal_access_tokens")]
+        prt[("password_reset_tokens")]
+        jobs[("jobs")]
+    end
+
+    subgraph Q["Queue Worker (in web container)"]
+        mailJob["Send mail via Brevo HTTPS API (MAIL_MAILER=brevo)"]
+    end
+
+    subgraph EXT["External Services"]
+        google["Google OAuth 2.0"]
+        brevo["Brevo transactional email"]
+    end
+
+    start --> has
+    has -->|"No"| regForm --> regSubmit --> regThr
+    regThr -->|"Exceeded"| e429 --> showErr
+    regThr -->|"Ok"| regVal
+    regVal -->|"Fails"| e422 --> showErr
+    showErr -->|"User corrects"| regForm
+    regVal -->|"Passes"| regCreate
+    regCreate -->|"INSERT users"| users
+    regCreate --> regNotify
+    regNotify -->|"INSERT job"| jobs
+    jobs -->|"Worker picks job"| mailJob
+    mailJob -->|"POST /v3/smtp/email"| brevo
+    regNotify --> regTok
+    regTok -->|"INSERT token"| pat
+    regTok -->|"200 token + user"| storeTok
+
+    has -->|"Yes"| loginForm --> forgot
+    forgot -->|"No"| loginSubmit --> loginThr
+    loginThr -->|"Exceeded"| e429
+    loginThr -->|"Ok"| loginCheck
+    loginCheck -->|"Fails"| e401 --> showErr
+    loginCheck -->|"Passes"| loginTok
+    loginTok -->|"INSERT token"| pat
+    loginTok -->|"200 token + user"| storeTok
+
+    has -->|"Google"| gBtn --> gRedirect
+    gRedirect -->|"Redirect with client_id, redirect_uri"| google
+    google -->|"Redirect back with code"| gCallbackPage --> gPost --> gThr
+    gThr -->|"Exceeded"| e429
+    gThr -->|"Ok"| gExchange
+    gExchange -->|"Token request"| google
+    google -->|"Profile or error"| gValid
+    gValid -->|"Error / no email"| e400 --> showErr
+    gValid -->|"Profile ok"| gFind
+    gFind -->|"Exists"| gTok
+    gFind -->|"Not found"| gCreate
+    gCreate -->|"INSERT users"| users
+    gCreate --> gTok
+    gTok -->|"INSERT token"| pat
+    gTok -->|"200 token + user"| storeTok
+
+    forgot -->|"Yes"| forgotForm --> forgotSubmit --> fThr
+    fThr -->|"Exceeded"| e429
+    fThr -->|"Ok"| fExists
+    fExists -->|"Not registered"| e422
+    fExists -->|"Registered"| fBroker
+    fBroker -->|"Yes"| e429
+    fBroker -->|"No"| fToken
+    fToken -->|"UPSERT email, token, created_at"| prt
+    fToken --> fNotify
+    fNotify -->|"INSERT job"| jobs
+    fNotify -->|"200 Check your inbox"| resetPage
+    resetPage --> resetForm --> resetSubmit --> rThr
+    rThr -->|"Exceeded"| e429
+    rThr -->|"Ok"| rValid
+    rValid -->|"Fails"| e422
+    rValid -->|"Passes"| rSave
+    rSave -->|"UPDATE users.password"| users
+    rSave -->|"DELETE token"| prt
+    rSave -->|"200 Password reset"| loginForm
+
+    storeTok --> toMain --> fin
+    fin -.->|"Later: user clicks email link"| vLink
+    vLink --> vSig
+    vSig -->|"Invalid"| e403
+    vSig -->|"Valid"| vMark
+    vMark -->|"UPDATE email_verified_at"| users
+    fin -.->|"Or: user enters code"| verifyPanel --> verifyCode --> vCodeThr
+    vCodeThr -->|"Exceeded"| e429
+    vCodeThr -->|"Ok"| vCodeOk
+    vCodeOk -->|"Wrong"| e422
+    vCodeOk -->|"Matches"| vMark
+
+%% ═══════════════ 3 · Agent Verification ═══════════════
+flowchart TD
+    subgraph FE["Frontend - Nuxt SPA"]
+        start([Start: buyer opens /dashboard/verify])
+        fetchMe["GET /api/me -> agent_profile status"]
+        exist{"agent_profile exists?"}
+        stat{"agent_profile.status?"}
+        showPending[/"Application Submitted - pending admin review"/]
+        cool{"reapply_at in the future?"}
+        showCool[/"Not approved: reason + countdown to re-apply"/]
+        chooseType{"Broker or Salesperson?"}
+        stepsB["Steps: Information, License Card, Live Scan, Review"]
+        stepsS["Steps: Information, Accreditation, Valid ID, Live Scan, Review"]
+        info[/"full_name, mobile, prc_number, supervising_broker"/]
+        pick[/"Pick document file"/]
+        fCheck{"Type in pdf/jpg/png/webp and size 5MB or less?"}
+        fReject[/"Show file name and reason; ask again"/]
+        selfie["LiveFaceCapture: webcam capture (Retake allowed)"]
+        review["Review step"]
+        submit["XMLHttpRequest POST /api/agent/verify multipart; upload.onprogress -> percent"]
+        overlay[/"Overlay: Uploading your documents N% -> Saving your application"/]
+        done[/"Application Submitted; menu shows Agent Application Pending"/]
+        errUp[/"Show 429 cool-down or 422 field error"/]
+        fin([End])
+    end
+
+    subgraph API["API - Laravel"]
+        thr{"Throttle ok?"}
+        val{"SubmitVerificationRequest: applicant_type, prc_number, files valid?"}
+        cd{"Existing profile in 12h re-apply cool-down?"}
+        tx["DB transaction: update users.name/phone; store files; upsert agent_profiles status=pending, ai_comment=null"]
+        notifA["NotificationService: applicant in-app"]
+        notifAdm["For each admin: in-app + NewAgentApplication email (queued)"]
+        dispatch["AssessAgentApplication::dispatch(profile.id)->afterCommit()"]
+        resp[/"201 AgentProfileResource (no ai_comment for owner)"/]
+        e429[/"429 Your application was recently declined"/]
+        e422[/"422 validation errors"/]
+        pending["GET /api/admin/agent-applications (admin, polls 5s while ai_pending)"]
+        decide["POST /api/admin/agent-applications/{profile}/review"]
+        act{"action = approve or reject?"}
+        approve["status=approved, reviewed_at=now; users.role_type=agent"]
+        reject{"reason present?"}
+        rejectDo["status=rejected, admin_note=reason, reviewed_at=now"]
+        e422r[/"422 reason required"/]
+        nApprove["Notify applicant: in-app + AgentApplicationApproved email"]
+        nReject["Notify applicant: in-app + AgentApplicationRejected email with reapply time"]
+    end
+
+    subgraph DB["Database & Storage"]
+        users[("users")]
+        profiles[("agent_profiles")]
+        store[("Supabase bucket: agent-faces/, agent-docs/")]
+        jobs[("jobs")]
+    end
+
+    subgraph Q["Queue Worker & Scheduler"]
+        job["Job AssessAgentApplication (timeout 150s, tries 2)"]
+        jGuard{"profile.status == pending and ai_assessed_at null?"}
+        jRead["Read documents from Uploads::disk(); base64 inline_data"]
+        jPrompt["Build prompt: AgentCredentialReference + declared name/number + today's date"]
+        jCall["Gemini generateContent (60s/model, 2 models)"]
+        jOk{"Text returned?"}
+        jWrite["UPDATE ai_comment=text, ai_assessed_at=now"]
+        jFail["UPDATE ai_comment='assessment unavailable - review manually', ai_assessed_at=now"]
+        purge["Scheduler hourly: agents:purge-rejected-documents after cool-down"]
+    end
+
+    subgraph EXT["External Services"]
+        gemini["Gemini API"]
+        brevo["Brevo email API"]
+        prc["PRC License Verification portal (admin opens manually)"]
+    end
+
+    start --> fetchMe --> exist
+    exist -->|"Yes"| stat
+    stat -->|"pending"| showPending --> fin
+    stat -->|"rejected"| cool
+    cool -->|"Yes"| showCool --> fin
+    cool -->|"No"| chooseType
+    exist -->|"No"| chooseType
+    chooseType -->|"Broker"| stepsB --> info
+    chooseType -->|"Salesperson"| stepsS --> info
+    info --> pick --> fCheck
+    fCheck -->|"Fails"| fReject --> pick
+    fCheck -->|"Passes"| selfie --> review --> submit
+    submit -->|"progress events"| overlay
+    submit -->|"multipart"| thr
+    thr -->|"Exceeded"| e429 --> errUp
+    thr -->|"Ok"| val
+    val -->|"Fails"| e422 --> errUp
+    errUp --> review
+    val -->|"Passes"| cd
+    cd -->|"Yes"| e429
+    cd -->|"No"| tx
+    tx -->|"PUT files"| store
+    tx -->|"UPSERT"| profiles
+    tx -->|"UPDATE name, phone"| users
+    tx -->|"Committed"| notifA --> notifAdm
+    notifAdm -->|"INSERT mail jobs"| jobs
+    tx -->|"Committed"| dispatch
+    dispatch -->|"INSERT job"| jobs
+    dispatch --> resp
+    resp -->|"201"| done --> fin
+    jobs -->|"Worker picks job"| job --> jGuard
+    jGuard -->|"No: already decided or assessed"| fin
+    jGuard -->|"Yes"| jRead
+    jRead -->|"GET objects"| store
+    jRead --> jPrompt --> jCall
+    jCall -->|"HTTPS"| gemini
+    gemini -->|"Response or timeout"| jOk
+    jOk -->|"Text"| jWrite
+    jOk -->|"Null after 2 models"| jFail
+    jWrite -->|"UPDATE"| profiles
+    jFail -->|"UPDATE"| profiles
+    profiles -->|"ai_pending false"| pending
+    pending -->|"Admin reviews docs, AI note, Verify on PRC"| prc
+    pending --> decide --> act
+    act -->|"approve"| approve
+    approve -->|"UPDATE profiles, users"| profiles
+    approve -->|"UPDATE role_type"| users
+    approve --> nApprove
+    nApprove -->|"INSERT mail job"| jobs
+    act -->|"reject"| reject
+    reject -->|"Missing"| e422r
+    reject -->|"Present"| rejectDo
+    rejectDo -->|"UPDATE"| profiles
+    rejectDo --> nReject
+    nReject -->|"INSERT mail job"| jobs
+    jobs -->|"Mail jobs"| brevo
+    rejectDo -.->|"After 12h cool-down"| purge
+    purge -->|"DELETE objects"| store
+    purge -->|"NULL document paths"| profiles
+
+%% ═══════════════ 4 · Listing Management ═══════════════
+flowchart TD
+    subgraph FE["Frontend - Nuxt SPA"]
+        start([Start: agent opens /dashboard/listings/new])
+        ls{"rl-listing-draft in localStorage or ?draft=id?"}
+        resume["GET /api/properties/{id}: hydrate form, gallery, panos; jump to last step"]
+        resumeOk{"200 and status == draft?"}
+        clearLs["Remove rl-listing-draft key"]
+        s1["Step 1: Add photos"]
+        pCheck{"File size 10MB or less and image/*?"}
+        pSkip[/"Skip file; show name and limit"/]
+        dEx{"draftId set?"}
+        create["POST /api/properties with current fields (may be blank)"]
+        setId["draftId = id; localStorage rl-listing-draft = id"]
+        upload["POST /api/properties/{id}/photos multipart; tile shows spinner"]
+        upOk{"201 photo?"}
+        upFail[/"Remove tile; list failed file"/]
+        more{"More photos?"}
+        s2["Step 2: Add 360 panoramas (is_360=1), same upload path, or Skip"]
+        s3[/"Step 3: offer_type, title, address, type, price, beds, baths, areas, description"/]
+        watch["watch(form): dirty=true; debounce 800ms"]
+        autosave["PUT /api/properties/{id} with payload()"]
+        asOk{"200?"}
+        saved[/"Header: Draft saved . time"/]
+        asErr[/"Header: Could not save - will retry on next change"/]
+        aiQ{"Generate with AI?"}
+        aiCall["POST /api/ai/generate-description with details + property_id (or in-memory files)"]
+        aiOk{"200 description?"}
+        aiFill["form.description = text"]
+        aiErr[/"Could not generate a description"/]
+        leave{"onBeforeRouteLeave: draftId or dirty?"}
+        modal{"Modal: Save as draft / Keep editing / Discard?"}
+        flush["flushSave(); leavingOnPurpose=true; router.push(target)"]
+        discard["DELETE /api/properties/{id}; remove localStorage key"]
+        finish["Save listing: flushSave(); remove localStorage key; go to /dashboard/listings"]
+        myList["My Listings: is_complete false -> Continue; true -> Publish"]
+        pubBtn["POST /api/properties/{id}/publish"]
+        pubOk{"200?"}
+        pubErr[/"Toast: This listing still needs a title / a price / an address / at least one photo"/]
+        live[/"Card shows Published; appears in browse, home rows, map"/]
+        later{"Later action?"}
+        unpub["POST /api/properties/{id}/unpublish"]
+        sold["POST /api/properties/{id}/mark-sold"]
+        relist["POST /api/properties/{id}/relist"]
+        edit["PUT /api/properties/{id} (published: title, price, address required)"]
+        del["DELETE /api/properties/{id}"]
+        fin([End])
+    end
+
+    subgraph API["API - Laravel"]
+        storeVal{"StorePropertyRequest: all fields nullable, types/max ok?"}
+        normalize["normaliseDraftFields: null title/address -> '', price/beds/baths -> 0, type -> house, offer_type -> sale"]
+        insert["INSERT properties status=draft, agent_id=user; return fresh()"]
+        geoNeed{"Address present and lat/lng empty?"}
+        geoDispatch["GeocodeProperty::dispatch(id)"]
+        photoVal{"UploadPhotoRequest: image, max 10240KB? PHP upload_max_filesize 12M"}
+        photoStore["Uploads::disk()->put('properties/{id}/...'); INSERT property_photos sort_order, is_360"]
+        updVal{"UpdatePropertyRequest: draft -> nullable; published -> title/price/address required"}
+        updSave["normalise; UPDATE properties; geocode if address changed"]
+        pubCheck{"missingForPublish(): title, price gt 0, address, photos exist?"}
+        pubSave["UPDATE status=published, unpublish_reason=null, unpublished_at=null"]
+        firstPub{"Was previously unpublished (first publish)?"}
+        alertBuyers["Queue NewPropertyAlert to users with property_alerts=true"]
+        e422p[/"422 listing: This listing still needs ..."/]
+        unpubSave["UPDATE status=draft"]
+        soldSave["UPDATE status=sold, sold_at=now"]
+        relistSave["UPDATE status=draft, sold_at=null"]
+        delTx["For each photo: PropertyPhotoService->delete (storage + row); DELETE property (cascades)"]
+        aiGen["GeminiController: read photos from storage via property_id if no files; generatePropertyDescription"]
+        e403[/"403 not owner"/]
+    end
+
+    subgraph DB["Database & Storage"]
+        props[("properties")]
+        photos[("property_photos")]
+        store[("Supabase bucket: properties/{id}/")]
+        users[("users")]
+        jobs[("jobs")]
+    end
+
+    subgraph Q["Queue Worker"]
+        geoJob["Job GeocodeProperty: Geoapify geocode -> UPDATE lat, lng"]
+        mailJob["NewPropertyAlert emails via Brevo"]
+    end
+
+    subgraph EXT["External Services"]
+        gemini["Gemini API"]
+        geoapify["Geoapify Geocoding"]
+        brevo["Brevo email API"]
+    end
+
+    start --> ls
+    ls -->|"Found id"| resume --> resumeOk
+    resumeOk -->|"No"| clearLs --> s1
+    resumeOk -->|"Yes"| s1
+    ls -->|"None"| s1
+    s1 --> pCheck
+    pCheck -->|"Fails"| pSkip --> more
+    pCheck -->|"Passes"| dEx
+    dEx -->|"No"| create --> storeVal
+    storeVal -->|"Fails"| pSkip
+    storeVal -->|"Passes"| normalize --> insert
+    insert -->|"INSERT"| props
+    insert --> geoNeed
+    geoNeed -->|"Yes"| geoDispatch -->|"INSERT job"| jobs
+    geoNeed -->|"No"| setId
+    insert -->|"201 property"| setId --> upload
+    dEx -->|"Yes"| upload
+    upload --> photoVal
+    photoVal -->|"Fails"| upFail --> more
+    photoVal -->|"Passes"| photoStore
+    photoStore -->|"PUT object"| store
+    photoStore -->|"INSERT"| photos
+    photoStore -->|"201 photo id, url"| upOk
+    upOk -->|"Yes"| more
+    more -->|"Yes"| s1
+    more -->|"No"| s2 --> s3 --> watch
+    watch -->|"800ms idle"| autosave --> updVal
+    updVal -->|"Fails"| asErr --> watch
+    updVal -->|"Passes"| updSave
+    updSave -->|"UPDATE"| props
+    updSave -->|"200"| asOk
+    asOk -->|"Yes"| saved --> aiQ
+    aiQ -->|"Yes"| aiCall --> aiGen
+    aiGen -->|"GET photos"| store
+    aiGen -->|"HTTPS"| gemini
+    gemini -->|"Text or error"| aiOk
+    aiOk -->|"Text"| aiFill --> watch
+    aiOk -->|"Error"| aiErr --> aiQ
+    aiQ -->|"No"| leave
+    leave -->|"Navigating away with draft"| modal
+    modal -->|"Keep editing"| s3
+    modal -->|"Save as draft"| flush --> myList
+    modal -->|"Discard"| discard --> delTx
+    leave -->|"Clicks Save listing"| finish --> myList
+    myList -->|"Publish"| pubBtn --> pubCheck
+    pubCheck -->|"Something missing"| e422p --> pubErr --> myList
+    pubCheck -->|"Complete"| pubSave
+    pubSave -->|"UPDATE"| props
+    pubSave --> firstPub
+    firstPub -->|"Yes"| alertBuyers
+    alertBuyers -->|"SELECT property_alerts=true"| users
+    alertBuyers -->|"INSERT mail jobs"| jobs
+    firstPub -->|"No"| live
+    alertBuyers --> live
+    pubSave -->|"200"| pubOk --> live
+    live --> later
+    later -->|"Unpublish"| unpub --> unpubSave -->|"UPDATE"| props
+    later -->|"Mark as Sold"| sold --> soldSave -->|"UPDATE"| props
+    later -->|"Re-list"| relist --> relistSave -->|"UPDATE"| props
+    later -->|"Edit"| edit --> updVal
+    later -->|"Delete"| del --> delTx
+    delTx -->|"DELETE objects"| store
+    delTx -->|"DELETE rows"| photos
+    delTx -->|"DELETE row"| props
+    delTx --> fin
+    unpubSave --> fin
+    soldSave --> fin
+    relistSave --> later
+    jobs -->|"Worker"| geoJob
+    geoJob -->|"HTTPS"| geoapify
+    geoapify -->|"lat, lng"| geoJob
+    geoJob -->|"UPDATE lat, lng"| props
+    jobs -->|"Worker"| mailJob
+    mailJob -->|"POST"| brevo
+
+%% ═══════════════ 5 · Viewing Booking, Confirmation & Cancellation ═══════════════
+flowchart TD
+    subgraph FE["Frontend - Nuxt SPA"]
+        start([Start: buyer clicks Schedule Viewing])
+        signed{"Signed in?"}
+        signIn[/"Sign in to schedule a viewing"/]
+        openDlg["Open booking dialog"]
+        avail["GET /api/agents/{agent}/availability?date"]
+        dates["GET /api/agents/{agent}/unavailable-dates"]
+        pickDate[/"Select a date"/]
+        pickSlot[/"Available times: 1h slots 08:00-18:00; Limited tag"/]
+        note[/"Special requests"/]
+        book["POST /api/properties/{id}/appointments {preferred_datetime, notes}"]
+        bookOk{"Response?"}
+        taken[/"Someone just booked that time slot. Please pick another."/]
+        locked[/"Booking locked until date"/]
+        sent[/"Request sent - Pending"/]
+        agentList["Agent: /dashboard/appointments"]
+        agentAct{"Agent action?"}
+        confirmBtn["POST /api/appointments/{id}/confirm"]
+        cancelModal["CancelViewingModal: reason_code (role list), reason_note if other; late warning"]
+        cancelBtn["POST /api/appointments/{id}/cancel"]
+        cancelOk{"Response?"}
+        cancelErr[/"422 reason required / note required"/]
+        completeBtn["POST /api/appointments/{id}/complete"]
+        history["Buyer: History -> Rate agent"]
+        review["POST /api/reviews {appointment_id, rating 1-5, review_text}"]
+        fin([End])
+    end
+
+    subgraph API["API - Laravel"]
+        lockChk{"User::isBookingLocked(): 5+ late strikes in 30 days?"}
+        e423[/"423 Booking locked until date"/]
+        slotCalc["AvailabilityService: SLOT_MINUTES=60, 08:00-18:00 minus blocked dates/recurring minus pending+confirmed"]
+        slotsOut[/"Slots JSON"/]
+        bookVal{"Slot in list, in future, listing published?"}
+        insertAppt["INSERT appointments status=pending"]
+        uniq{"Partial unique index (agent_id, preferred_datetime) WHERE status IN pending, confirmed"}
+        e409[/"409 Someone just booked that time slot"/]
+        e422[/"422 validation"/]
+        notifAgent["Notify agent: in-app + realtime + email"]
+        confirmSave["UPDATE status=confirmed"]
+        gcalEach["For buyer and agent with google tokens: GoogleCalendarService->createEvent"]
+        calEnsure{"users.google_calendar_id set?"}
+        calCreate["POST calendars {summary: RealtyLink PH Viewings}; store id"]
+        calInsert["POST calendars/{id}/events"]
+        cal404{"404 calendar deleted by user?"}
+        calStore["UPDATE gcal_event_id / gcal_event_id_buyer"]
+        notifBuyerC["Notify buyer: confirmed"]
+        cancelVal{"CancelAppointmentRequest: reason_code in role list; note required if other?"}
+        cancelSave["UPDATE status=cancelled, cancelled_by_id, cancel_reason_code, cancel_reason_note, cancelled_at"]
+        lateChk{"Was confirmed AND now->diffInHours(slot) between 0 and 24?"}
+        lateSet["UPDATE late_cancellation=true"]
+        strikeCount{"Canceller recentStrikes() >= 5 in 30 days?"}
+        lockNote["bookingLockedUntil = last strike + 7 days (computed, not stored)"]
+        calDel["DELETE calendar events for both parties"]
+        notifOther["Notify the other party with reason"]
+        completeVal{"status == confirmed and slot time passed?"}
+        completeSave["UPDATE status=completed"]
+        reviewVal{"Appointment completed, buyer owns it, no review yet (unique appointment_id)?"}
+        reviewSave["INSERT agent_reviews rating, review_text, is_visible=true"]
+        notifAgentR["Notify agent: new review"]
+        e422r[/"422 already reviewed / not completed"/]
+    end
+
+    subgraph DB["Database"]
+        appts[("appointments")]
+        blocked[("agent_blocked_dates")]
+        users[("users")]
+        reviews[("agent_reviews")]
+        props[("properties")]
+    end
+
+    subgraph EXT["External Services"]
+        gcal["Google Calendar API"]
+        pusher["Pusher"]
+        brevo["Brevo email API"]
+    end
+
+    start --> signed
+    signed -->|"No"| signIn --> fin
+    signed -->|"Yes"| openDlg --> dates --> pickDate --> avail --> lockChk
+    lockChk -->|"Locked"| e423 --> locked --> fin
+    lockChk -->|"Not locked"| slotCalc
+    slotCalc -->|"SELECT blocks"| blocked
+    slotCalc -->|"SELECT pending, confirmed"| appts
+    slotCalc --> slotsOut --> pickSlot --> note --> book --> bookVal
+    bookVal -->|"Fails"| e422 --> pickSlot
+    bookVal -->|"Passes"| insertAppt --> uniq
+    uniq -->|"Violation caught (UniqueConstraintViolationException)"| e409 --> taken --> avail
+    uniq -->|"Inserted"| appts
+    insertAppt -->|"201"| sent
+    insertAppt --> notifAgent
+    notifAgent -->|"broadcast"| pusher
+    notifAgent -->|"queue mail"| brevo
+    sent --> agentList --> agentAct
+    agentAct -->|"Confirm"| confirmBtn --> confirmSave
+    confirmSave -->|"UPDATE"| appts
+    confirmSave --> gcalEach --> calEnsure
+    calEnsure -->|"No"| calCreate
+    calCreate -->|"POST"| gcal
+    calCreate -->|"UPDATE google_calendar_id"| users
+    calCreate --> calInsert
+    calEnsure -->|"Yes"| calInsert
+    calInsert -->|"POST"| gcal
+    gcal -->|"201 event or 404"| cal404
+    cal404 -->|"404"| calCreate
+    cal404 -->|"201"| calStore
+    calStore -->|"UPDATE"| appts
+    gcalEach -->|"No tokens: skip"| notifBuyerC
+    calStore --> notifBuyerC
+    notifBuyerC -->|"broadcast + mail"| pusher
+    agentAct -->|"Cancel"| cancelModal --> cancelBtn --> cancelVal
+    cancelVal -->|"Fails"| cancelErr --> cancelModal
+    cancelVal -->|"Passes"| cancelSave
+    cancelSave -->|"UPDATE"| appts
+    cancelSave --> lateChk
+    lateChk -->|"Yes"| lateSet
+    lateSet -->|"UPDATE"| appts
+    lateSet --> strikeCount
+    strikeCount -->|"Yes"| lockNote
+    strikeCount -->|"No"| calDel
+    lockNote --> calDel
+    lateChk -->|"No"| calDel
+    calDel -->|"DELETE events"| gcal
+    calDel --> notifOther
+    notifOther -->|"broadcast + mail"| pusher
+    notifOther --> fin
+    notifBuyerC --> completeBtn
+    agentAct -->|"Mark as Done"| completeBtn --> completeVal
+    completeVal -->|"Fails"| e422 --> agentList
+    completeVal -->|"Passes"| completeSave
+    completeSave -->|"UPDATE"| appts
+    completeSave --> history --> review --> reviewVal
+    reviewVal -->|"Fails"| e422r --> history
+    reviewVal -->|"Passes"| reviewSave
+    reviewSave -->|"INSERT"| reviews
+    reviewSave --> notifAgentR --> fin
+
+%% ═══════════════ 6 · Messaging, Presence & AI Auto-Reply ═══════════════
+flowchart TD
+    subgraph FE["Frontend - Nuxt SPA"]
+        start([Start: buyer clicks Message Agent])
+        startConv["POST /api/properties/{id}/conversations"]
+        openThread["Open thread in /dashboard/messages; subscribe private-conversation.{id}"]
+        typing["On keystroke: Echo whisper typing (no HTTP)"]
+        send["POST /api/conversations/{id}/messages {body} with header X-Socket-Id"]
+        appendOwn["Append own message from 201 response"]
+        recv["Listener message.sent: append incoming; play notification"]
+        readMark["POST /api/conversations/{id}/read on open"]
+        aiTyping["Listener ai.typing: show RealtyLink AI is typing"]
+        delBtn["Hover thread -> Delete conversation -> confirm modal"]
+        delCall["DELETE /api/conversations/{id}"]
+        fin([End])
+    end
+
+    subgraph API["API - Laravel"]
+        findOrCreate["firstOrCreate conversations (property_id, buyer_id, agent_id) unique"]
+        convJson[/"200 ConversationResource"/]
+        msgVal{"body required, user is participant, side not deleted?"}
+        msgSave["INSERT messages sender_id, body, is_ai=false; UPDATE conversations.last_message_at"]
+        undelete["If other side had deleted: clear their deleted_at so thread reappears"]
+        bcastMsg["broadcast(MessageSent)->toOthers() (ShouldBroadcastNow, excludes X-Socket-Id)"]
+        notifIn["INSERT notifications for recipient"]
+        senderIsBuyer{"Sender is buyer?"}
+        agentOnline{"Agent last_seen_at within presence window?"}
+        emailed{"conversations.agent_offline_emailed_at recent?"}
+        emailAgent["Queue MessageWhileAway email; UPDATE agent_offline_emailed_at"]
+        dispatchAi["SendAiAutoReply::dispatch(conversation_id, message_id)->afterCommit()"]
+        readSave["UPDATE messages is_read=true, read_at=now for other side's messages"]
+        readWhisper["Client whispers seen -> other side updates receipts"]
+        delVal{"User is participant?"}
+        delSave["UPDATE buyer_deleted_at or agent_deleted_at = now (per side)"]
+        e403[/"403 not a participant"/]
+        e422[/"422 body required"/]
+        bcastAuth["POST /broadcasting/auth: participant check for private-conversation.{id}"]
+    end
+
+    subgraph DB["Database"]
+        convs[("conversations")]
+        msgs[("messages")]
+        users[("users")]
+        notifs[("notifications")]
+        jobs[("jobs")]
+    end
+
+    subgraph Q["Queue Worker"]
+        job["Job SendAiAutoReply"]
+        recheck{"Agent still offline when job runs?"}
+        aiTypeEvt["broadcast(AiTyping) to buyer"]
+        groq["GroqService: openai/gpt-oss-120b, max_tokens 600, AutoReplyPrompt"]
+        groqOk{"Non-empty reply?"}
+        geminiFb["GeminiService->autoReplyWhileAway (same prompt)"]
+        gemOk{"Reply?"}
+        aiSave["INSERT messages sender_id=User::realtyAi(), is_ai=true; UPDATE last_message_at"]
+        aiBcast["broadcast(MessageSent) to buyer"]
+        noReply["Log warning; no AI message"]
+        mailJob["MessageWhileAway email via Brevo"]
+    end
+
+    subgraph EXT["External Services"]
+        pusher["Pusher Channels"]
+        groqApi["Groq API"]
+        geminiApi["Gemini API"]
+        brevo["Brevo email API"]
+    end
+
+    start --> startConv --> findOrCreate
+    findOrCreate -->|"SELECT or INSERT"| convs
+    findOrCreate --> convJson --> openThread
+    openThread -->|"subscribe"| pusher
+    pusher -->|"auth request"| bcastAuth
+    bcastAuth -->|"403"| fin
+    openThread --> readMark --> readSave
+    readSave -->|"UPDATE"| msgs
+    readSave --> readWhisper -->|"whisper"| pusher
+    openThread --> typing -->|"whisper typing"| pusher
+    openThread --> send --> msgVal
+    msgVal -->|"Fails"| e422 --> openThread
+    msgVal -->|"Not participant"| e403 --> fin
+    msgVal -->|"Passes"| msgSave
+    msgSave -->|"INSERT"| msgs
+    msgSave -->|"UPDATE"| convs
+    msgSave --> undelete -->|"UPDATE"| convs
+    msgSave --> bcastMsg -->|"trigger private-conversation.{id}"| pusher
+    pusher -->|"message.sent to other side"| recv
+    msgSave --> notifIn -->|"INSERT"| notifs
+    msgSave -->|"201 message"| appendOwn
+    msgSave --> senderIsBuyer
+    senderIsBuyer -->|"No (agent replied)"| fin
+    senderIsBuyer -->|"Yes"| agentOnline
+    agentOnline -->|"Online"| fin
+    agentOnline -->|"Offline"| emailed
+    emailed -->|"Not recently"| emailAgent
+    emailAgent -->|"INSERT mail job"| jobs
+    emailAgent -->|"UPDATE"| convs
+    emailAgent --> dispatchAi
+    emailed -->|"Recently"| dispatchAi
+    dispatchAi -->|"INSERT job (after commit)"| jobs
+    jobs -->|"Worker"| job --> recheck
+    recheck -->|"Agent came back"| fin
+    recheck -->|"Still offline"| aiTypeEvt -->|"trigger ai.typing"| pusher
+    pusher -->|"ai.typing"| aiTyping
+    aiTypeEvt --> groq -->|"HTTPS"| groqApi
+    groqApi -->|"Completion or error"| groqOk
+    groqOk -->|"Reply"| aiSave
+    groqOk -->|"Empty or 4xx/5xx"| geminiFb -->|"HTTPS"| geminiApi
+    geminiApi -->|"Text or error"| gemOk
+    gemOk -->|"Reply"| aiSave
+    gemOk -->|"None"| noReply --> fin
+    aiSave -->|"INSERT is_ai=true"| msgs
+    aiSave -->|"UPDATE"| convs
+    aiSave --> aiBcast -->|"trigger"| pusher
+    aiBcast --> fin
+    jobs -->|"Worker"| mailJob -->|"POST"| brevo
+    openThread --> delBtn --> delCall --> delVal
+    delVal -->|"No"| e403
+    delVal -->|"Yes"| delSave -->|"UPDATE"| convs
+    delSave --> fin
+
+%% ═══════════════ 7 · Administration ═══════════════
+flowchart TD
+    subgraph FE["Frontend - Nuxt SPA"]
+        start([Start: admin signed in])
+        guard{"authStore.isAdmin?"}
+        e403p[/"createError 403 Forbidden"/]
+        dash["GET /api/admin/stats -> counters"]
+        task{"Which page?"}
+        agentsPg["GET /api/admin/agent-applications (poll 5s while any ai_pending)"]
+        viewDocs["Lightbox for images; PDFs open in new tab"]
+        prcBtn["Verify on PRC link (new tab)"]
+        decision{"Approve or Reject?"}
+        rejectModal[/"Reason for rejection (required)"/]
+        reviewCall["POST /api/admin/agent-applications/{profile}/review {action, reason}"]
+        listPg["GET /api/admin/properties"]
+        unpubModal[/"Take-down reason (required)"/]
+        unpubCall["POST /api/admin/properties/{id}/unpublish {reason}"]
+        delListing["DELETE /api/admin/properties/{id} after confirm"]
+        usersPg["GET /api/admin/users?role&search&page"]
+        select["Checkbox rows; header checkbox selects all eligible (not self, not admins)"]
+        bar[/"N accounts selected . Delete selected"/]
+        confirmModal[/"List of names+emails; Delete N accounts"/]
+        loopNext{"More selected ids?"}
+        delOne["DELETE /api/admin/users/{id}"]
+        delRes{"200?"}
+        incDone["done++; progress = (done+failed)/total"]
+        incFail["failed++"]
+        summary[/"All done: N deleted, M could not be removed; reload list + stats"/]
+        createAdmin["POST /api/admins {name, email, password}"]
+        reviewsPg["GET /api/admin/reviews"]
+        toggle["POST /api/admin/reviews/{id}/toggle-visibility"]
+        fin([End])
+    end
+
+    subgraph API["API - Laravel (middleware auth:sanctum + admin)"]
+        adminMw{"User isAdmin()?"}
+        e403[/"403 Forbidden"/]
+        stats["Counts: users by role, listings, pending applications"]
+        appsQuery["AgentProfile::pending()->with(user)->paginate"]
+        appsJson[/"AgentProfileResource with ai_comment, ai_pending, verification_links"/]
+        reviewVal{"action in approve,reject; reason required when reject?"}
+        approve["status=approved; reviewed_at; users.role_type=agent; notify + email"]
+        reject["status=rejected; admin_note=reason; reviewed_at; notify + email; 12h cool-down"]
+        e422[/"422 reason required"/]
+        unpubVal{"reason present and listing published?"}
+        unpubSave["UPDATE status=draft, unpublish_reason, unpublished_at; notify agent (in-app + email)"]
+        delProp["PropertyService->delete: photos from storage + rows"]
+        delUserVal{"Target != self AND (not admin OR admins count gt 1)?"}
+        e422u[/"422 cannot delete self / last admin"/]
+        delUser["DELETE users (cascades listings, photos rows, appointments, conversations, reviews)"]
+        createVal{"name, email unique, password min 8?"}
+        createSave["INSERT users role_type=admin"]
+        toggleSave["UPDATE agent_reviews.is_visible = NOT is_visible"]
+    end
+
+    subgraph DB["Database & Storage"]
+        users[("users")]
+        profiles[("agent_profiles")]
+        props[("properties")]
+        photos[("property_photos")]
+        reviews[("agent_reviews")]
+        store[("Supabase bucket")]
+        jobs[("jobs")]
+    end
+
+    subgraph EXT["External Services"]
+        prc["PRC License Verification portal"]
+        brevo["Brevo email API"]
+    end
+
+    start --> guard
+    guard -->|"No"| e403p --> fin
+    guard -->|"Yes"| dash --> adminMw
+    adminMw -->|"No"| e403 --> fin
+    adminMw -->|"Yes"| stats -->|"COUNT"| users
+    stats --> task
+    task -->|"Agents"| agentsPg --> appsQuery -->|"SELECT"| profiles
+    appsQuery --> appsJson --> viewDocs --> prcBtn -->|"opens"| prc
+    viewDocs --> decision
+    decision -->|"Approve"| reviewCall
+    decision -->|"Reject"| rejectModal --> reviewCall
+    reviewCall --> reviewVal
+    reviewVal -->|"Fails"| e422 --> rejectModal
+    reviewVal -->|"approve"| approve
+    approve -->|"UPDATE"| profiles
+    approve -->|"UPDATE role_type"| users
+    approve -->|"queue mail"| jobs
+    reviewVal -->|"reject"| reject
+    reject -->|"UPDATE"| profiles
+    reject -->|"queue mail"| jobs
+    approve --> agentsPg
+    reject --> agentsPg
+    task -->|"Listings"| listPg -->|"SELECT all statuses"| props
+    listPg --> unpubModal --> unpubCall --> unpubVal
+    unpubVal -->|"Fails"| e422 --> unpubModal
+    unpubVal -->|"Passes"| unpubSave
+    unpubSave -->|"UPDATE"| props
+    unpubSave -->|"queue mail"| jobs
+    listPg --> delListing --> delProp
+    delProp -->|"DELETE objects"| store
+    delProp -->|"DELETE rows"| photos
+    delProp -->|"DELETE row"| props
+    task -->|"Users"| usersPg -->|"SELECT paginate"| users
+    usersPg --> select --> bar --> confirmModal --> loopNext
+    loopNext -->|"Yes: next id"| delOne --> delUserVal
+    delUserVal -->|"Fails"| e422u --> delRes
+    delUserVal -->|"Passes"| delUser
+    delUser -->|"DELETE"| users
+    delUser -->|"200"| delRes
+    delRes -->|"200"| incDone --> loopNext
+    delRes -->|"Error"| incFail --> loopNext
+    loopNext -->|"No"| summary --> fin
+    usersPg --> createAdmin --> createVal
+    createVal -->|"Fails"| e422
+    createVal -->|"Passes"| createSave -->|"INSERT"| users
+    task -->|"Reviews"| reviewsPg -->|"SELECT"| reviews
+    reviewsPg --> toggle --> toggleSave -->|"UPDATE"| reviews
+    toggleSave --> reviewsPg
+    jobs -->|"Worker"| brevo
