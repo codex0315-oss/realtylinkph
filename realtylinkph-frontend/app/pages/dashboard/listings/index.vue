@@ -3,7 +3,7 @@ import type { Property } from '~/types'
 
 definePageMeta({ layout: 'dashboard' })
 
-const { properties, loading, fetchMyListings, deleteProperty, publishProperty, unpublishProperty, markSold } = useProperty()
+const { properties, loading, error, fetchMyListings, deleteProperty, publishProperty, unpublishProperty, markSold } = useProperty()
 const confirm = useConfirm()
 const toast   = useToast()
 
@@ -68,6 +68,9 @@ async function publish(id: number) {
   busy.value = id
   const ok = await publishProperty(id)
   if (ok) await fetchMyListings()
+  // The server refuses to publish a listing that's missing a title, price,
+  // address or photo, and says which — that message is the useful part.
+  else toast.error(error.value || 'Could not publish this listing.')
   busy.value = null
 }
 async function unpublish(id: number) {
@@ -79,6 +82,7 @@ async function unpublish(id: number) {
 
 function priceLabel(p: Property): string {
   const n = Number(p.price)
+  if (!(n > 0))       return 'Price not set'
   if (n >= 1_000_000) return `₱${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`
   if (n >= 1_000)     return `₱${(n / 1_000).toFixed(0)}K`
   return `₱${n.toLocaleString('en-PH')}`
@@ -151,7 +155,7 @@ const publishedCount = computed(() => properties.value.filter(p => p.status === 
           </div>
 
           <span class="absolute top-2.5 left-2.5 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full shadow-sm" :class="prop.offer_type === 'rent' ? 'bg-blue-600 text-white' : 'bg-emerald-600 text-white'">{{ prop.offer_type === 'rent' ? 'For Rent' : 'For Sale' }}</span>
-          <span class="absolute top-2.5 right-2.5 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full shadow-sm" :class="prop.status === 'published' ? 'bg-white/90 text-emerald-700' : 'bg-black/60 text-white'">{{ prop.status }}</span>
+          <span class="absolute top-2.5 right-2.5 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full shadow-sm" :class="prop.status === 'published' ? 'bg-white/90 text-emerald-700' : 'bg-black/60 text-white'">{{ prop.status === 'draft' && prop.is_complete === false ? 'unfinished' : prop.status }}</span>
           <span class="absolute bottom-2.5 left-2.5 inline-flex items-center gap-1 text-[10px] font-semibold bg-black/55 text-white px-2 py-0.5 rounded-full">
             <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
             {{ prop.views ?? 0 }}
@@ -161,8 +165,8 @@ const publishedCount = computed(() => properties.value.filter(p => p.status === 
         <!-- Body -->
         <div class="p-4 flex-1 flex flex-col">
           <p class="text-lg font-bold text-brand-gold">{{ priceLabel(prop) }}</p>
-          <NuxtLink :to="`/dashboard/listings/${prop.id}/edit`" class="font-semibold text-brand-navy line-clamp-1 hover:text-brand-gold transition-colors mt-0.5">{{ prop.title }}</NuxtLink>
-          <p class="text-xs text-gray-400 line-clamp-1 mt-0.5">{{ prop.address }}</p>
+          <NuxtLink :to="`/dashboard/listings/${prop.id}/edit`" class="font-semibold line-clamp-1 hover:text-brand-gold transition-colors mt-0.5" :class="prop.title ? 'text-brand-navy' : 'text-gray-400 italic'">{{ prop.title || 'Untitled listing' }}</NuxtLink>
+          <p class="text-xs text-gray-400 line-clamp-1 mt-0.5">{{ prop.address || (prop.status === 'draft' ? 'Address not added yet' : '') }}</p>
           <p class="text-xs text-gray-500 mt-2 flex items-center gap-3">
             <span v-if="prop.bedrooms">{{ prop.bedrooms }} bd</span>
             <span v-if="prop.bathrooms">{{ prop.bathrooms }} ba</span>
@@ -185,8 +189,15 @@ const publishedCount = computed(() => properties.value.filter(p => p.status === 
           <!-- Actions -->
           <div class="flex items-center gap-2 mt-4 pt-3 border-t border-gray-100">
             <NuxtLink :to="`/dashboard/listings/${prop.id}/edit`" class="flex-1 text-center text-xs font-semibold text-brand-navy border border-gray-200 rounded-lg py-2 hover:border-brand-gold transition-colors">Edit</NuxtLink>
+            <!-- A draft the wizard saved half-filled can't be published yet — send
+                 the agent back to where they left off instead. -->
+            <NuxtLink
+              v-if="prop.status === 'draft' && prop.is_complete === false"
+              :to="`/dashboard/listings/new?draft=${prop.id}`"
+              class="flex-1 text-center text-xs font-semibold text-brand-navy bg-brand-gold rounded-lg py-2 hover:-translate-y-0.5 transition-all"
+            >Continue</NuxtLink>
             <button
-              v-if="prop.status === 'draft'"
+              v-else-if="prop.status === 'draft'"
               :disabled="busy === prop.id"
               class="flex-1 text-xs font-semibold text-brand-navy bg-brand-gold rounded-lg py-2 hover:-translate-y-0.5 transition-all disabled:opacity-50"
               @click="publish(prop.id)"

@@ -11,6 +11,7 @@ use App\Notifications\NewPropertyAlert;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Facades\Notification;
+use Illuminate\Validation\ValidationException;
 
 class PropertyService
 {
@@ -212,8 +213,37 @@ class PropertyService
             ->paginate($perPage);
     }
 
+    /**
+     * A draft can be created with almost nothing filled in — the wizard saves
+     * as the agent goes. The columns are NOT NULL, so blanks become empty
+     * strings / zero rather than a schema change that would ripple through
+     * every reader of `title` and `price`. Publish is where completeness is
+     * checked.
+     *
+     * @param  array<string, mixed>  $data
+     * @return array<string, mixed>
+     */
+    private function normaliseDraftFields(array $data): array
+    {
+        foreach (['title', 'address'] as $k) {
+            if (array_key_exists($k, $data) && $data[$k] === null) $data[$k] = '';
+        }
+        foreach (['price', 'bedrooms', 'bathrooms'] as $k) {
+            if (array_key_exists($k, $data) && $data[$k] === null) $data[$k] = 0;
+        }
+        if (array_key_exists('type', $data) && $data['type'] === null)             $data['type'] = 'house';
+        if (array_key_exists('offer_type', $data) && $data['offer_type'] === null) $data['offer_type'] = 'sale';
+
+        return $data;
+    }
+
     public function create(User $agent, array $data): Property
     {
+        $data = $this->normaliseDraftFields($data + [
+            'title' => null, 'address' => null, 'price' => null,
+            'bedrooms' => null, 'bathrooms' => null, 'type' => null, 'offer_type' => null,
+        ]);
+
         $property = DB::transaction(function () use ($agent, $data): Property {
             return Property::create([...$data, 'agent_id' => $agent->id]);
         });
@@ -222,11 +252,14 @@ class PropertyService
             GeocodeProperty::dispatch($property->id);   // background — save stays instant
         }
 
-        return $property;
+        // fresh(): the in-memory model doesn't carry DB defaults, so without
+        // this the create response reported `status: null` instead of 'draft'.
+        return $property->fresh(['photos']);
     }
 
     public function update(Property $property, array $data): Property
     {
+        $data         = $this->normaliseDraftFields($data);
         $needsGeocode = $this->needsGeocode($data, $property);
 
         $property = DB::transaction(function () use ($property, $data): Property {
@@ -273,8 +306,36 @@ class PropertyService
         });
     }
 
+    /**
+     * What a listing still needs before it can go live. Empty means complete.
+     *
+     * @return list<string>
+     */
+    public function missingForPublish(Property $property): array
+    {
+        $missing = [];
+        if (trim((string) $property->title) === '')   $missing[] = 'a title';
+        if ((float) $property->price <= 0)             $missing[] = 'a price';
+        if (trim((string) $property->address) === '') $missing[] = 'an address';
+        // Use the eager-loaded relation when the caller has it (listing pages),
+        // so this doesn't add a query per row.
+        $hasPhoto = $property->relationLoaded('photos') ? $property->photos->isNotEmpty() : $property->photos()->exists();
+        if (! $hasPhoto)                               $missing[] = 'at least one photo';
+
+        return $missing;
+    }
+
     public function publish(Property $property): Property
     {
+        // Drafts can be saved half-filled, so this is where completeness is
+        // enforced — a listing with no photos or no price must never go live.
+        $missing = $this->missingForPublish($property);
+        if ($missing) {
+            throw ValidationException::withMessages([
+                'listing' => 'This listing still needs ' . implode(', ', $missing) . ' before it can be published.',
+            ]);
+        }
+
         $wasPublished = $property->status === 'published';
 
         // Re-publishing resolves an admin take-down, so clear the reason too.

@@ -27,6 +27,12 @@ class PropertyResource extends JsonResource
             'lat'         => $this->lat ? (float) $this->lat : null,
             'lng'         => $this->lng ? (float) $this->lng : null,
             'status'         => $this->status,
+            // Drafts can be saved half-filled by the wizard. Tells the owner's
+            // UI whether to offer "Publish" or "Continue".
+            'is_complete'    => $this->when(
+                $request->user()?->id === $this->agent_id || ($request->user()?->isAdmin() ?? false),
+                fn () => app(\App\Services\PropertyService::class)->missingForPublish($this->resource) === [],
+            ),
             'sold_at'        => $this->sold_at?->toISOString(),
             // Admin take-down reason — only meaningful to the owner and admins;
             // a draft is never shown publicly anyway.

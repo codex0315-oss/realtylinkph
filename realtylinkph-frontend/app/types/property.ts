@@ -33,6 +33,8 @@ export interface Property {
   lat: string | null
   lng: string | null
   status: PropertyStatus
+  /** Owner/admin only. False for a draft the wizard saved half-filled — needs title, price, address and a photo before Publish. */
+  is_complete?: boolean
   sold_at?: string | null
   featured_score?: number
   is_featured?: boolean
@@ -70,17 +72,21 @@ export interface PropertyFilters {
   page?: number
 }
 
+/**
+ * Creates a DRAFT, so everything is optional — the wizard saves as the agent
+ * goes. Completeness (title, price, address, a photo) is enforced at publish.
+ */
 export interface CreatePropertyRequest {
-  title: string
-  description: string
-  price: number
-  type: PropertyType
+  title?: string
+  description?: string | null
+  price?: number
+  type?: PropertyType
   offer_type?: OfferType
   bedrooms?: number
   bathrooms?: number
   floor_area?: number
   lot_area?: number
-  address: string
+  address?: string
   lat?: number
   lng?: number
 }

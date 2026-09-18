@@ -2,6 +2,7 @@ import type {
   ApiResponse,
   PaginatedResponse,
   Property,
+  PropertyPhoto,
   PropertyFilters,
   CreatePropertyRequest,
   UpdatePropertyRequest,
@@ -181,6 +182,8 @@ export const useProperty = () => {
       floor_area?: number
       lot_area?: number
       address?: string
+      /** A draft whose photos are already on the server — the API reads them from storage. */
+      property_id?: number
     },
     photos: File[] = [],
   ): Promise<string | null> {
@@ -198,17 +201,18 @@ export const useProperty = () => {
     }
   }
 
-  async function uploadPhoto(propertyId: number, file: File, sortOrder = 0, is360 = false): Promise<boolean> {
+  /** Returns the stored photo (id + url) so the caller can show and later remove it; null on failure. */
+  async function uploadPhoto(propertyId: number, file: File, sortOrder = 0, is360 = false): Promise<PropertyPhoto | null> {
     const form = new FormData()
     form.append('photo', file)
     form.append('sort_order', String(sortOrder))
     if (is360) form.append('is_360', '1')
     try {
-      await api.postForm(`/properties/${propertyId}/photos`, form)
-      return true
+      const res = await api.postForm<ApiResponse<PropertyPhoto>>(`/properties/${propertyId}/photos`, form)
+      return res.data
     } catch (e) {
       error.value = extractError(e)
-      return false
+      return null
     }
   }
 
