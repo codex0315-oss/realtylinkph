@@ -1,0 +1,895 @@
+flowchart TD
+    subgraph M1["1 - Application Bootstrap, Session and Role Dispatch"]
+        subgraph m1_FE["Frontend - Nuxt SPA"]
+            m1_start([Start: browser opens realtylinkph.vercel.app])
+            m1_load["Load Nuxt app; run client plugins in filename order"]
+            m1_p00["Plugin 00.auth: read rl token from localStorage"]
+            m1_hasTok{"Token present in localStorage?"}
+            m1_pub["Render public site: home rows, /properties, /properties/:id, /agents"]
+            m1_wantAuth{"User clicks Sign in or Get started?"}
+            m1_gotoAuth["Go to diagram 2: Authentication"]
+            m1_setUser["Store user in Pinia authStore"]
+            m1_role{"authStore.user.role_type?"}
+            m1_dashAdmin["Route /admin: Users, Agents, Listings, Reviews"]
+            m1_dashAgent["Route /dashboard: My Listings, Inquiries, Appointments, Calendar, Reviews"]
+            m1_dashBuyer["Route /dashboard: Browse, Saved, Messages, Appointments, History"]
+            m1_echo["Plugin echo.client: connect Pusher wss with NUXT_PUBLIC_PUSHER_KEY"]
+            m1_authz["Custom authorizer: POST /broadcasting/auth with Bearer token at subscribe time"]
+            m1_subOk{"Private channel subscription accepted?"}
+            m1_rtOn["Realtime ON: listen message.sent, notification, typing whispers"]
+            m1_rtOff["Realtime OFF: console warn; pages still work via refresh"]
+            m1_hb["Heartbeat: POST /api/heartbeat every 60s"]
+            m1_bell["GET /api/notifications -> bell count"]
+            m1_act["User performs actions in the current module"]
+            m1_evt{"Realtime event received?"}
+            m1_apply["Update open screen in place; bump bell count"]
+            m1_logout{"User clicks Sign out?"}
+            m1_clear["Clear token from localStorage; disconnect Echo; stop heartbeat"]
+            m1_fin([End: public site shown])
+        end
+        subgraph m1_API["API - Laravel 12 on Render"]
+            m1_me["GET /api/me  (auth:sanctum)"]
+            m1_meValid{"Bearer token found in personal_access_tokens?"}
+            m1_meJson[/"200 UserResource: id, name, role_type, agent_profile, favorites, has_gcal"/]
+            m1_me401[/"401 Unauthenticated"/]
+            m1_hbApi["POST /api/heartbeat: users.last_seen_at = now"]
+            m1_notifApi["GET /api/notifications: unread rows for notifiable_id = user"]
+            m1_logoutApi["POST /api/logout: delete current access token"]
+            m1_bcast["POST /broadcasting/auth: verify Bearer, sign socket_id + channel"]
+        end
+        subgraph m1_DB["Database & Storage - Neon Postgres"]
+            m1_users[("users")]
+            m1_pat[("personal_access_tokens")]
+            m1_notifs[("notifications")]
+        end
+        subgraph m1_EXT["External Services"]
+            m1_pusher["Pusher Channels ap1"]
+        end
+        m1_start --> m1_load --> m1_p00 --> m1_hasTok
+        m1_hasTok -->|"No token"| m1_pub
+        m1_hasTok -->|"Token found"| m1_me
+        m1_me --> m1_meValid
+        m1_meValid -->|"Not found or revoked"| m1_me401
+        m1_me401 -->|"Catch 401"| m1_clear
+        m1_clear -->|"Session cleared"| m1_pub
+        m1_meValid -->|"Valid token"| m1_pat
+        m1_pat -->|"Load owner"| m1_users
+        m1_users -->|"User row"| m1_meJson
+        m1_meJson -->|"200 JSON"| m1_setUser
+        m1_pub --> m1_wantAuth
+        m1_wantAuth -->|"No, keep browsing"| m1_pub
+        m1_wantAuth -->|"Yes"| m1_gotoAuth
+        m1_gotoAuth -->|"Token issued"| m1_me
+        m1_setUser --> m1_role
+        m1_role -->|"admin or super_admin"| m1_dashAdmin
+        m1_role -->|"agent"| m1_dashAgent
+        m1_role -->|"buyer or ghost_buyer"| m1_dashBuyer
+        m1_dashAdmin --> m1_echo
+        m1_dashAgent --> m1_echo
+        m1_dashBuyer --> m1_echo
+        m1_echo -->|"wss connect"| m1_pusher
+        m1_pusher -->|"subscribe private-user.{id}"| m1_authz
+        m1_authz -->|"socket_id, channel_name, Bearer"| m1_bcast
+        m1_bcast -->|"Signed auth or 403"| m1_subOk
+        m1_subOk -->|"200 signed"| m1_rtOn
+        m1_subOk -->|"403 or network error"| m1_rtOff
+        m1_rtOn --> m1_hb
+        m1_rtOff --> m1_hb
+        m1_hb -->|"every 60s"| m1_hbApi
+        m1_hbApi -->|"UPDATE last_seen_at"| m1_users
+        m1_hb --> m1_bell
+        m1_bell --> m1_notifApi
+        m1_notifApi -->|"SELECT unread"| m1_notifs
+        m1_notifs -->|"rows"| m1_bell
+        m1_bell --> m1_act
+        m1_act --> m1_evt
+        m1_evt -->|"message.sent / notification / typing"| m1_apply
+        m1_apply --> m1_act
+        m1_evt -->|"No event"| m1_logout
+        m1_logout -->|"No"| m1_act
+        m1_logout -->|"Yes"| m1_logoutApi
+        m1_logoutApi -->|"DELETE token row"| m1_pat
+        m1_logoutApi -->|"204"| m1_clear
+        m1_clear --> m1_fin
+    end
+    subgraph M2["2 - Authentication"]
+        subgraph m2_FE["Frontend - Nuxt SPA"]
+            m2_start([Start: Sign in or Get started clicked])
+            m2_has{"Has an account?"}
+            m2_regForm[/"Register form: name, email, password"/]
+            m2_regSubmit["POST /api/register"]
+            m2_loginForm[/"Sign in form: email, password"/]
+            m2_loginSubmit["POST /api/login"]
+            m2_gBtn["Click Continue with Google"]
+            m2_gRedirect["GET /api/auth/google/redirect -> browser goes to Google"]
+            m2_gCallbackPage["Page /auth/google/callback receives ?code"]
+            m2_gPost["POST /api/auth/google/callback with code"]
+            m2_forgot{"Forgot password?"}
+            m2_forgotForm[/"Email address"/]
+            m2_forgotSubmit["POST /api/forgot-password"]
+            m2_resetPage["Page /reset-password?token&email"]
+            m2_resetForm[/"New password x2"/]
+            m2_resetSubmit["POST /api/reset-password"]
+            m2_storeTok["Save token to localStorage; authStore.initFromStorage"]
+            m2_toMain["Go to diagram 1: GET /api/me and role dispatch"]
+            m2_showErr[/"Show field or message error"/]
+            m2_verifyPanel["My Profile -> Email status: enter 6-digit code or Resend"]
+            m2_verifyCode["POST /api/email/verify with code"]
+            m2_fin([End: signed in])
+        end
+        subgraph m2_API["API - Laravel"]
+            m2_regThr{"Throttle 10/min ok?"}
+            m2_regVal{"Validation: name required, email unique, password min 8?"}
+            m2_regCreate["Create user: role_type=buyer, password bcrypt"]
+            m2_regNotify["Queue VerifyEmail notification (signed URL + 6-digit code)"]
+            m2_regTok["Create Sanctum token"]
+            m2_loginThr{"Throttle 10/min ok?"}
+            m2_loginCheck{"Hash check passes and not is_system?"}
+            m2_loginTok["Create Sanctum token"]
+            m2_gThr{"Throttle 20/min ok?"}
+            m2_gExchange["Exchange code with Google for id_token / profile"]
+            m2_gValid{"Google returned email?"}
+            m2_gFind{"users.email exists?"}
+            m2_gCreate["Create user: role_type=buyer, email_verified_at=now"]
+            m2_gTok["Create Sanctum token"]
+            m2_fThr{"Throttle 5/min ok?"}
+            m2_fExists{"Email registered?"}
+            m2_fBroker{"Broker throttle: requested under 60s ago?"}
+            m2_fToken["Create password_reset_tokens row (60 min)"]
+            m2_fNotify["Queue ResetPasswordLink email with FRONTEND_URL link"]
+            m2_rThr{"Throttle 10/min ok?"}
+            m2_rValid{"Token matches, not expired, password min 8 and confirmed?"}
+            m2_rSave["Update password hash; delete reset token"]
+            m2_vLink["GET /api/email/verify/{id}/{hash} (signed middleware)"]
+            m2_vSig{"Signature and sha1(email) hash valid?"}
+            m2_vMark["Set email_verified_at; fire Verified event; redirect FRONTEND_URL/?verified=1"]
+            m2_vCodeThr{"Throttle 6/min ok?"}
+            m2_vCodeOk{"Code matches?"}
+            m2_e422[/"422 validation errors"/]
+            m2_e429[/"429 Too many attempts"/]
+            m2_e401[/"401 invalid credentials"/]
+            m2_e400[/"400 Google exchange failed"/]
+            m2_e403[/"403 Invalid verification link"/]
+        end
+        subgraph m2_DB["Database"]
+            m2_users[("users")]
+            m2_pat[("personal_access_tokens")]
+            m2_prt[("password_reset_tokens")]
+            m2_jobs[("jobs")]
+        end
+        subgraph m2_Q["Queue Worker (in web container)"]
+            m2_mailJob["Send mail via Brevo HTTPS API (MAIL_MAILER=brevo)"]
+        end
+        subgraph m2_EXT["External Services"]
+            m2_google["Google OAuth 2.0"]
+            m2_brevo["Brevo transactional email"]
+        end
+        m2_start --> m2_has
+        m2_has -->|"No"| m2_regForm --> m2_regSubmit --> m2_regThr
+        m2_regThr -->|"Exceeded"| m2_e429 --> m2_showErr
+        m2_regThr -->|"Ok"| m2_regVal
+        m2_regVal -->|"Fails"| m2_e422 --> m2_showErr
+        m2_showErr -->|"User corrects"| m2_regForm
+        m2_regVal -->|"Passes"| m2_regCreate
+        m2_regCreate -->|"INSERT users"| m2_users
+        m2_regCreate --> m2_regNotify
+        m2_regNotify -->|"INSERT job"| m2_jobs
+        m2_jobs -->|"Worker picks job"| m2_mailJob
+        m2_mailJob -->|"POST /v3/smtp/email"| m2_brevo
+        m2_regNotify --> m2_regTok
+        m2_regTok -->|"INSERT token"| m2_pat
+        m2_regTok -->|"200 token + user"| m2_storeTok
+        m2_has -->|"Yes"| m2_loginForm --> m2_forgot
+        m2_forgot -->|"No"| m2_loginSubmit --> m2_loginThr
+        m2_loginThr -->|"Exceeded"| m2_e429
+        m2_loginThr -->|"Ok"| m2_loginCheck
+        m2_loginCheck -->|"Fails"| m2_e401 --> m2_showErr
+        m2_loginCheck -->|"Passes"| m2_loginTok
+        m2_loginTok -->|"INSERT token"| m2_pat
+        m2_loginTok -->|"200 token + user"| m2_storeTok
+        m2_has -->|"Google"| m2_gBtn --> m2_gRedirect
+        m2_gRedirect -->|"Redirect with client_id, redirect_uri"| m2_google
+        m2_google -->|"Redirect back with code"| m2_gCallbackPage --> m2_gPost --> m2_gThr
+        m2_gThr -->|"Exceeded"| m2_e429
+        m2_gThr -->|"Ok"| m2_gExchange
+        m2_gExchange -->|"Token request"| m2_google
+        m2_google -->|"Profile or error"| m2_gValid
+        m2_gValid -->|"Error / no email"| m2_e400 --> m2_showErr
+        m2_gValid -->|"Profile ok"| m2_gFind
+        m2_gFind -->|"Exists"| m2_gTok
+        m2_gFind -->|"Not found"| m2_gCreate
+        m2_gCreate -->|"INSERT users"| m2_users
+        m2_gCreate --> m2_gTok
+        m2_gTok -->|"INSERT token"| m2_pat
+        m2_gTok -->|"200 token + user"| m2_storeTok
+        m2_forgot -->|"Yes"| m2_forgotForm --> m2_forgotSubmit --> m2_fThr
+        m2_fThr -->|"Exceeded"| m2_e429
+        m2_fThr -->|"Ok"| m2_fExists
+        m2_fExists -->|"Not registered"| m2_e422
+        m2_fExists -->|"Registered"| m2_fBroker
+        m2_fBroker -->|"Yes"| m2_e429
+        m2_fBroker -->|"No"| m2_fToken
+        m2_fToken -->|"UPSERT email, token, created_at"| m2_prt
+        m2_fToken --> m2_fNotify
+        m2_fNotify -->|"INSERT job"| m2_jobs
+        m2_fNotify -->|"200 Check your inbox"| m2_resetPage
+        m2_resetPage --> m2_resetForm --> m2_resetSubmit --> m2_rThr
+        m2_rThr -->|"Exceeded"| m2_e429
+        m2_rThr -->|"Ok"| m2_rValid
+        m2_rValid -->|"Fails"| m2_e422
+        m2_rValid -->|"Passes"| m2_rSave
+        m2_rSave -->|"UPDATE users.password"| m2_users
+        m2_rSave -->|"DELETE token"| m2_prt
+        m2_rSave -->|"200 Password reset"| m2_loginForm
+        m2_storeTok --> m2_toMain --> m2_fin
+        m2_fin -.->|"Later: user clicks email link"| m2_vLink
+        m2_vLink --> m2_vSig
+        m2_vSig -->|"Invalid"| m2_e403
+        m2_vSig -->|"Valid"| m2_vMark
+        m2_vMark -->|"UPDATE email_verified_at"| m2_users
+        m2_fin -.->|"Or: user enters code"| m2_verifyPanel --> m2_verifyCode --> m2_vCodeThr
+        m2_vCodeThr -->|"Exceeded"| m2_e429
+        m2_vCodeThr -->|"Ok"| m2_vCodeOk
+        m2_vCodeOk -->|"Wrong"| m2_e422
+        m2_vCodeOk -->|"Matches"| m2_vMark
+    end
+    subgraph M3["3 - Agent Verification"]
+        subgraph m3_FE["Frontend - Nuxt SPA"]
+            m3_start([Start: buyer opens /dashboard/verify])
+            m3_fetchMe["GET /api/me -> agent_profile status"]
+            m3_exist{"agent_profile exists?"}
+            m3_stat{"agent_profile.status?"}
+            m3_showPending[/"Application Submitted - pending admin review"/]
+            m3_cool{"reapply_at in the future?"}
+            m3_showCool[/"Not approved: reason + countdown to re-apply"/]
+            m3_chooseType{"Broker or Salesperson?"}
+            m3_stepsB["Steps: Information, License Card, Live Scan, Review"]
+            m3_stepsS["Steps: Information, Accreditation, Valid ID, Live Scan, Review"]
+            m3_info[/"full_name, mobile, prc_number, supervising_broker"/]
+            m3_pick[/"Pick document file"/]
+            m3_fCheck{"Type in pdf/jpg/png/webp and size 5MB or less?"}
+            m3_fReject[/"Show file name and reason; ask again"/]
+            m3_selfie["LiveFaceCapture: webcam capture (Retake allowed)"]
+            m3_review["Review step"]
+            m3_submit["XMLHttpRequest POST /api/agent/verify multipart; upload.onprogress -> percent"]
+            m3_overlay[/"Overlay: Uploading your documents N% -> Saving your application"/]
+            m3_done[/"Application Submitted; menu shows Agent Application Pending"/]
+            m3_errUp[/"Show 429 cool-down or 422 field error"/]
+            m3_fin([End])
+        end
+        subgraph m3_API["API - Laravel"]
+            m3_thr{"Throttle ok?"}
+            m3_val{"SubmitVerificationRequest: applicant_type, prc_number, files valid?"}
+            m3_cd{"Existing profile in 12h re-apply cool-down?"}
+            m3_tx["DB transaction: update users.name/phone; store files; upsert agent_profiles status=pending, ai_comment=null"]
+            m3_notifA["NotificationService: applicant in-app"]
+            m3_notifAdm["For each admin: in-app + NewAgentApplication email (queued)"]
+            m3_dispatch["AssessAgentApplication::dispatch(profile.id)->afterCommit()"]
+            m3_resp[/"201 AgentProfileResource (no ai_comment for owner)"/]
+            m3_e429[/"429 Your application was recently declined"/]
+            m3_e422[/"422 validation errors"/]
+            m3_pending["GET /api/admin/agent-applications (admin, polls 5s while ai_pending)"]
+            m3_decide["POST /api/admin/agent-applications/{profile}/review"]
+            m3_act{"action = approve or reject?"}
+            m3_approve["status=approved, reviewed_at=now; users.role_type=agent"]
+            m3_reject{"reason present?"}
+            m3_rejectDo["status=rejected, admin_note=reason, reviewed_at=now"]
+            m3_e422r[/"422 reason required"/]
+            m3_nApprove["Notify applicant: in-app + AgentApplicationApproved email"]
+            m3_nReject["Notify applicant: in-app + AgentApplicationRejected email with reapply time"]
+        end
+        subgraph m3_DB["Database & Storage"]
+            m3_users[("users")]
+            m3_profiles[("agent_profiles")]
+            m3_store[("Supabase bucket: agent-faces/, agent-docs/")]
+            m3_jobs[("jobs")]
+        end
+        subgraph m3_Q["Queue Worker & Scheduler"]
+            m3_job["Job AssessAgentApplication (timeout 150s, tries 2)"]
+            m3_jGuard{"profile.status == pending and ai_assessed_at null?"}
+            m3_jRead["Read documents from Uploads::disk(); base64 inline_data"]
+            m3_jPrompt["Build prompt: AgentCredentialReference + declared name/number + today's date"]
+            m3_jCall["Gemini generateContent (60s/model, 2 models)"]
+            m3_jOk{"Text returned?"}
+            m3_jWrite["UPDATE ai_comment=text, ai_assessed_at=now"]
+            m3_jFail["UPDATE ai_comment='assessment unavailable - review manually', ai_assessed_at=now"]
+            m3_purge["Scheduler hourly: agents:purge-rejected-documents after cool-down"]
+        end
+        subgraph m3_EXT["External Services"]
+            m3_gemini["Gemini API"]
+            m3_brevo["Brevo email API"]
+            m3_prc["PRC License Verification portal (admin opens manually)"]
+        end
+        m3_start --> m3_fetchMe --> m3_exist
+        m3_exist -->|"Yes"| m3_stat
+        m3_stat -->|"pending"| m3_showPending --> m3_fin
+        m3_stat -->|"rejected"| m3_cool
+        m3_cool -->|"Yes"| m3_showCool --> m3_fin
+        m3_cool -->|"No"| m3_chooseType
+        m3_exist -->|"No"| m3_chooseType
+        m3_chooseType -->|"Broker"| m3_stepsB --> m3_info
+        m3_chooseType -->|"Salesperson"| m3_stepsS --> m3_info
+        m3_info --> m3_pick --> m3_fCheck
+        m3_fCheck -->|"Fails"| m3_fReject --> m3_pick
+        m3_fCheck -->|"Passes"| m3_selfie --> m3_review --> m3_submit
+        m3_submit -->|"progress events"| m3_overlay
+        m3_submit -->|"multipart"| m3_thr
+        m3_thr -->|"Exceeded"| m3_e429 --> m3_errUp
+        m3_thr -->|"Ok"| m3_val
+        m3_val -->|"Fails"| m3_e422 --> m3_errUp
+        m3_errUp --> m3_review
+        m3_val -->|"Passes"| m3_cd
+        m3_cd -->|"Yes"| m3_e429
+        m3_cd -->|"No"| m3_tx
+        m3_tx -->|"PUT files"| m3_store
+        m3_tx -->|"UPSERT"| m3_profiles
+        m3_tx -->|"UPDATE name, phone"| m3_users
+        m3_tx -->|"Committed"| m3_notifA --> m3_notifAdm
+        m3_notifAdm -->|"INSERT mail jobs"| m3_jobs
+        m3_tx -->|"Committed"| m3_dispatch
+        m3_dispatch -->|"INSERT job"| m3_jobs
+        m3_dispatch --> m3_resp
+        m3_resp -->|"201"| m3_done --> m3_fin
+        m3_jobs -->|"Worker picks job"| m3_job --> m3_jGuard
+        m3_jGuard -->|"No: already decided or assessed"| m3_fin
+        m3_jGuard -->|"Yes"| m3_jRead
+        m3_jRead -->|"GET objects"| m3_store
+        m3_jRead --> m3_jPrompt --> m3_jCall
+        m3_jCall -->|"HTTPS"| m3_gemini
+        m3_gemini -->|"Response or timeout"| m3_jOk
+        m3_jOk -->|"Text"| m3_jWrite
+        m3_jOk -->|"Null after 2 models"| m3_jFail
+        m3_jWrite -->|"UPDATE"| m3_profiles
+        m3_jFail -->|"UPDATE"| m3_profiles
+        m3_profiles -->|"ai_pending false"| m3_pending
+        m3_pending -->|"Admin reviews docs, AI note, Verify on PRC"| m3_prc
+        m3_pending --> m3_decide --> m3_act
+        m3_act -->|"approve"| m3_approve
+        m3_approve -->|"UPDATE profiles, users"| m3_profiles
+        m3_approve -->|"UPDATE role_type"| m3_users
+        m3_approve --> m3_nApprove
+        m3_nApprove -->|"INSERT mail job"| m3_jobs
+        m3_act -->|"reject"| m3_reject
+        m3_reject -->|"Missing"| m3_e422r
+        m3_reject -->|"Present"| m3_rejectDo
+        m3_rejectDo -->|"UPDATE"| m3_profiles
+        m3_rejectDo --> m3_nReject
+        m3_nReject -->|"INSERT mail job"| m3_jobs
+        m3_jobs -->|"Mail jobs"| m3_brevo
+        m3_rejectDo -.->|"After 12h cool-down"| m3_purge
+        m3_purge -->|"DELETE objects"| m3_store
+        m3_purge -->|"NULL document paths"| m3_profiles
+    end
+    subgraph M4["4 - Listing Management"]
+        subgraph m4_FE["Frontend - Nuxt SPA"]
+            m4_start([Start: agent opens /dashboard/listings/new])
+            m4_ls{"rl-listing-draft in localStorage or ?draft=id?"}
+            m4_resume["GET /api/properties/{id}: hydrate form, gallery, panos; jump to last step"]
+            m4_resumeOk{"200 and status == draft?"}
+            m4_clearLs["Remove rl-listing-draft key"]
+            m4_s1["Step 1: Add photos"]
+            m4_pCheck{"File size 10MB or less and image/*?"}
+            m4_pSkip[/"Skip file; show name and limit"/]
+            m4_dEx{"draftId set?"}
+            m4_create["POST /api/properties with current fields (may be blank)"]
+            m4_setId["draftId = id; localStorage rl-listing-draft = id"]
+            m4_upload["POST /api/properties/{id}/photos multipart; tile shows spinner"]
+            m4_upOk{"201 photo?"}
+            m4_upFail[/"Remove tile; list failed file"/]
+            m4_more{"More photos?"}
+            m4_s2["Step 2: Add 360 panoramas (is_360=1), same upload path, or Skip"]
+            m4_s3[/"Step 3: offer_type, title, address, type, price, beds, baths, areas, description"/]
+            m4_watch["watch(form): dirty=true; debounce 800ms"]
+            m4_autosave["PUT /api/properties/{id} with payload()"]
+            m4_asOk{"200?"}
+            m4_saved[/"Header: Draft saved . time"/]
+            m4_asErr[/"Header: Could not save - will retry on next change"/]
+            m4_aiQ{"Generate with AI?"}
+            m4_aiCall["POST /api/ai/generate-description with details + property_id (or in-memory files)"]
+            m4_aiOk{"200 description?"}
+            m4_aiFill["form.description = text"]
+            m4_aiErr[/"Could not generate a description"/]
+            m4_leave{"onBeforeRouteLeave: draftId or dirty?"}
+            m4_modal{"Modal: Save as draft / Keep editing / Discard?"}
+            m4_flush["flushSave(); leavingOnPurpose=true; router.push(target)"]
+            m4_discard["DELETE /api/properties/{id}; remove localStorage key"]
+            m4_finish["Save listing: flushSave(); remove localStorage key; go to /dashboard/listings"]
+            m4_myList["My Listings: is_complete false -> Continue; true -> Publish"]
+            m4_pubBtn["POST /api/properties/{id}/publish"]
+            m4_pubOk{"200?"}
+            m4_pubErr[/"Toast: This listing still needs a title / a price / an address / at least one photo"/]
+            m4_live[/"Card shows Published; appears in browse, home rows, map"/]
+            m4_later{"Later action?"}
+            m4_unpub["POST /api/properties/{id}/unpublish"]
+            m4_sold["POST /api/properties/{id}/mark-sold"]
+            m4_relist["POST /api/properties/{id}/relist"]
+            m4_edit["PUT /api/properties/{id} (published: title, price, address required)"]
+            m4_del["DELETE /api/properties/{id}"]
+            m4_fin([End])
+        end
+        subgraph m4_API["API - Laravel"]
+            m4_storeVal{"StorePropertyRequest: all fields nullable, types/max ok?"}
+            m4_normalize["normaliseDraftFields: null title/address -> '', price/beds/baths -> 0, type -> house, offer_type -> sale"]
+            m4_insert["INSERT properties status=draft, agent_id=user; return fresh()"]
+            m4_geoNeed{"Address present and lat/lng empty?"}
+            m4_geoDispatch["GeocodeProperty::dispatch(id)"]
+            m4_photoVal{"UploadPhotoRequest: image, max 10240KB? PHP upload_max_filesize 12M"}
+            m4_photoStore["Uploads::disk()->put('properties/{id}/...'); INSERT property_photos sort_order, is_360"]
+            m4_updVal{"UpdatePropertyRequest: draft -> nullable; published -> title/price/address required"}
+            m4_updSave["normalise; UPDATE properties; geocode if address changed"]
+            m4_pubCheck{"missingForPublish(): title, price gt 0, address, photos exist?"}
+            m4_pubSave["UPDATE status=published, unpublish_reason=null, unpublished_at=null"]
+            m4_firstPub{"Was previously unpublished (first publish)?"}
+            m4_alertBuyers["Queue NewPropertyAlert to users with property_alerts=true"]
+            m4_e422p[/"422 listing: This listing still needs ..."/]
+            m4_unpubSave["UPDATE status=draft"]
+            m4_soldSave["UPDATE status=sold, sold_at=now"]
+            m4_relistSave["UPDATE status=draft, sold_at=null"]
+            m4_delTx["For each photo: PropertyPhotoService->delete (storage + row); DELETE property (cascades)"]
+            m4_aiGen["GeminiController: read photos from storage via property_id if no files; generatePropertyDescription"]
+            m4_e403[/"403 not owner"/]
+        end
+        subgraph m4_DB["Database & Storage"]
+            m4_props[("properties")]
+            m4_photos[("property_photos")]
+            m4_store[("Supabase bucket: properties/{id}/")]
+            m4_users[("users")]
+            m4_jobs[("jobs")]
+        end
+        subgraph m4_Q["Queue Worker"]
+            m4_geoJob["Job GeocodeProperty: Geoapify geocode -> UPDATE lat, lng"]
+            m4_mailJob["NewPropertyAlert emails via Brevo"]
+        end
+        subgraph m4_EXT["External Services"]
+            m4_gemini["Gemini API"]
+            m4_geoapify["Geoapify Geocoding"]
+            m4_brevo["Brevo email API"]
+        end
+        m4_start --> m4_ls
+        m4_ls -->|"Found id"| m4_resume --> m4_resumeOk
+        m4_resumeOk -->|"No"| m4_clearLs --> m4_s1
+        m4_resumeOk -->|"Yes"| m4_s1
+        m4_ls -->|"None"| m4_s1
+        m4_s1 --> m4_pCheck
+        m4_pCheck -->|"Fails"| m4_pSkip --> m4_more
+        m4_pCheck -->|"Passes"| m4_dEx
+        m4_dEx -->|"No"| m4_create --> m4_storeVal
+        m4_storeVal -->|"Fails"| m4_pSkip
+        m4_storeVal -->|"Passes"| m4_normalize --> m4_insert
+        m4_insert -->|"INSERT"| m4_props
+        m4_insert --> m4_geoNeed
+        m4_geoNeed -->|"Yes"| m4_geoDispatch -->|"INSERT job"| m4_jobs
+        m4_geoNeed -->|"No"| m4_setId
+        m4_insert -->|"201 property"| m4_setId --> m4_upload
+        m4_dEx -->|"Yes"| m4_upload
+        m4_upload --> m4_photoVal
+        m4_photoVal -->|"Fails"| m4_upFail --> m4_more
+        m4_photoVal -->|"Passes"| m4_photoStore
+        m4_photoStore -->|"PUT object"| m4_store
+        m4_photoStore -->|"INSERT"| m4_photos
+        m4_photoStore -->|"201 photo id, url"| m4_upOk
+        m4_upOk -->|"Yes"| m4_more
+        m4_more -->|"Yes"| m4_s1
+        m4_more -->|"No"| m4_s2 --> m4_s3 --> m4_watch
+        m4_watch -->|"800ms idle"| m4_autosave --> m4_updVal
+        m4_updVal -->|"Fails"| m4_asErr --> m4_watch
+        m4_updVal -->|"Passes"| m4_updSave
+        m4_updSave -->|"UPDATE"| m4_props
+        m4_updSave -->|"200"| m4_asOk
+        m4_asOk -->|"Yes"| m4_saved --> m4_aiQ
+        m4_aiQ -->|"Yes"| m4_aiCall --> m4_aiGen
+        m4_aiGen -->|"GET photos"| m4_store
+        m4_aiGen -->|"HTTPS"| m4_gemini
+        m4_gemini -->|"Text or error"| m4_aiOk
+        m4_aiOk -->|"Text"| m4_aiFill --> m4_watch
+        m4_aiOk -->|"Error"| m4_aiErr --> m4_aiQ
+        m4_aiQ -->|"No"| m4_leave
+        m4_leave -->|"Navigating away with draft"| m4_modal
+        m4_modal -->|"Keep editing"| m4_s3
+        m4_modal -->|"Save as draft"| m4_flush --> m4_myList
+        m4_modal -->|"Discard"| m4_discard --> m4_delTx
+        m4_leave -->|"Clicks Save listing"| m4_finish --> m4_myList
+        m4_myList -->|"Publish"| m4_pubBtn --> m4_pubCheck
+        m4_pubCheck -->|"Something missing"| m4_e422p --> m4_pubErr --> m4_myList
+        m4_pubCheck -->|"Complete"| m4_pubSave
+        m4_pubSave -->|"UPDATE"| m4_props
+        m4_pubSave --> m4_firstPub
+        m4_firstPub -->|"Yes"| m4_alertBuyers
+        m4_alertBuyers -->|"SELECT property_alerts=true"| m4_users
+        m4_alertBuyers -->|"INSERT mail jobs"| m4_jobs
+        m4_firstPub -->|"No"| m4_live
+        m4_alertBuyers --> m4_live
+        m4_pubSave -->|"200"| m4_pubOk --> m4_live
+        m4_live --> m4_later
+        m4_later -->|"Unpublish"| m4_unpub --> m4_unpubSave -->|"UPDATE"| m4_props
+        m4_later -->|"Mark as Sold"| m4_sold --> m4_soldSave -->|"UPDATE"| m4_props
+        m4_later -->|"Re-list"| m4_relist --> m4_relistSave -->|"UPDATE"| m4_props
+        m4_later -->|"Edit"| m4_edit --> m4_updVal
+        m4_later -->|"Delete"| m4_del --> m4_delTx
+        m4_delTx -->|"DELETE objects"| m4_store
+        m4_delTx -->|"DELETE rows"| m4_photos
+        m4_delTx -->|"DELETE row"| m4_props
+        m4_delTx --> m4_fin
+        m4_unpubSave --> m4_fin
+        m4_soldSave --> m4_fin
+        m4_relistSave --> m4_later
+        m4_jobs -->|"Worker"| m4_geoJob
+        m4_geoJob -->|"HTTPS"| m4_geoapify
+        m4_geoapify -->|"lat, lng"| m4_geoJob
+        m4_geoJob -->|"UPDATE lat, lng"| m4_props
+        m4_jobs -->|"Worker"| m4_mailJob
+        m4_mailJob -->|"POST"| m4_brevo
+    end
+    subgraph M5["5 - Viewing Booking and Cancellation"]
+        subgraph m5_FE["Frontend - Nuxt SPA"]
+            m5_start([Start: buyer clicks Schedule Viewing])
+            m5_signed{"Signed in?"}
+            m5_signIn[/"Sign in to schedule a viewing"/]
+            m5_openDlg["Open booking dialog"]
+            m5_avail["GET /api/agents/{agent}/availability?date"]
+            m5_dates["GET /api/agents/{agent}/unavailable-dates"]
+            m5_pickDate[/"Select a date"/]
+            m5_pickSlot[/"Available times: 1h slots 08:00-18:00; Limited tag"/]
+            m5_note[/"Special requests"/]
+            m5_book["POST /api/properties/{id}/appointments {preferred_datetime, notes}"]
+            m5_bookOk{"Response?"}
+            m5_taken[/"Someone just booked that time slot. Please pick another."/]
+            m5_locked[/"Booking locked until date"/]
+            m5_sent[/"Request sent - Pending"/]
+            m5_agentList["Agent: /dashboard/appointments"]
+            m5_agentAct{"Agent action?"}
+            m5_confirmBtn["POST /api/appointments/{id}/confirm"]
+            m5_cancelModal["CancelViewingModal: reason_code (role list), reason_note if other; late warning"]
+            m5_cancelBtn["POST /api/appointments/{id}/cancel"]
+            m5_cancelOk{"Response?"}
+            m5_cancelErr[/"422 reason required / note required"/]
+            m5_completeBtn["POST /api/appointments/{id}/complete"]
+            m5_history["Buyer: History -> Rate agent"]
+            m5_review["POST /api/reviews {appointment_id, rating 1-5, review_text}"]
+            m5_fin([End])
+        end
+        subgraph m5_API["API - Laravel"]
+            m5_lockChk{"User::isBookingLocked(): 5+ late strikes in 30 days?"}
+            m5_e423[/"423 Booking locked until date"/]
+            m5_slotCalc["AvailabilityService: SLOT_MINUTES=60, 08:00-18:00 minus blocked dates/recurring minus pending+confirmed"]
+            m5_slotsOut[/"Slots JSON"/]
+            m5_bookVal{"Slot in list, in future, listing published?"}
+            m5_insertAppt["INSERT appointments status=pending"]
+            m5_uniq{"Partial unique index (agent_id, preferred_datetime) WHERE status IN pending, confirmed"}
+            m5_e409[/"409 Someone just booked that time slot"/]
+            m5_e422[/"422 validation"/]
+            m5_notifAgent["Notify agent: in-app + realtime + email"]
+            m5_confirmSave["UPDATE status=confirmed"]
+            m5_gcalEach["For buyer and agent with google tokens: GoogleCalendarService->createEvent"]
+            m5_calEnsure{"users.google_calendar_id set?"}
+            m5_calCreate["POST calendars {summary: RealtyLink PH Viewings}; store id"]
+            m5_calInsert["POST calendars/{id}/events"]
+            m5_cal404{"404 calendar deleted by user?"}
+            m5_calStore["UPDATE gcal_event_id / gcal_event_id_buyer"]
+            m5_notifBuyerC["Notify buyer: confirmed"]
+            m5_cancelVal{"CancelAppointmentRequest: reason_code in role list; note required if other?"}
+            m5_cancelSave["UPDATE status=cancelled, cancelled_by_id, cancel_reason_code, cancel_reason_note, cancelled_at"]
+            m5_lateChk{"Was confirmed AND now->diffInHours(slot) between 0 and 24?"}
+            m5_lateSet["UPDATE late_cancellation=true"]
+            m5_strikeCount{"Canceller recentStrikes() >= 5 in 30 days?"}
+            m5_lockNote["bookingLockedUntil = last strike + 7 days (computed, not stored)"]
+            m5_calDel["DELETE calendar events for both parties"]
+            m5_notifOther["Notify the other party with reason"]
+            m5_completeVal{"status == confirmed and slot time passed?"}
+            m5_completeSave["UPDATE status=completed"]
+            m5_reviewVal{"Appointment completed, buyer owns it, no review yet (unique appointment_id)?"}
+            m5_reviewSave["INSERT agent_reviews rating, review_text, is_visible=true"]
+            m5_notifAgentR["Notify agent: new review"]
+            m5_e422r[/"422 already reviewed / not completed"/]
+        end
+        subgraph m5_DB["Database"]
+            m5_appts[("appointments")]
+            m5_blocked[("agent_blocked_dates")]
+            m5_users[("users")]
+            m5_reviews[("agent_reviews")]
+            m5_props[("properties")]
+        end
+        subgraph m5_EXT["External Services"]
+            m5_gcal["Google Calendar API"]
+            m5_pusher["Pusher"]
+            m5_brevo["Brevo email API"]
+        end
+        m5_start --> m5_signed
+        m5_signed -->|"No"| m5_signIn --> m5_fin
+        m5_signed -->|"Yes"| m5_openDlg --> m5_dates --> m5_pickDate --> m5_avail --> m5_lockChk
+        m5_lockChk -->|"Locked"| m5_e423 --> m5_locked --> m5_fin
+        m5_lockChk -->|"Not locked"| m5_slotCalc
+        m5_slotCalc -->|"SELECT blocks"| m5_blocked
+        m5_slotCalc -->|"SELECT pending, confirmed"| m5_appts
+        m5_slotCalc --> m5_slotsOut --> m5_pickSlot --> m5_note --> m5_book --> m5_bookVal
+        m5_bookVal -->|"Fails"| m5_e422 --> m5_pickSlot
+        m5_bookVal -->|"Passes"| m5_insertAppt --> m5_uniq
+        m5_uniq -->|"Violation caught (UniqueConstraintViolationException)"| m5_e409 --> m5_taken --> m5_avail
+        m5_uniq -->|"Inserted"| m5_appts
+        m5_insertAppt -->|"201"| m5_sent
+        m5_insertAppt --> m5_notifAgent
+        m5_notifAgent -->|"broadcast"| m5_pusher
+        m5_notifAgent -->|"queue mail"| m5_brevo
+        m5_sent --> m5_agentList --> m5_agentAct
+        m5_agentAct -->|"Confirm"| m5_confirmBtn --> m5_confirmSave
+        m5_confirmSave -->|"UPDATE"| m5_appts
+        m5_confirmSave --> m5_gcalEach --> m5_calEnsure
+        m5_calEnsure -->|"No"| m5_calCreate
+        m5_calCreate -->|"POST"| m5_gcal
+        m5_calCreate -->|"UPDATE google_calendar_id"| m5_users
+        m5_calCreate --> m5_calInsert
+        m5_calEnsure -->|"Yes"| m5_calInsert
+        m5_calInsert -->|"POST"| m5_gcal
+        m5_gcal -->|"201 event or 404"| m5_cal404
+        m5_cal404 -->|"404"| m5_calCreate
+        m5_cal404 -->|"201"| m5_calStore
+        m5_calStore -->|"UPDATE"| m5_appts
+        m5_gcalEach -->|"No tokens: skip"| m5_notifBuyerC
+        m5_calStore --> m5_notifBuyerC
+        m5_notifBuyerC -->|"broadcast + mail"| m5_pusher
+        m5_agentAct -->|"Cancel"| m5_cancelModal --> m5_cancelBtn --> m5_cancelVal
+        m5_cancelVal -->|"Fails"| m5_cancelErr --> m5_cancelModal
+        m5_cancelVal -->|"Passes"| m5_cancelSave
+        m5_cancelSave -->|"UPDATE"| m5_appts
+        m5_cancelSave --> m5_lateChk
+        m5_lateChk -->|"Yes"| m5_lateSet
+        m5_lateSet -->|"UPDATE"| m5_appts
+        m5_lateSet --> m5_strikeCount
+        m5_strikeCount -->|"Yes"| m5_lockNote
+        m5_strikeCount -->|"No"| m5_calDel
+        m5_lockNote --> m5_calDel
+        m5_lateChk -->|"No"| m5_calDel
+        m5_calDel -->|"DELETE events"| m5_gcal
+        m5_calDel --> m5_notifOther
+        m5_notifOther -->|"broadcast + mail"| m5_pusher
+        m5_notifOther --> m5_fin
+        m5_notifBuyerC --> m5_completeBtn
+        m5_agentAct -->|"Mark as Done"| m5_completeBtn --> m5_completeVal
+        m5_completeVal -->|"Fails"| m5_e422 --> m5_agentList
+        m5_completeVal -->|"Passes"| m5_completeSave
+        m5_completeSave -->|"UPDATE"| m5_appts
+        m5_completeSave --> m5_history --> m5_review --> m5_reviewVal
+        m5_reviewVal -->|"Fails"| m5_e422r --> m5_history
+        m5_reviewVal -->|"Passes"| m5_reviewSave
+        m5_reviewSave -->|"INSERT"| m5_reviews
+        m5_reviewSave --> m5_notifAgentR --> m5_fin
+    end
+    subgraph M6["6 - Messaging and AI Auto-Reply"]
+        subgraph m6_FE["Frontend - Nuxt SPA"]
+            m6_start([Start: buyer clicks Message Agent])
+            m6_startConv["POST /api/properties/{id}/conversations"]
+            m6_openThread["Open thread in /dashboard/messages; subscribe private-conversation.{id}"]
+            m6_typing["On keystroke: Echo whisper typing (no HTTP)"]
+            m6_send["POST /api/conversations/{id}/messages {body} with header X-Socket-Id"]
+            m6_appendOwn["Append own message from 201 response"]
+            m6_recv["Listener message.sent: append incoming; play notification"]
+            m6_readMark["POST /api/conversations/{id}/read on open"]
+            m6_aiTyping["Listener ai.typing: show RealtyLink AI is typing"]
+            m6_delBtn["Hover thread -> Delete conversation -> confirm modal"]
+            m6_delCall["DELETE /api/conversations/{id}"]
+            m6_fin([End])
+        end
+        subgraph m6_API["API - Laravel"]
+            m6_findOrCreate["firstOrCreate conversations (property_id, buyer_id, agent_id) unique"]
+            m6_convJson[/"200 ConversationResource"/]
+            m6_msgVal{"body required, user is participant, side not deleted?"}
+            m6_msgSave["INSERT messages sender_id, body, is_ai=false; UPDATE conversations.last_message_at"]
+            m6_undelete["If other side had deleted: clear their deleted_at so thread reappears"]
+            m6_bcastMsg["broadcast(MessageSent)->toOthers() (ShouldBroadcastNow, excludes X-Socket-Id)"]
+            m6_notifIn["INSERT notifications for recipient"]
+            m6_senderIsBuyer{"Sender is buyer?"}
+            m6_agentOnline{"Agent last_seen_at within presence window?"}
+            m6_emailed{"conversations.agent_offline_emailed_at recent?"}
+            m6_emailAgent["Queue MessageWhileAway email; UPDATE agent_offline_emailed_at"]
+            m6_dispatchAi["SendAiAutoReply::dispatch(conversation_id, message_id)->afterCommit()"]
+            m6_readSave["UPDATE messages is_read=true, read_at=now for other side's messages"]
+            m6_readWhisper["Client whispers seen -> other side updates receipts"]
+            m6_delVal{"User is participant?"}
+            m6_delSave["UPDATE buyer_deleted_at or agent_deleted_at = now (per side)"]
+            m6_e403[/"403 not a participant"/]
+            m6_e422[/"422 body required"/]
+            m6_bcastAuth["POST /broadcasting/auth: participant check for private-conversation.{id}"]
+        end
+        subgraph m6_DB["Database"]
+            m6_convs[("conversations")]
+            m6_msgs[("messages")]
+            m6_users[("users")]
+            m6_notifs[("notifications")]
+            m6_jobs[("jobs")]
+        end
+        subgraph m6_Q["Queue Worker"]
+            m6_job["Job SendAiAutoReply"]
+            m6_recheck{"Agent still offline when job runs?"}
+            m6_aiTypeEvt["broadcast(AiTyping) to buyer"]
+            m6_groq["GroqService: openai/gpt-oss-120b, max_tokens 600, AutoReplyPrompt"]
+            m6_groqOk{"Non-empty reply?"}
+            m6_geminiFb["GeminiService->autoReplyWhileAway (same prompt)"]
+            m6_gemOk{"Reply?"}
+            m6_aiSave["INSERT messages sender_id=User::realtyAi(), is_ai=true; UPDATE last_message_at"]
+            m6_aiBcast["broadcast(MessageSent) to buyer"]
+            m6_noReply["Log warning; no AI message"]
+            m6_mailJob["MessageWhileAway email via Brevo"]
+        end
+        subgraph m6_EXT["External Services"]
+            m6_pusher["Pusher Channels"]
+            m6_groqApi["Groq API"]
+            m6_geminiApi["Gemini API"]
+            m6_brevo["Brevo email API"]
+        end
+        m6_start --> m6_startConv --> m6_findOrCreate
+        m6_findOrCreate -->|"SELECT or INSERT"| m6_convs
+        m6_findOrCreate --> m6_convJson --> m6_openThread
+        m6_openThread -->|"subscribe"| m6_pusher
+        m6_pusher -->|"auth request"| m6_bcastAuth
+        m6_bcastAuth -->|"403"| m6_fin
+        m6_openThread --> m6_readMark --> m6_readSave
+        m6_readSave -->|"UPDATE"| m6_msgs
+        m6_readSave --> m6_readWhisper -->|"whisper"| m6_pusher
+        m6_openThread --> m6_typing -->|"whisper typing"| m6_pusher
+        m6_openThread --> m6_send --> m6_msgVal
+        m6_msgVal -->|"Fails"| m6_e422 --> m6_openThread
+        m6_msgVal -->|"Not participant"| m6_e403 --> m6_fin
+        m6_msgVal -->|"Passes"| m6_msgSave
+        m6_msgSave -->|"INSERT"| m6_msgs
+        m6_msgSave -->|"UPDATE"| m6_convs
+        m6_msgSave --> m6_undelete -->|"UPDATE"| m6_convs
+        m6_msgSave --> m6_bcastMsg -->|"trigger private-conversation.{id}"| m6_pusher
+        m6_pusher -->|"message.sent to other side"| m6_recv
+        m6_msgSave --> m6_notifIn -->|"INSERT"| m6_notifs
+        m6_msgSave -->|"201 message"| m6_appendOwn
+        m6_msgSave --> m6_senderIsBuyer
+        m6_senderIsBuyer -->|"No (agent replied)"| m6_fin
+        m6_senderIsBuyer -->|"Yes"| m6_agentOnline
+        m6_agentOnline -->|"Online"| m6_fin
+        m6_agentOnline -->|"Offline"| m6_emailed
+        m6_emailed -->|"Not recently"| m6_emailAgent
+        m6_emailAgent -->|"INSERT mail job"| m6_jobs
+        m6_emailAgent -->|"UPDATE"| m6_convs
+        m6_emailAgent --> m6_dispatchAi
+        m6_emailed -->|"Recently"| m6_dispatchAi
+        m6_dispatchAi -->|"INSERT job (after commit)"| m6_jobs
+        m6_jobs -->|"Worker"| m6_job --> m6_recheck
+        m6_recheck -->|"Agent came back"| m6_fin
+        m6_recheck -->|"Still offline"| m6_aiTypeEvt -->|"trigger ai.typing"| m6_pusher
+        m6_pusher -->|"ai.typing"| m6_aiTyping
+        m6_aiTypeEvt --> m6_groq -->|"HTTPS"| m6_groqApi
+        m6_groqApi -->|"Completion or error"| m6_groqOk
+        m6_groqOk -->|"Reply"| m6_aiSave
+        m6_groqOk -->|"Empty or 4xx/5xx"| m6_geminiFb -->|"HTTPS"| m6_geminiApi
+        m6_geminiApi -->|"Text or error"| m6_gemOk
+        m6_gemOk -->|"Reply"| m6_aiSave
+        m6_gemOk -->|"None"| m6_noReply --> m6_fin
+        m6_aiSave -->|"INSERT is_ai=true"| m6_msgs
+        m6_aiSave -->|"UPDATE"| m6_convs
+        m6_aiSave --> m6_aiBcast -->|"trigger"| m6_pusher
+        m6_aiBcast --> m6_fin
+        m6_jobs -->|"Worker"| m6_mailJob -->|"POST"| m6_brevo
+        m6_openThread --> m6_delBtn --> m6_delCall --> m6_delVal
+        m6_delVal -->|"No"| m6_e403
+        m6_delVal -->|"Yes"| m6_delSave -->|"UPDATE"| m6_convs
+        m6_delSave --> m6_fin
+    end
+    subgraph M7["7 - Administration"]
+        subgraph m7_FE["Frontend - Nuxt SPA"]
+            m7_start([Start: admin signed in])
+            m7_guard{"authStore.isAdmin?"}
+            m7_e403p[/"createError 403 Forbidden"/]
+            m7_dash["GET /api/admin/stats -> counters"]
+            m7_task{"Which page?"}
+            m7_agentsPg["GET /api/admin/agent-applications (poll 5s while any ai_pending)"]
+            m7_viewDocs["Lightbox for images; PDFs open in new tab"]
+            m7_prcBtn["Verify on PRC link (new tab)"]
+            m7_decision{"Approve or Reject?"}
+            m7_rejectModal[/"Reason for rejection (required)"/]
+            m7_reviewCall["POST /api/admin/agent-applications/{profile}/review {action, reason}"]
+            m7_listPg["GET /api/admin/properties"]
+            m7_unpubModal[/"Take-down reason (required)"/]
+            m7_unpubCall["POST /api/admin/properties/{id}/unpublish {reason}"]
+            m7_delListing["DELETE /api/admin/properties/{id} after confirm"]
+            m7_usersPg["GET /api/admin/users?role&search&page"]
+            m7_select["Checkbox rows; header checkbox selects all eligible (not self, not admins)"]
+            m7_bar[/"N accounts selected . Delete selected"/]
+            m7_confirmModal[/"List of names+emails; Delete N accounts"/]
+            m7_loopNext{"More selected ids?"}
+            m7_delOne["DELETE /api/admin/users/{id}"]
+            m7_delRes{"200?"}
+            m7_incDone["done++; progress = (done+failed)/total"]
+            m7_incFail["failed++"]
+            m7_summary[/"All done: N deleted, M could not be removed; reload list + stats"/]
+            m7_createAdmin["POST /api/admins {name, email, password}"]
+            m7_reviewsPg["GET /api/admin/reviews"]
+            m7_toggle["POST /api/admin/reviews/{id}/toggle-visibility"]
+            m7_fin([End])
+        end
+        subgraph m7_API["API - Laravel (middleware auth:sanctum + admin)"]
+            m7_adminMw{"User isAdmin()?"}
+            m7_e403[/"403 Forbidden"/]
+            m7_stats["Counts: users by role, listings, pending applications"]
+            m7_appsQuery["AgentProfile::pending()->with(user)->paginate"]
+            m7_appsJson[/"AgentProfileResource with ai_comment, ai_pending, verification_links"/]
+            m7_reviewVal{"action in approve,reject; reason required when reject?"}
+            m7_approve["status=approved; reviewed_at; users.role_type=agent; notify + email"]
+            m7_reject["status=rejected; admin_note=reason; reviewed_at; notify + email; 12h cool-down"]
+            m7_e422[/"422 reason required"/]
+            m7_unpubVal{"reason present and listing published?"}
+            m7_unpubSave["UPDATE status=draft, unpublish_reason, unpublished_at; notify agent (in-app + email)"]
+            m7_delProp["PropertyService->delete: photos from storage + rows"]
+            m7_delUserVal{"Target != self AND (not admin OR admins count gt 1)?"}
+            m7_e422u[/"422 cannot delete self / last admin"/]
+            m7_delUser["DELETE users (cascades listings, photos rows, appointments, conversations, reviews)"]
+            m7_createVal{"name, email unique, password min 8?"}
+            m7_createSave["INSERT users role_type=admin"]
+            m7_toggleSave["UPDATE agent_reviews.is_visible = NOT is_visible"]
+        end
+        subgraph m7_DB["Database & Storage"]
+            m7_users[("users")]
+            m7_profiles[("agent_profiles")]
+            m7_props[("properties")]
+            m7_photos[("property_photos")]
+            m7_reviews[("agent_reviews")]
+            m7_store[("Supabase bucket")]
+            m7_jobs[("jobs")]
+        end
+        subgraph m7_EXT["External Services"]
+            m7_prc["PRC License Verification portal"]
+            m7_brevo["Brevo email API"]
+        end
+        m7_start --> m7_guard
+        m7_guard -->|"No"| m7_e403p --> m7_fin
+        m7_guard -->|"Yes"| m7_dash --> m7_adminMw
+        m7_adminMw -->|"No"| m7_e403 --> m7_fin
+        m7_adminMw -->|"Yes"| m7_stats -->|"COUNT"| m7_users
+        m7_stats --> m7_task
+        m7_task -->|"Agents"| m7_agentsPg --> m7_appsQuery -->|"SELECT"| m7_profiles
+        m7_appsQuery --> m7_appsJson --> m7_viewDocs --> m7_prcBtn -->|"opens"| m7_prc
+        m7_viewDocs --> m7_decision
+        m7_decision -->|"Approve"| m7_reviewCall
+        m7_decision -->|"Reject"| m7_rejectModal --> m7_reviewCall
+        m7_reviewCall --> m7_reviewVal
+        m7_reviewVal -->|"Fails"| m7_e422 --> m7_rejectModal
+        m7_reviewVal -->|"approve"| m7_approve
+        m7_approve -->|"UPDATE"| m7_profiles
+        m7_approve -->|"UPDATE role_type"| m7_users
+        m7_approve -->|"queue mail"| m7_jobs
+        m7_reviewVal -->|"reject"| m7_reject
+        m7_reject -->|"UPDATE"| m7_profiles
+        m7_reject -->|"queue mail"| m7_jobs
+        m7_approve --> m7_agentsPg
+        m7_reject --> m7_agentsPg
+        m7_task -->|"Listings"| m7_listPg -->|"SELECT all statuses"| m7_props
+        m7_listPg --> m7_unpubModal --> m7_unpubCall --> m7_unpubVal
+        m7_unpubVal -->|"Fails"| m7_e422 --> m7_unpubModal
+        m7_unpubVal -->|"Passes"| m7_unpubSave
+        m7_unpubSave -->|"UPDATE"| m7_props
+        m7_unpubSave -->|"queue mail"| m7_jobs
+        m7_listPg --> m7_delListing --> m7_delProp
+        m7_delProp -->|"DELETE objects"| m7_store
+        m7_delProp -->|"DELETE rows"| m7_photos
+        m7_delProp -->|"DELETE row"| m7_props
+        m7_task -->|"Users"| m7_usersPg -->|"SELECT paginate"| m7_users
+        m7_usersPg --> m7_select --> m7_bar --> m7_confirmModal --> m7_loopNext
+        m7_loopNext -->|"Yes: next id"| m7_delOne --> m7_delUserVal
+        m7_delUserVal -->|"Fails"| m7_e422u --> m7_delRes
+        m7_delUserVal -->|"Passes"| m7_delUser
+        m7_delUser -->|"DELETE"| m7_users
+        m7_delUser -->|"200"| m7_delRes
+        m7_delRes -->|"200"| m7_incDone --> m7_loopNext
+        m7_delRes -->|"Error"| m7_incFail --> m7_loopNext
+        m7_loopNext -->|"No"| m7_summary --> m7_fin
+        m7_usersPg --> m7_createAdmin --> m7_createVal
+        m7_createVal -->|"Fails"| m7_e422
+        m7_createVal -->|"Passes"| m7_createSave -->|"INSERT"| m7_users
+        m7_task -->|"Reviews"| m7_reviewsPg -->|"SELECT"| m7_reviews
+        m7_reviewsPg --> m7_toggle --> m7_toggleSave -->|"UPDATE"| m7_reviews
+        m7_toggleSave --> m7_reviewsPg
+        m7_jobs -->|"Worker"| m7_brevo
+    end
+    m1_gotoAuth -->|"Opens sign-in / register"| m2_start
+    m2_toMain -->|"Token issued"| m1_me
+    m1_dashBuyer -->|"Become an Agent"| m3_start
+    m3_done -.->|"After approval: role_type=agent"| m1_dashAgent
+    m1_dashAgent -->|"New Listing"| m4_start
+    m1_dashBuyer -->|"Schedule Viewing"| m5_start
+    m1_dashBuyer -->|"Message Agent"| m6_start
+    m1_dashAdmin -->|"Admin pages"| m7_start
+    m3_pending -.->|"Same screen"| m7_agentsPg
