@@ -43,9 +43,16 @@ class AssessAgentApplication implements ShouldQueue
             return;
         }
 
+        $profile->loadMissing('user');
+
         $comment = $gemini->assessAgentApplication(
             $profile->applicant_type,
             $this->documents($profile),
+            declared: [
+                'name'               => $profile->user?->name,
+                'number'             => $profile->prc_number,
+                'supervising_broker' => $profile->supervising_broker,
+            ],
             timeout: 60,
         );
 

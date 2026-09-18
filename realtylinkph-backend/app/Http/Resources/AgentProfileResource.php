@@ -30,6 +30,8 @@ class AgentProfileResource extends JsonResource
             'ai_assessed_at'     => $this->when($isAdmin, $this->ai_assessed_at?->toISOString()),
             // True while the queued assessment hasn't landed yet.
             'ai_pending'         => $this->when($isAdmin, $this->status === 'pending' && $this->ai_assessed_at === null),
+            // Official places to verify the credential — fixed and checked, never model-generated.
+            'verification_links' => $this->when($isAdmin, fn () => \App\Support\AgentCredentialReference::links($this->applicant_type)),
             'reviewed_at'        => $this->reviewed_at?->toISOString(),
             // When a rejected applicant may re-apply (12h after rejection); null otherwise.
             'reapply_at'         => $this->reapplyAt()?->toISOString(),

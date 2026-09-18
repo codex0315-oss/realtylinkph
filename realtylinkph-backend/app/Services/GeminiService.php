@@ -5,8 +5,9 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Property;
-use App\Support\Uploads;
 use App\Models\User;
+use App\Support\AgentCredentialReference;
+use App\Support\Uploads;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -377,24 +378,33 @@ class GeminiService
      * @param  string  $applicantType  'salesperson' | 'broker'
      * @param  array<int, array{label:string,path:string}>  $documents  storage-relative paths
      */
-    public function assessAgentApplication(string $applicantType, array $documents, int $timeout = 12): string
+    /**
+     * @param  array<int, array{label:string,path:string}>  $documents
+     * @param  array{name?:string|null,number?:string|null,supervising_broker?:string|null}  $declared
+     *         What the applicant typed into the form, so the model can check
+     *         the card against it — a mismatch there is the finding that
+     *         matters most and the one a human is slowest to spot.
+     */
+    public function assessAgentApplication(string $applicantType, array $documents, array $declared = [], int $timeout = 12): string
     {
-        if ($applicantType === 'broker') {
-            $instruction = 'You are RealtyLink AI assisting a human admin who reviews real estate AGENT (Broker) applications in the Philippines. '
-                . 'A broker can transact independently. You are given a broker license card image and a live selfie. Briefly: '
-                . '(1) read any legible details from the license card (name, license/PRC number, validity); '
-                . '(2) QUALITATIVELY compare the face on the license card with the live selfie and state whether they appear to be the same person; '
-                . '(3) flag red flags (blurry, expired, edited, mismatched name/photo). '
-                . 'You are an ADVISORY tool only — the admin makes the final decision. Do NOT say "approved" or "rejected". Keep under 140 words.';
-        } else {
-            $instruction = 'You are RealtyLink AI assisting a human admin who reviews real estate AGENT (Salesperson) applications in the Philippines. '
-                . 'A salesperson needs accreditation. You are given an accreditation document, a valid ID, and a live selfie. Briefly: '
-                . '(1) read legible details from the accreditation document and ID (name, number, validity/expiry); '
-                . '(2) note whether the name on the ID appears consistent with the accreditation document; '
-                . '(3) QUALITATIVELY state whether the live selfie appears to be a clear photo of a real person consistent with the ID photo; '
-                . '(4) flag red flags. '
-                . 'You are an ADVISORY tool only — the admin makes the final decision. Do NOT say "approved" or "rejected". Keep under 150 words.';
-        }
+        $role = $applicantType === 'broker' ? 'BROKER' : 'SALESPERSON';
+        $docs = $applicantType === 'broker'
+            ? "You are given the applicant's PRC broker license card and a live selfie."
+            : "You are given the applicant's accreditation document, a valid government ID, and a live selfie.";
+
+        $declaredLines = array_values(array_filter([
+            'Declared full name: ' . ($declared['name'] ?? '(not given)'),
+            'Declared ' . ($applicantType === 'broker' ? 'PRC license number' : 'accreditation number') . ': ' . ($declared['number'] ?? '(not given)'),
+            $applicantType !== 'broker' && ! empty($declared['supervising_broker'])
+                ? 'Declared supervising broker: ' . $declared['supervising_broker']
+                : null,
+        ]));
+
+        $instruction = "You are RealtyLink AI, assisting a human admin who reviews real estate {$role} applications in the Philippines. {$docs}\n\n"
+            . AgentCredentialReference::knowledge() . "\n\n"
+            . AgentCredentialReference::method() . "\n\n"
+            . "TODAY'S DATE: " . now()->timezone('Asia/Manila')->format('j F Y') . "\n"
+            . "APPLICANT'S DECLARED DETAILS (compare the documents against these):\n- " . implode("\n- ", $declaredLines);
 
         $parts = [['text' => 'Application documents follow, each labeled:']];
         foreach ($documents as $doc) {

@@ -15,6 +15,8 @@ export interface AgentProfile {
   ai_assessed_at?: string | null
   /** Admin-only: the queued AI pre-check hasn't produced its note yet. */
   ai_pending?: boolean
+  /** Admin-only: official places to verify the credential. Fixed list from the backend. */
+  verification_links?: { label: string; url: string; note: string }[]
   reviewed_at?: string | null
   reapply_at?: string | null
   license_doc?: string | null
