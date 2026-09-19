@@ -250,7 +250,7 @@ function startReapply() {
     </Teleport>
 
     <!-- ════════ Submitted / Pending status ════════ -->
-    <div v-if="showStatus" class="max-w-4xl bg-white dark:bg-[#10264D] rounded-2xl border border-gray-200 dark:border-white/10 p-8">
+    <div v-if="showStatus" class="max-w-4xl mx-auto bg-white dark:bg-[#10264D] rounded-2xl border border-gray-200 dark:border-white/10 p-8">
       <div class="text-center">
         <div class="h-16 w-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
           <svg class="h-8 w-8 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
@@ -263,7 +263,7 @@ function startReapply() {
     </div>
 
     <!-- ════════ Rejected ════════ -->
-    <div v-else-if="showRejected" class="max-w-2xl bg-white dark:bg-[#10264D] rounded-2xl border border-gray-200 dark:border-white/10 p-8 text-center">
+    <div v-else-if="showRejected" class="max-w-2xl mx-auto bg-white dark:bg-[#10264D] rounded-2xl border border-gray-200 dark:border-white/10 p-8 text-center">
       <div class="h-16 w-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
         <svg class="h-8 w-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
       </div>

@@ -76,7 +76,7 @@ const emptyClass = 'flex-1 flex flex-col items-center justify-center px-5 py-12 
     spent ~140px of the fold on a sentence nobody reads more than once. The page
     now opens on the numbers.
   -->
-  <div class="space-y-8 max-w-6xl">
+  <div class="space-y-8 max-w-6xl mx-auto">
 
     <!-- ── Page header ── -->
     <header class="flex flex-wrap items-end justify-between gap-4 pb-5 border-b border-gray-200 dark:border-white/[0.08]">
