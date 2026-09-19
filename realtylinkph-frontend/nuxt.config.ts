@@ -41,6 +41,18 @@ export default defineNuxtConfig({
     // serves files itself; with UPLOAD_DISK=s3 the URLs point at the bucket
     // and CORS on the bucket is what allows the texture (see DEPLOYMENT.md).
     '/storage/**':   { proxy: `${process.env.NUXT_STORAGE_PROXY || 'http://127.0.0.1:8000'}/storage/**` },
+    // Emergency detour. On 2026-09-19 Render's edge stopped accepting HTTPS
+    // from a Philippine ISP (TCP to 216.24.57.16/.18:443 timed out) while
+    // Vercel's servers in the US reached the API fine. If that happens during
+    // the demo, set NUXT_PUBLIC_API_BASE=https://realtylinkph.vercel.app/api
+    // on Vercel and redeploy: browsers then talk only to Vercel, which
+    // forwards to Render. Costs ~100 ms per call and Vercel functions cap the
+    // request body at 4.5 MB (large photo uploads fail), so it is not the
+    // default — these routes just sit unused until apiBase points at them.
+    // `/broadcasting` is included because echo.client.ts derives the Pusher
+    // auth URL from apiBase by stripping `/api`.
+    '/api/**':          { proxy: `${process.env.NUXT_API_PROXY_TARGET || 'https://realtylinkph-api.onrender.com'}/api/**` },
+    '/broadcasting/**': { proxy: `${process.env.NUXT_API_PROXY_TARGET || 'https://realtylinkph-api.onrender.com'}/broadcasting/**` },
   },
 
   app: {

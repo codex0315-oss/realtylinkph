@@ -352,6 +352,24 @@ What now keeps it fast, and where to look if it regresses:
 
 ---
 
+## If the API is unreachable from the venue's network
+
+Seen on 2026-09-19: the browser got `ERR_CONNECTION_TIMED_OUT` for every
+API call while Vercel's own servers reached the API fine. Render's edge IPs
+(`216.24.57.16/.18`, what `realtylinkph-api.onrender.com` resolves to) were
+not accepting HTTPS from that Philippine ISP; even `dashboard.render.com`
+failed from the same machine. Nothing in the app was wrong.
+
+1. First try a different network — a phone hotspot takes a different route.
+2. If that isn't possible, detour the API through Vercel: in the Vercel
+   project set `NUXT_PUBLIC_API_BASE=https://realtylinkph.vercel.app/api`
+   and redeploy (~2 min). `nuxt.config.ts` already proxies `/api/**` and
+   `/broadcasting/**` to Render. Photo uploads over 4.5 MB will fail through
+   the detour (Vercel's request-body cap); everything else works. Set it back
+   to `https://realtylinkph-api.onrender.com/api` afterwards.
+
+---
+
 ## Known limitations (be ready to say these out loud)
 
 - **No automated tests.** Everything has been verified by hand.
