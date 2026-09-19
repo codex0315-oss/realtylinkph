@@ -203,7 +203,7 @@ const statusBadge: Record<string, string> = {
           >
             <!-- Property thumb (click → details) -->
             <NuxtLink :to="propertyHref(appt.property_id)" class="h-16 w-24 rounded-lg overflow-hidden flex-shrink-0 bg-gray-100">
-              <img v-if="appt.property?.photos?.[0]" :src="appt.property.photos[0].url" :alt="appt.property?.title" class="h-full w-full object-cover" />
+              <img v-if="appt.property?.photos?.[0]" :src="appt.property.photos[0].thumb_url ?? appt.property.photos[0].url" :alt="appt.property?.title" class="h-full w-full object-cover" />
               <div v-else class="h-full w-full flex items-center justify-center text-gray-300">
                 <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.3" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M4 6h16v12H4z" /></svg>
               </div>

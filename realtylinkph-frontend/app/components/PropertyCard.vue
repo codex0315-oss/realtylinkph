@@ -118,8 +118,10 @@ const specs = computed(() => {
     <div class="relative aspect-[4/3] rounded-2xl bg-gray-100 dark:bg-white/5 overflow-hidden">
       <template v-if="photos.length">
         <img
-          :src="photos[currentPhoto]?.url"
+          :src="photos[currentPhoto]?.thumb_url ?? photos[currentPhoto]?.url"
           :alt="property.title"
+          loading="lazy"
+          decoding="async"
           class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300"
         />
         <!-- Prev / next sit on the photo, not the page, so they must not follow

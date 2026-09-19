@@ -215,7 +215,7 @@ const isVerifiedAgent = computed(() => property.value?.agent?.agent_profile?.sta
             :class="thumbClass(i)"
             @click="openLightbox(i + 1)"
           >
-            <img :src="photo.url" :alt="`Photo ${i + 2}`" class="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-500" />
+            <img :src="photo.thumb_url ?? photo.url" :alt="`Photo ${i + 2}`" loading="lazy" class="w-full h-full object-cover group-hover:scale-[1.03] transition-transform duration-500" />
             <div v-if="i === thumbs.length - 1 && galleryPhotos.length > 5" class="absolute inset-0 bg-black/55 flex items-center justify-center text-white font-bold text-sm">
               +{{ galleryPhotos.length - 5 }} more
             </div>
@@ -523,7 +523,7 @@ const isVerifiedAgent = computed(() => property.value?.agent?.agent_profile?.sta
           </div>
           <div class="flex gap-2 mt-3 overflow-x-auto justify-center">
             <button v-for="(photo, i) in galleryPhotos" :key="photo.id" type="button" class="h-14 w-20 flex-shrink-0 rounded-md overflow-hidden border-2 transition-colors" :class="i === lightboxIndex ? 'border-brand-gold' : 'border-white/20'" @click="lightboxIndex = i">
-              <img :src="photo.url" class="h-full w-full object-cover" />
+              <img :src="photo.thumb_url ?? photo.url" class="h-full w-full object-cover" />
             </button>
           </div>
         </div>
@@ -544,11 +544,11 @@ const isVerifiedAgent = computed(() => property.value?.agent?.agent_profile?.sta
             </button>
           </div>
           <div class="flex-1 min-h-0">
-            <Property360Viewer v-if="panoramas[activePano]" :src="panoramas[activePano].url" class="!h-full !rounded-xl" />
+            <LazyProperty360Viewer v-if="panoramas[activePano]" :src="panoramas[activePano].url" class="!h-full !rounded-xl" />
           </div>
           <div v-if="panoramas.length > 1" class="flex gap-2 mt-3 overflow-x-auto justify-center">
             <button v-for="(pano, i) in panoramas" :key="pano.id" type="button" class="h-14 w-24 flex-shrink-0 rounded-md overflow-hidden border-2 transition-colors" :class="i === activePano ? 'border-brand-gold' : 'border-white/20'" @click="activePano = i">
-              <img :src="pano.url" class="h-full w-full object-cover" />
+              <img :src="pano.thumb_url ?? pano.url" class="h-full w-full object-cover" />
             </button>
           </div>
         </div>

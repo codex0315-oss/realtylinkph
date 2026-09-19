@@ -123,7 +123,7 @@ const emptyClass = 'flex-1 flex flex-col items-center justify-center px-5 py-12 
             class="group"
           >
             <div class="h-11 w-14 rounded-lg bg-gray-100 dark:bg-white/[0.06] overflow-hidden flex-shrink-0">
-              <img v-if="prop.photos?.length" :src="prop.photos[0]?.url" :alt="prop.title" class="w-full h-full object-cover" />
+              <img v-if="prop.photos?.length" :src="prop.photos[0]?.thumb_url ?? prop.photos[0]?.url" :alt="prop.title" class="w-full h-full object-cover" />
             </div>
             <div class="flex-1 min-w-0">
               <p class="text-sm font-semibold text-brand-navy dark:text-white truncate group-hover:text-brand-gold-deep dark:group-hover:text-brand-gold transition-colors">

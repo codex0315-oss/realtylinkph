@@ -75,6 +75,13 @@ return [
             'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
             'throw' => false,
             'report' => false,
+            // Sent with every object written. Nothing is ever overwritten in
+            // place (uploads get random names), so browsers may cache for a
+            // year. Without it Supabase serves `cache-control: no-cache` and
+            // every visit re-downloads every image.
+            'options' => [
+                'CacheControl' => 'public, max-age=31536000, immutable',
+            ],
         ],
 
     ],

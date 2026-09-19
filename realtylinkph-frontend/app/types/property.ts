@@ -13,6 +13,8 @@ export interface PropertyPhoto {
   id: number
   property_id: number
   url: string
+  /** Card-sized copy (≤640 px). The API falls back to `url` for older photos. */
+  thumb_url: string
   is_360: boolean
   sort_order: number
 }

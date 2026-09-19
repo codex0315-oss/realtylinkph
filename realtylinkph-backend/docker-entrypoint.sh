@@ -57,6 +57,32 @@ if [ "${RUN_SCHEDULER}" = "true" ]; then
     done &
 fi
 
+# One-off backfill for photos uploaded before resize-on-upload existed:
+# writes card thumbnails and shrinks oversized originals. Idempotent, but it
+# re-scans every photo on each boot, so remove the flag once it has run.
+if [ "${RUN_PHOTO_OPTIMIZE}" = "true" ]; then
+    echo "==> Optimising existing listing photos"
+    php artisan photos:optimize || true
+fi
+
+# ── Keep-alive ───────────────────────────────────────────────────────────────
+# Render spins a free web service down after 15 minutes without *inbound*
+# traffic, and waking it takes 30–60 s — long enough that the home page's
+# server render on Vercel gives up (10 s) and shows a 504. The worker and
+# scheduler loops above don't count as traffic. Requesting our own public URL
+# does, because it goes through Render's load balancer like any visitor.
+# RENDER_EXTERNAL_HOSTNAME is set by Render on every service. /up is
+# Laravel's health route: it boots the framework but touches no database, so
+# it doesn't keep Neon's compute awake (that would burn its free quota).
+# KEEP_ALIVE=false disables it, e.g. to let the service sleep after the demo.
+if [ -n "${RENDER_EXTERNAL_HOSTNAME}" ] && [ "${KEEP_ALIVE}" != "false" ]; then
+    echo "==> Keep-alive pinging https://${RENDER_EXTERNAL_HOSTNAME}/up every 10 minutes"
+    while true; do
+        sleep 600
+        curl -fsS -o /dev/null --max-time 30 "https://${RENDER_EXTERNAL_HOSTNAME}/up" || true
+    done &
+fi
+
 # Seeds demo accounts and listings. Same opt-in treatment, and it should be
 # removed immediately after — re-running it duplicates data.
 if [ "${RUN_SEEDERS}" = "true" ]; then

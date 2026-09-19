@@ -9,21 +9,42 @@ FROM php:8.4-apache
 
 # ── System libraries and PHP extensions ──────────────────────────────────────
 # pdo_pgsql/pgsql : Render Postgres.
-# gd              : intervention/image declares ext-gd as a platform
-#                   requirement, so composer install refuses without it —
-#                   even though nothing in app/ actually imports it.
+# gd              : intervention/image, which resizes listing photos on
+#                   upload (PropertyPhotoService). --with-webp so a WebP
+#                   upload — an accepted mime — can be decoded too.
 # zip, bcmath     : required by Laravel's dependency tree.
 RUN apt-get update && apt-get install -y --no-install-recommends \
         git \
         unzip \
+        curl \
         libpq-dev \
         libzip-dev \
         libpng-dev \
         libjpeg62-turbo-dev \
         libfreetype6-dev \
-    && docker-php-ext-configure gd --with-freetype --with-jpeg \
-    && docker-php-ext-install -j"$(nproc)" pdo_pgsql pgsql zip gd bcmath \
+        libwebp-dev \
+    && docker-php-ext-configure gd --with-freetype --with-jpeg --with-webp \
+    && docker-php-ext-install -j"$(nproc)" pdo_pgsql pgsql zip gd bcmath opcache \
     && rm -rf /var/lib/apt/lists/*
+
+# ── OPcache ──────────────────────────────────────────────────────────────────
+# The official image ships with opcache compiled but NOT enabled, so without
+# this every request re-parses and re-compiles the whole framework from source
+# — measured at roughly 150–250 ms per request on Render's shared CPU, which
+# was most of the "warm" latency. The code inside a container never changes
+# (a deploy builds a new image), so timestamp validation is switched off too:
+# no stat() call per included file. jit_buffer_size stays 0 on purpose — the
+# JIT gains nothing for a request/response app and has had stability issues.
+RUN printf 'opcache.enable=1\n\
+opcache.enable_cli=0\n\
+opcache.validate_timestamps=0\n\
+opcache.memory_consumption=128\n\
+opcache.interned_strings_buffer=16\n\
+opcache.max_accelerated_files=20000\n\
+opcache.save_comments=1\n\
+realpath_cache_size=4096K\n\
+realpath_cache_ttl=600\n' \
+        > /usr/local/etc/php/conf.d/opcache.ini
 
 # ── Apache ───────────────────────────────────────────────────────────────────
 # Laravel's front controller is public/index.php, and the pretty-URL rewrite

@@ -12,6 +12,7 @@ class PropertyPhoto extends Model
     protected $fillable = [
         'property_id',
         'url',
+        'thumb_url',
         'is_360',
         'sort_order',
     ];

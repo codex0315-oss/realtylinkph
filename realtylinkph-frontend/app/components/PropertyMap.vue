@@ -52,7 +52,7 @@ function renderMarkers() {
     const lat = Number(p.lat)
     const lng = Number(p.lng)
 
-    const photo = p.photos?.[0]?.url
+    const photo = p.photos?.[0]?.thumb_url ?? p.photos?.[0]?.url
     const html = photo
       ? `<div class="map-photo-pin">
            <div class="map-photo-pin__img" style="background-image:url('${photo}')"></div>

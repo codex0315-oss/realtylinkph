@@ -144,7 +144,7 @@ await load()
         class="card p-4 flex items-center gap-4"
       >
         <div class="h-14 w-20 rounded-md overflow-hidden bg-brand-silver-light flex-shrink-0">
-          <img v-if="prop.photos?.[0]" :src="prop.photos[0].url" :alt="prop.title" class="h-full w-full object-cover" />
+          <img v-if="prop.photos?.[0]" :src="prop.photos[0].thumb_url ?? prop.photos[0].url" :alt="prop.title" class="h-full w-full object-cover" />
         </div>
 
         <div class="flex-1 min-w-0">
@@ -204,7 +204,7 @@ await load()
       <div v-if="unpubTarget" class="p-6 space-y-4">
         <div class="flex items-center gap-3 rounded-xl bg-gray-50 border border-gray-200 p-3">
           <div class="h-12 w-16 rounded-md overflow-hidden bg-brand-silver-light flex-shrink-0">
-            <img v-if="unpubTarget.photos?.[0]" :src="unpubTarget.photos[0].url" :alt="unpubTarget.title" class="h-full w-full object-cover" />
+            <img v-if="unpubTarget.photos?.[0]" :src="unpubTarget.photos[0].thumb_url ?? unpubTarget.photos[0].url" :alt="unpubTarget.title" class="h-full w-full object-cover" />
           </div>
           <div class="min-w-0">
             <p class="text-sm font-semibold text-brand-navy truncate">{{ unpubTarget.title }}</p>

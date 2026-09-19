@@ -19,6 +19,13 @@ The queue (emails, the AI auto-reply, geocoding) and the hourly scheduled
 commands therefore run *inside the web service container*, started by
 `docker-entrypoint.sh` when `RUN_WORKER` / `RUN_SCHEDULER` are set.
 
+**The free tier sleeps after 15 minutes without inbound traffic** and takes
+30–60 s to wake — long enough that the server-rendered home page on Vercel
+gave up and showed a 504. The entrypoint therefore requests its own public
+URL (`https://$RENDER_EXTERNAL_HOSTNAME/up`) every 10 minutes, which counts
+as traffic. One always-on web service fits in the 750 free instance-hours a
+month. Set `KEEP_ALIVE=false` to let it sleep again (e.g. after the defense).
+
 That is not how you would scale this, and it is worth saying out loud in a
 demo. The alternative — `QUEUE_CONNECTION=sync` — is worse: on the sync driver
 a failing job throws into the HTTP request, so one rejected email turns a
@@ -264,6 +271,12 @@ listings, then remove it. The seeder is idempotent — it checks for the demo
 admin and does nothing if present — so leaving it on is wasteful, not
 dangerous.
 
+**Photo backfill is opt-in.** Listing photos are resized on upload (1600 px
+main + 640 px card thumbnail, `PropertyPhotoService`). Photos uploaded before
+that existed have no thumbnail — the API falls back to the main image for
+them — and may be full-size phone originals. Set `RUN_PHOTO_OPTIMIZE=true`
+for one deploy to run `php artisan photos:optimize` at boot, then remove it.
+
 There is no Shell on Render's free tier, which is why these are boot flags.
 
 `php artisan storage:link` is handled by the entrypoint and is a no-op when
@@ -297,8 +310,10 @@ the browser and is readable by anyone who opens devtools.
 
 ## Before you demo
 
-- [ ] Open the site ~2 minutes early. **Render's free tier sleeps after 15 min
-      idle and takes ~50s to wake.** A cold start mid-presentation looks broken.
+- [ ] Open the site ~2 minutes early anyway. The container pings its own
+      `/up` every 10 minutes (see §0) so Render should never put it to sleep,
+      but a redeploy or a Render incident still means a ~50s cold start.
+      Check the logs for `==> Keep-alive pinging`.
 - [ ] Upload one listing photo and confirm it still loads after a redeploy —
       that proves S3/R2 is actually wired up.
 - [ ] Send a message between two accounts to confirm Pusher is connected.
@@ -309,12 +324,42 @@ the browser and is readable by anyone who opens devtools.
 
 ---
 
+## Where the time goes (performance notes)
+
+Measured from Manila on 2026-09-19, before the fixes in this section:
+
+| | Before | Why |
+|---|---|---|
+| Warm API call | ~300 ms | PHP recompiled all of Laravel on every request — the official `php:8.4-apache` image ships with OPcache **off** |
+| Home page TTFB | 2.3–2.9 s | Vercel function (US East) waited on the API (Oregon) before sending any HTML |
+| First visit after 15 min idle | 30–60 s | Render free tier sleep |
+| Browse page images | up to 10 MB *per card* | photos stored as uploaded, `cache-control: no-cache` |
+
+What now keeps it fast, and where to look if it regresses:
+
+- **OPcache** is enabled in the Dockerfile (`opcache.ini`, timestamps off —
+  code never changes inside a container).
+- **Keep-alive** in `docker-entrypoint.sh` (§0).
+- **Edge caching** — `routeRules` in `nuxt.config.ts` mark `/`, `/properties`
+  and `/agents*` as `isr` (stale-while-revalidate, 60–300 s). Vercel serves
+  the cached HTML instantly and refreshes it in the background. Listing
+  detail pages are *not* cached because the API counts a view per render.
+- **Photos** are resized on upload and served with a one-year
+  `Cache-Control` (set on the `s3` disk in `config/filesystems.php`, so
+  avatars and documents get it too). Cards use `thumb_url`.
+- **Three.js** (the 360° viewer, 170 KB gzipped) only downloads when a
+  listing actually has panoramas (`LazyProperty360Viewer`).
+
+---
+
 ## Known limitations (be ready to say these out loud)
 
 - **No automated tests.** Everything has been verified by hand.
 - **Queue and scheduler run inside the web container** because the free tier
   has no worker. They stop while the instance is asleep.
-- **Free-tier cold starts** make the first request slow.
+- **Free-tier cold starts** — mitigated by the in-container keep-alive, but
+  Neon still pauses the database after 5 idle minutes (~1 s on the first
+  query afterwards) and a redeploy always starts cold.
 - **Agent documents share the public bucket** — fine for a demo, would need a
   private bucket with signed URLs for real use.
 - **No admin UI to waive a cancellation strike** — the data model supports it,

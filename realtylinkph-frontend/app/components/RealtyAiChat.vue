@@ -133,7 +133,7 @@ function priceLabel(p: Property): string {
                 @click="emit('close')"
               >
                 <div class="h-12 w-16 rounded-lg bg-gray-100 dark:bg-white/10 overflow-hidden flex-shrink-0">
-                  <img v-if="p.photos?.length" :src="p.photos[0]?.url" :alt="p.title" class="w-full h-full object-cover" />
+                  <img v-if="p.photos?.length" :src="p.photos[0]?.thumb_url ?? p.photos[0]?.url" :alt="p.title" class="w-full h-full object-cover" />
                 </div>
                 <div class="flex-1 min-w-0">
                   <p class="text-sm font-semibold text-brand-navy dark:text-white truncate group-hover:text-brand-gold transition-colors">{{ p.title }}</p>

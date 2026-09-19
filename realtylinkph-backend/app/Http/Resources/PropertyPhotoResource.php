@@ -16,6 +16,9 @@ class PropertyPhotoResource extends JsonResource
             'id'          => $this->id,
             'property_id' => $this->property_id,
             'url'         => Uploads::url($this->url),
+            // Card-sized copy. Falls back to the main image for photos that
+            // predate thumbnails, so the frontend can always use it for cards.
+            'thumb_url'   => Uploads::url($this->thumb_url ?? $this->url),
             'is_360'      => $this->is_360,
             'sort_order'  => $this->sort_order,
         ];

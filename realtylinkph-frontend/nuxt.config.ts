@@ -15,6 +15,27 @@ export default defineNuxtConfig({
   routeRules: {
     '/dashboard/**': { ssr: false },
     '/admin/**':     { ssr: false },
+    // Public pages are rendered on the server, which means the Vercel function
+    // (US East) has to call the API (Oregon) before it can send a single byte
+    // — measured at 2.3–2.9 s TTFB for the home page, and a 504 whenever the
+    // API was asleep. These pages look identical to every visitor at render
+    // time (the session lives in localStorage, so SSR never sees it; the
+    // per-user bits hydrate on the client), so let the edge keep a copy and
+    // refresh it in the background: visitors get the cached HTML instantly
+    // and a slow or sleeping API can only delay the refresh, never the page.
+    //
+    // `isr`, not `swr`: on the Vercel preset Nitro maps `swr` to ISR with
+    // *no* expiration (cached until the next deploy). `isr: N` is
+    // stale-while-revalidate with an N-second freshness window, keyed by the
+    // full URL, so each Browse filter combination gets its own copy.
+    //
+    // Listing detail pages are deliberately left out: the API counts a view
+    // on every render, and a cached page would stop the agent's "views"
+    // analytics from moving.
+    '/':               { isr: 120 },
+    '/properties':     { isr: 60 },
+    '/agents':         { isr: 300 },
+    '/agents/**':      { isr: 120 },
     // Proxy locally-served uploads so they're same-origin — the WebGL 360°
     // viewer can't use a cross-origin texture. Only applies when the backend
     // serves files itself; with UPLOAD_DISK=s3 the URLs point at the bucket
