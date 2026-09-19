@@ -129,7 +129,8 @@ function peso(n: number): string {
     </div>
 
     <!-- Thread -->
-    <div ref="threadEl" class="flex-1 overflow-y-auto px-4 sm:px-6 py-5 space-y-5">
+    <div ref="threadEl" class="flex-1 overflow-y-auto px-4 sm:px-6 py-5">
+      <div class="max-w-3xl mx-auto w-full min-h-full space-y-5">
       <!-- Welcome -->
       <div v-if="!messages.length" class="h-full flex flex-col items-center justify-center text-center px-4">
         <div class="h-28 w-28 mb-4 flex items-center justify-center">
@@ -215,6 +216,7 @@ function peso(n: number): string {
             <span class="h-1.5 w-1.5 rounded-full bg-gray-400 dark:bg-white/50 ai-dot" style="animation-delay:300ms" />
           </span>
         </div>
+      </div>
       </div>
     </div>
 
