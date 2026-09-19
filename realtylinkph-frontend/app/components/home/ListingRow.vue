@@ -48,7 +48,7 @@ watch(() => props.properties.length, () => nextTick(measure))
     <div class="flex items-center justify-between gap-4 mb-3">
       <NuxtLink
         :to="href"
-        class="group inline-flex items-center gap-2 font-display text-xl sm:text-[22px] font-bold text-brand-navy dark:text-white leading-tight"
+        class="group inline-flex items-center gap-2 font-display text-xl sm:text-[1.375rem] font-bold text-brand-navy dark:text-white leading-tight"
       >
         {{ title }}
         <span class="h-6 w-6 rounded-full flex items-center justify-center text-brand-navy/60 dark:text-white/60 group-hover:bg-brand-navy/5 dark:group-hover:bg-white/10 group-hover:translate-x-0.5 transition-all">
@@ -88,7 +88,7 @@ watch(() => props.properties.length, () => nextTick(measure))
       <div
         v-for="p in properties"
         :key="p.id"
-        class="snap-start flex-none w-[230px] sm:w-[250px] lg:w-[calc((100%-4*1.25rem)/5)] lg:min-w-[230px]"
+        class="snap-start flex-none w-[14.375rem] sm:w-[15.625rem] lg:w-[calc((100%-4*1.25rem)/5)] lg:min-w-[14.375rem]"
       >
         <PropertyCard :property="p" />
       </div>

@@ -102,7 +102,7 @@ onUnmounted(() => observer?.disconnect())
               </svg>
             </div>
 
-            <span class="absolute -top-1 -left-1 w-6 h-6 bg-brand-gold rounded-full flex items-center justify-center text-[11px] font-black text-brand-navy shadow-md z-10">
+            <span class="absolute -top-1 -left-1 w-6 h-6 bg-brand-gold rounded-full flex items-center justify-center text-[0.6875rem] font-black text-brand-navy shadow-md z-10">
               {{ step.num }}
             </span>
           </div>

@@ -46,7 +46,7 @@ export default {
         button: '8px',
       },
       maxWidth: {
-        content: '1280px',
+        content: "var(--content-w)", // 80rem (1280px) → 88rem above 1536px; set in main.css, scales with the root font size
       },
     },
   },

@@ -148,7 +148,7 @@ await load()
             <div class="flex items-center gap-2 flex-wrap">
               <p class="font-semibold text-brand-text-primary">{{ agent.user?.name }}</p>
               <span
-                class="text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full"
+                class="text-[0.625rem] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full"
                 :class="agent.applicant_type === 'broker' ? 'bg-brand-navy/10 text-brand-navy' : 'bg-brand-gold/15 text-brand-gold'"
               >
                 {{ agent.applicant_type === 'broker' ? 'Broker' : agent.applicant_type === 'salesperson' ? 'Salesperson' : 'Agent' }}
@@ -189,7 +189,7 @@ await load()
 
         <!-- Submitted documents — selfie first so it sits beside the ID -->
         <div class="flex flex-col">
-          <p class="text-[11px] font-bold uppercase tracking-[0.16em] text-brand-navy/45 dark:text-white/40 mb-2">
+          <p class="text-[0.6875rem] font-bold uppercase tracking-[0.16em] text-brand-navy/45 dark:text-white/40 mb-2">
             Submitted documents
           </p>
           <div
@@ -221,7 +221,7 @@ await load()
                   <svg class="h-9 w-9" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                     <path stroke-linecap="round" stroke-linejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" />
                   </svg>
-                  <span class="text-[10px] font-bold tracking-wide">PDF</span>
+                  <span class="text-[0.625rem] font-bold tracking-wide">PDF</span>
                 </div>
                 <!-- expand hint -->
                 <span class="absolute bottom-2 right-2 h-7 w-7 rounded-full bg-black/50 text-white flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
@@ -238,7 +238,7 @@ await load()
         <!-- RealtyLink AI assessment. Same eyebrow-then-box structure as the
              documents column, so the two boxes start on the same line. -->
         <div v-if="hasAiPanel(agent)" class="flex flex-col">
-          <p class="flex items-center gap-2 text-[11px] font-bold uppercase tracking-[0.16em] text-brand-navy/45 dark:text-white/40 mb-2">
+          <p class="flex items-center gap-2 text-[0.6875rem] font-bold uppercase tracking-[0.16em] text-brand-navy/45 dark:text-white/40 mb-2">
             <svg class="h-3.5 w-3.5 text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" /></svg>
             RealtyLink AI assessment
             <span class="normal-case tracking-normal font-medium text-gray-400">· advisory only — you decide</span>
@@ -267,7 +267,7 @@ await load()
           <!-- Official sources, fixed on the server — the AI never generates a
                link, so there is nothing here that can be invented. -->
           <div v-if="agent.verification_links?.length" class="mt-3">
-            <p class="text-[11px] font-bold uppercase tracking-[0.16em] text-brand-navy/45 dark:text-white/40 mb-1.5">Verify against</p>
+            <p class="text-[0.6875rem] font-bold uppercase tracking-[0.16em] text-brand-navy/45 dark:text-white/40 mb-1.5">Verify against</p>
             <ul class="space-y-1">
               <li v-for="l in agent.verification_links" :key="l.url" class="text-xs leading-snug">
                 <a :href="l.url" target="_blank" rel="noopener" class="font-semibold text-brand-navy dark:text-white hover:text-brand-gold transition-colors">{{ l.label }} ↗</a>
@@ -354,7 +354,7 @@ await load()
               @click="!d.isPdf && (viewer.index = i)"
             >
               <img v-if="!d.isPdf" :src="d.url" :alt="d.label" class="h-full w-full object-cover" />
-              <div v-else class="h-full w-full bg-white/10 text-white/60 text-[10px] font-bold flex items-center justify-center">PDF</div>
+              <div v-else class="h-full w-full bg-white/10 text-white/60 text-[0.625rem] font-bold flex items-center justify-center">PDF</div>
             </button>
           </div>
         </div>

@@ -51,7 +51,7 @@ const { data: rows, pending } = await useAsyncData(
             <span class="block">Find your place in the</span>
             <span class="block mt-3 sm:mt-4 text-brand-gold-deep dark:text-brand-gold">Philippines</span>
           </h1>
-          <p class="mt-3 text-[15px] text-brand-text-secondary dark:text-white/55">
+          <p class="mt-3 text-[0.9375rem] text-brand-text-secondary dark:text-white/55">
             Every agent PRC-verified. Every listing reviewed before it goes live.
           </p>
         </div>

@@ -158,7 +158,7 @@ const fieldClass =
 </script>
 
 <template>
-  <div class="max-w-6xl lg:h-[calc(100vh-9rem)] flex flex-col">
+  <div class="max-w-6xl mx-auto lg:h-[calc(100vh-9rem)] flex flex-col">
     <div class="mb-4 shrink-0">
       <h1 class="font-playfair text-2xl font-bold text-brand-navy">Calendar</h1>
       <p class="text-sm text-gray-500 mt-1">Your viewings and unavailable days. Click any day to block it or see what's scheduled.</p>
@@ -188,7 +188,7 @@ const fieldClass =
 
         <!-- Weekday header -->
         <div class="grid grid-cols-7 mb-1 shrink-0">
-          <div v-for="w in WEEKDAYS" :key="w" class="text-center text-[11px] font-bold uppercase tracking-wide text-gray-400 py-1">{{ w }}</div>
+          <div v-for="w in WEEKDAYS" :key="w" class="text-center text-[0.6875rem] font-bold uppercase tracking-wide text-gray-400 py-1">{{ w }}</div>
         </div>
 
         <!-- Days -->
@@ -217,7 +217,7 @@ const fieldClass =
                 class="h-1.5 w-1.5 rounded-full"
                 :class="statusDot[v.status] ?? 'bg-gray-400'"
               />
-              <span v-if="viewingsMap[c.iso].length > 3" class="text-[9px] font-bold text-gray-400 leading-none">+{{ viewingsMap[c.iso].length - 3 }}</span>
+              <span v-if="viewingsMap[c.iso].length > 3" class="text-[0.5625rem] font-bold text-gray-400 leading-none">+{{ viewingsMap[c.iso].length - 3 }}</span>
             </div>
 
             <!-- blocked mark: full day (✕) or partial time block (clock) -->
@@ -227,7 +227,7 @@ const fieldClass =
         </div>
 
         <!-- Legend -->
-        <div class="flex items-center gap-4 mt-4 pt-3 border-t border-gray-100 text-[11px] text-gray-500 shrink-0">
+        <div class="flex items-center gap-4 mt-4 pt-3 border-t border-gray-100 text-[0.6875rem] text-gray-500 shrink-0">
           <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-emerald-500" /> Confirmed</span>
           <span class="flex items-center gap-1.5"><span class="h-2 w-2 rounded-full bg-amber-500" /> Pending</span>
           <span class="flex items-center gap-1.5"><svg class="h-3 w-3 text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M6 18L18 6M6 6l12 12" /></svg> Blocked</span>
@@ -238,7 +238,7 @@ const fieldClass =
 
       <!-- ═══════════ Day detail panel ═══════════ -->
       <div class="bg-white rounded-2xl border border-gray-200 p-5 flex flex-col min-h-0">
-        <p class="text-[11px] font-bold uppercase tracking-wide text-gray-400">Selected day</p>
+        <p class="text-[0.6875rem] font-bold uppercase tracking-wide text-gray-400">Selected day</p>
         <h3 class="text-base font-bold text-brand-navy mt-0.5">{{ fmtFull(selectedDate) }}</h3>
 
         <!-- Block status / action -->
@@ -261,10 +261,10 @@ const fieldClass =
           <div v-else class="space-y-3">
             <!-- Existing time blocks -->
             <div v-if="selectedTimeBlocks.length" class="space-y-1.5">
-              <p class="text-[11px] font-bold uppercase tracking-wide text-gray-400">Blocked times</p>
+              <p class="text-[0.6875rem] font-bold uppercase tracking-wide text-gray-400">Blocked times</p>
               <div v-for="tb in selectedTimeBlocks" :key="tb.id" class="flex items-center justify-between gap-2 rounded-lg bg-amber-50 border border-amber-100 px-3 py-1.5">
                 <span class="text-xs font-semibold text-amber-700">{{ tb.start_time }} – {{ tb.end_time }}</span>
-                <button :disabled="busy" class="text-[11px] font-semibold text-red-500 hover:underline disabled:opacity-50" @click="unblock(tb.id)">Remove</button>
+                <button :disabled="busy" class="text-[0.6875rem] font-semibold text-red-500 hover:underline disabled:opacity-50" @click="unblock(tb.id)">Remove</button>
               </div>
             </div>
 
@@ -292,7 +292,7 @@ const fieldClass =
               >Block this time range</button>
 
               <div class="flex items-center gap-2 pt-1">
-                <div class="h-px flex-1 bg-gray-100 dark:bg-white/10" /><span class="text-[10px] text-gray-300 dark:text-white/30 uppercase">or</span><div class="h-px flex-1 bg-gray-100 dark:bg-white/10" />
+                <div class="h-px flex-1 bg-gray-100 dark:bg-white/10" /><span class="text-[0.625rem] text-gray-300 dark:text-white/30 uppercase">or</span><div class="h-px flex-1 bg-gray-100 dark:bg-white/10" />
               </div>
 
               <button :disabled="busy" class="w-full text-xs font-bold text-brand-navy bg-brand-gold rounded-lg py-2 hover:-translate-y-0.5 transition-all disabled:opacity-50" @click="block">Block the entire day</button>
@@ -302,7 +302,7 @@ const fieldClass =
 
         <!-- Viewings that day (paginated, never scrolls) -->
         <div class="mt-5 flex-1 min-h-0 flex flex-col">
-          <p class="text-[11px] font-bold uppercase tracking-wide text-gray-400 mb-2 shrink-0">
+          <p class="text-[0.6875rem] font-bold uppercase tracking-wide text-gray-400 mb-2 shrink-0">
             Viewings <span class="text-gray-300">({{ selectedViewings.length }})</span>
           </p>
           <p v-if="!selectedViewings.length" class="text-xs text-gray-400">No viewings scheduled.</p>
@@ -315,10 +315,10 @@ const fieldClass =
             >
               <div class="flex items-center justify-between gap-2">
                 <span class="text-sm font-bold text-brand-navy">{{ fmtTime(v.preferred_datetime) }}</span>
-                <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full capitalize" :class="statusBadge[v.status] ?? 'bg-gray-100 text-gray-500'">{{ v.status }}</span>
+                <span class="text-[0.625rem] font-bold uppercase px-2 py-0.5 rounded-full capitalize" :class="statusBadge[v.status] ?? 'bg-gray-100 text-gray-500'">{{ v.status }}</span>
               </div>
               <p class="text-xs font-medium text-brand-navy line-clamp-1 mt-1">{{ v.property?.title ?? `Property #${v.property_id}` }}</p>
-              <p class="text-[11px] text-gray-400 mt-0.5">Buyer: {{ v.buyer?.name ?? '—' }}</p>
+              <p class="text-[0.6875rem] text-gray-400 mt-0.5">Buyer: {{ v.buyer?.name ?? '—' }}</p>
             </NuxtLink>
           </div>
 
@@ -329,7 +329,7 @@ const fieldClass =
               class="text-xs font-semibold text-gray-500 px-3 py-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"
               @click="viewingPage--"
             >‹ Prev</button>
-            <span class="text-[11px] text-gray-400">Page {{ viewingPage }} of {{ totalViewingPages }}</span>
+            <span class="text-[0.6875rem] text-gray-400">Page {{ viewingPage }} of {{ totalViewingPages }}</span>
             <button
               :disabled="viewingPage === totalViewingPages"
               class="text-xs font-semibold text-gray-500 px-3 py-1.5 rounded-lg hover:bg-gray-100 disabled:opacity-40 disabled:hover:bg-transparent transition-colors"

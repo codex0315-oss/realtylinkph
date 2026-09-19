@@ -61,9 +61,9 @@ function priceLabel(p: Property): string {
       <div class="min-w-0">
         <p class="text-sm font-bold text-brand-navy dark:text-white flex items-center gap-1.5">
           RealtyLink AI
-          <span class="text-[9px] font-bold uppercase tracking-wide bg-brand-gold/15 text-brand-gold px-1.5 py-0.5 rounded">Beta</span>
+          <span class="text-[0.5625rem] font-bold uppercase tracking-wide bg-brand-gold/15 text-brand-gold px-1.5 py-0.5 rounded">Beta</span>
         </p>
-        <p class="text-[11px] text-gray-400 dark:text-white/40">Your personal property finder</p>
+        <p class="text-[0.6875rem] text-gray-400 dark:text-white/40">Your personal property finder</p>
       </div>
 
       <!-- Close (overlay only) -->
@@ -185,7 +185,7 @@ function priceLabel(p: Property): string {
           <svg class="h-4 w-4 text-brand-navy" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
         </button>
       </div>
-      <p class="text-[10px] text-gray-400 dark:text-white/30 text-center mt-1.5">RealtyLink AI can make mistakes — always verify listing details.</p>
+      <p class="text-[0.625rem] text-gray-400 dark:text-white/30 text-center mt-1.5">RealtyLink AI can make mistakes — always verify listing details.</p>
     </div>
   </div>
 </template>

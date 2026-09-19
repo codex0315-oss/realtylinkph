@@ -14,11 +14,11 @@ function onToggle(payload: { id: number; favorited: boolean }) {
 </script>
 
 <template>
-  <div class="max-w-6xl">
+  <div class="max-w-6xl mx-auto">
 
     <!-- Header — same shape as the other dashboard pages -->
     <header class="mb-8">
-      <h1 class="font-display text-2xl sm:text-[28px] font-bold text-brand-navy dark:text-white leading-tight">Saved</h1>
+      <h1 class="font-display text-2xl sm:text-[1.75rem] font-bold text-brand-navy dark:text-white leading-tight">Saved</h1>
       <p class="mt-1.5 text-sm text-brand-text-secondary dark:text-white/50">
         <template v-if="favorites.length">
           {{ favorites.length }} propert{{ favorites.length === 1 ? 'y' : 'ies' }} you've hearted.

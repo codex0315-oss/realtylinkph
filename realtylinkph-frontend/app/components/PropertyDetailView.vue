@@ -196,7 +196,7 @@ const isVerifiedAgent = computed(() => property.value?.agent?.agent_profile?.sta
     <template v-else-if="property">
       <!-- ░░ Gallery mosaic: lead photo + thumbnail block ░░ -->
       <div v-if="leadPhoto" class="relative">
-        <div class="grid grid-cols-4 grid-rows-2 gap-2 sm:gap-3 h-[300px] sm:h-[420px] lg:h-[480px]">
+        <div class="grid grid-cols-4 grid-rows-2 gap-2 sm:gap-3 h-[18.75rem] sm:h-[26.25rem] lg:h-[30rem]">
           <!-- Lead photo. On phones it's the only tile and takes the full width. -->
           <button
             type="button"
@@ -257,10 +257,10 @@ const isVerifiedAgent = computed(() => property.value?.agent?.agent_profile?.sta
           <!-- Title block -->
           <section class="pb-7">
             <div class="flex items-center gap-2 mb-3">
-              <span class="text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full" :class="property.offer_type === 'rent' ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'">{{ offerLabel }}</span>
-              <span class="text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full bg-brand-navy/5 text-brand-navy dark:bg-white/10 dark:text-white/80">{{ PROPERTY_TYPES[property.type] }}</span>
+              <span class="text-[0.625rem] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full" :class="property.offer_type === 'rent' ? 'bg-blue-100 text-blue-700 dark:bg-blue-500/15 dark:text-blue-300' : 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'">{{ offerLabel }}</span>
+              <span class="text-[0.625rem] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full bg-brand-navy/5 text-brand-navy dark:bg-white/10 dark:text-white/80">{{ PROPERTY_TYPES[property.type] }}</span>
             </div>
-            <h1 class="font-display text-2xl md:text-[34px] font-bold text-brand-navy dark:text-white leading-tight">{{ property.title }}</h1>
+            <h1 class="font-display text-2xl md:text-[2.125rem] font-bold text-brand-navy dark:text-white leading-tight">{{ property.title }}</h1>
             <a href="#location" class="mt-2 inline-flex items-center gap-1.5 text-sm text-brand-text-secondary dark:text-white/60 hover:text-brand-gold transition-colors">
               <svg class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M17.657 16.657L13.414 20.9a1.998 1.998 0 01-2.827 0l-4.244-4.243a8 8 0 1111.314 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 11a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
               {{ property.address }}
@@ -284,7 +284,7 @@ const isVerifiedAgent = computed(() => property.value?.agent?.agent_profile?.sta
           <!-- About -->
           <section v-if="property.description" class="py-7">
             <h2 class="font-display text-lg font-bold text-brand-navy dark:text-white mb-3">About this property</h2>
-            <p class="text-[15px] text-brand-text-secondary dark:text-white/70 leading-relaxed whitespace-pre-line">{{ property.description }}</p>
+            <p class="text-[0.9375rem] text-brand-text-secondary dark:text-white/70 leading-relaxed whitespace-pre-line">{{ property.description }}</p>
           </section>
 
           <!-- Location -->
@@ -300,10 +300,10 @@ const isVerifiedAgent = computed(() => property.value?.agent?.agent_profile?.sta
           <div class="lg:sticky lg:top-24 rounded-2xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#0B1A35] p-5 shadow-[0_12px_40px_-18px_rgba(8,21,47,0.25)]">
             <!-- Price -->
             <div class="flex items-baseline gap-1.5">
-              <p class="text-[30px] leading-none font-bold text-brand-navy dark:text-white tabular-nums">{{ displayPrice }}</p>
+              <p class="text-[1.875rem] leading-none font-bold text-brand-navy dark:text-white tabular-nums">{{ displayPrice }}</p>
               <span v-if="property.offer_type === 'rent'" class="text-sm text-brand-text-secondary dark:text-white/50">/ month</span>
             </div>
-            <p class="mt-1.5 text-[11px] font-bold uppercase tracking-[0.14em] text-brand-navy/45 dark:text-white/40">{{ offerLabel }}</p>
+            <p class="mt-1.5 text-[0.6875rem] font-bold uppercase tracking-[0.14em] text-brand-navy/45 dark:text-white/40">{{ offerLabel }}</p>
 
             <!-- Actions: one primary, one secondary -->
             <div class="mt-5 space-y-2.5">
@@ -329,7 +329,7 @@ const isVerifiedAgent = computed(() => property.value?.agent?.agent_profile?.sta
 
             <!-- Listed by -->
             <div v-if="property.agent" class="mt-5 pt-5 border-t border-gray-200 dark:border-white/10">
-              <p class="text-[11px] font-bold uppercase tracking-[0.14em] text-brand-navy/45 dark:text-white/40 mb-3">Listed by</p>
+              <p class="text-[0.6875rem] font-bold uppercase tracking-[0.14em] text-brand-navy/45 dark:text-white/40 mb-3">Listed by</p>
               <div class="flex items-center gap-3">
                 <AppAvatar :name="property.agent.name" :src="property.agent.avatar" size="md" />
                 <div class="min-w-0">
@@ -445,8 +445,8 @@ const isVerifiedAgent = computed(() => property.value?.agent?.agent_profile?.sta
         <div class="grid grid-cols-[125px_1fr] sm:grid-cols-[185px_1fr] gap-4 sm:gap-5">
           <!-- Dates -->
           <div class="min-w-0">
-            <p class="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-2">Select a date</p>
-            <div class="space-y-1.5 max-h-[300px] overflow-y-auto pr-1">
+            <p class="text-[0.6875rem] font-bold uppercase tracking-wider text-gray-400 mb-2">Select a date</p>
+            <div class="space-y-1.5 max-h-[18.75rem] overflow-y-auto pr-1">
               <button
                 v-for="d in next14Days"
                 :key="dateKey(d)"
@@ -459,9 +459,9 @@ const isVerifiedAgent = computed(() => property.value?.agent?.agent_profile?.sta
                 :title="isDateBlocked(d) ? 'Agent is unavailable this day' : (isDateLimited(d) ? 'Limited availability' : '')"
                 @click="pickDate(d)"
               >
-                <span class="text-[11px] font-medium uppercase tracking-wide opacity-70">{{ d.toLocaleDateString('en-PH', { weekday: 'short' }) }}</span>
+                <span class="text-[0.6875rem] font-medium uppercase tracking-wide opacity-70">{{ d.toLocaleDateString('en-PH', { weekday: 'short' }) }}</span>
                 <span class="flex items-center gap-1.5">
-                  <span v-if="!isDateBlocked(d) && isDateLimited(d)" class="text-[8px] font-bold uppercase tracking-wide text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full">Limited</span>
+                  <span v-if="!isDateBlocked(d) && isDateLimited(d)" class="text-[0.5rem] font-bold uppercase tracking-wide text-amber-600 bg-amber-100 px-1.5 py-0.5 rounded-full">Limited</span>
                   <span class="text-sm font-bold">{{ d.toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }) }}</span>
                 </span>
               </button>
@@ -470,8 +470,8 @@ const isVerifiedAgent = computed(() => property.value?.agent?.agent_profile?.sta
 
           <!-- Times -->
           <div class="min-w-0">
-            <p class="text-[11px] font-bold uppercase tracking-wider text-gray-400 mb-2">Available times</p>
-            <div class="max-h-[300px] overflow-y-auto pr-1">
+            <p class="text-[0.6875rem] font-bold uppercase tracking-wider text-gray-400 mb-2">Available times</p>
+            <div class="max-h-[18.75rem] overflow-y-auto pr-1">
               <p v-if="!selectedDate" class="text-xs text-gray-400 text-center py-12">Pick a date to see times.</p>
               <p v-else-if="loadingSlots" class="text-xs text-gray-400 text-center py-12">Loading…</p>
               <div v-else-if="slots.length" class="grid grid-cols-2 sm:grid-cols-3 gap-2">

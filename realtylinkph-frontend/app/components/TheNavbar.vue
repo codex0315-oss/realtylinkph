@@ -164,7 +164,7 @@ const panelClass =
             </svg>
             <span
               v-if="notifStore.unreadCount > 0"
-              class="absolute top-1 right-1 h-4 w-4 bg-brand-gold rounded-full text-[10px] font-bold text-brand-navy flex items-center justify-center"
+              class="absolute top-1 right-1 h-4 w-4 bg-brand-gold rounded-full text-[0.625rem] font-bold text-brand-navy flex items-center justify-center"
             >
               {{ notifStore.unreadCount > 9 ? '9+' : notifStore.unreadCount }}
             </span>
@@ -197,7 +197,7 @@ const panelClass =
                   <p class="text-xs font-medium text-brand-text-primary dark:text-white/90 line-clamp-2">
                     {{ (n.payload as Record<string, string>).message ?? n.type }}
                   </p>
-                  <p class="text-[10px] text-brand-text-light dark:text-white/40 mt-0.5">
+                  <p class="text-[0.625rem] text-brand-text-light dark:text-white/40 mt-0.5">
                     {{ new Date(n.created_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }) }}
                   </p>
                 </button>

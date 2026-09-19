@@ -74,12 +74,12 @@ const stats = computed(() => [
     greeting directly beneath it said the same thing twice and spent most of the
     fold on a sentence nobody reads more than once.
   -->
-  <div v-else class="space-y-8 max-w-6xl">
+  <div v-else class="space-y-8 max-w-6xl mx-auto">
 
     <!-- ── Page header ── -->
     <header class="flex flex-wrap items-end justify-between gap-4 pb-5 border-b border-gray-200 dark:border-white/[0.08]">
       <div class="min-w-0">
-        <h1 class="font-display text-2xl sm:text-[28px] font-bold text-brand-navy dark:text-white leading-tight">
+        <h1 class="font-display text-2xl sm:text-[1.75rem] font-bold text-brand-navy dark:text-white leading-tight">
           Dashboard
         </h1>
         <p class="mt-1.5 text-sm text-brand-text-secondary dark:text-white/50">

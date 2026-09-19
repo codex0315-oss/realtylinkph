@@ -27,7 +27,7 @@ withDefaults(defineProps<Props>(), { framed: true })
   -->
   <section class="h-full flex flex-col">
     <div class="flex items-center justify-between gap-4 mb-3">
-      <h2 class="text-[11px] font-bold uppercase tracking-[0.18em] text-brand-navy/45 dark:text-white/40">
+      <h2 class="text-[0.6875rem] font-bold uppercase tracking-[0.18em] text-brand-navy/45 dark:text-white/40">
         {{ title }}
       </h2>
       <NuxtLink

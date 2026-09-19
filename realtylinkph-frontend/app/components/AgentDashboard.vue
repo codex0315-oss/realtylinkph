@@ -81,7 +81,7 @@ const emptyClass = 'flex-1 flex flex-col items-center justify-center px-5 py-12 
     <!-- ── Page header ── -->
     <header class="flex flex-wrap items-end justify-between gap-4 pb-5 border-b border-gray-200 dark:border-white/[0.08]">
       <div class="min-w-0">
-        <h1 class="font-display text-2xl sm:text-[28px] font-bold text-brand-navy dark:text-white leading-tight">
+        <h1 class="font-display text-2xl sm:text-[1.75rem] font-bold text-brand-navy dark:text-white leading-tight">
           Dashboard
         </h1>
         <p class="mt-1.5 flex flex-wrap items-center gap-x-2 gap-y-1 text-sm text-brand-text-secondary dark:text-white/50">
@@ -166,7 +166,7 @@ const emptyClass = 'flex-1 flex flex-col items-center justify-center px-5 py-12 
                 aria-hidden="true"
               />
               <p class="text-sm font-semibold text-brand-navy dark:text-white truncate">{{ inq.name }}</p>
-              <span class="ml-auto text-[11px] text-brand-navy/40 dark:text-white/35 flex-shrink-0">{{ timeAgo(inq.created_at) }}</span>
+              <span class="ml-auto text-[0.6875rem] text-brand-navy/40 dark:text-white/35 flex-shrink-0">{{ timeAgo(inq.created_at) }}</span>
             </div>
             <p class="mt-1 pl-3.5 text-xs text-brand-navy/55 dark:text-white/45 truncate">
               {{ inq.property?.title ?? `Property #${inq.property_id}` }}
@@ -202,7 +202,7 @@ const emptyClass = 'flex-1 flex flex-col items-center justify-center px-5 py-12 
             </p>
           </div>
           <span
-            class="text-[10px] font-bold px-2 py-1 rounded-full border capitalize flex-shrink-0"
+            class="text-[0.625rem] font-bold px-2 py-1 rounded-full border capitalize flex-shrink-0"
             :class="statusBadge[appt.status]"
           >{{ appt.status }}</span>
         </div>

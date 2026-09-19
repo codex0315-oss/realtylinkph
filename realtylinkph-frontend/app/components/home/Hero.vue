@@ -50,7 +50,7 @@ const stagger = (i: number) => ({ transitionDelay: `${80 + i * 90}ms` })
               <span class="absolute inline-flex h-full w-full rounded-full bg-brand-gold animate-pulse-ring" />
               <span class="relative inline-flex h-1.5 w-1.5 rounded-full bg-brand-gold" />
             </span>
-            <span class="text-[10px] font-bold uppercase tracking-[0.2em] text-brand-navy/70 dark:text-white/60">
+            <span class="text-[0.625rem] font-bold uppercase tracking-[0.2em] text-brand-navy/70 dark:text-white/60">
               Verified listings · Licensed agents
             </span>
           </div>
@@ -123,7 +123,7 @@ const stagger = (i: number) => ({ transitionDelay: `${80 + i * 90}ms` })
               <p class="text-xl font-bold text-brand-navy dark:text-white leading-none">
                 <CountUp :to="s.value" :suffix="s.suffix" />
               </p>
-              <p class="text-[11px] text-brand-text-secondary dark:text-white/45 mt-1">{{ s.label }}</p>
+              <p class="text-[0.6875rem] text-brand-text-secondary dark:text-white/45 mt-1">{{ s.label }}</p>
             </div>
           </div>
         </div>

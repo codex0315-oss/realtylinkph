@@ -102,7 +102,7 @@ onUnmounted(() => {
           <div
             v-if="state.open"
             ref="panel"
-            class="relative w-full max-w-[440px] rounded-2xl overflow-hidden
+            class="relative w-full max-w-[27.5rem] rounded-2xl overflow-hidden
                    bg-white dark:bg-brand-navy-mid
                    border border-gray-200 dark:border-white/10
                    shadow-[0_30px_80px_rgba(8,21,47,0.35)] dark:shadow-[0_30px_80px_rgba(0,0,0,0.7)]"

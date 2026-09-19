@@ -174,7 +174,7 @@ const fieldStyle = 'background: rgba(255,255,255,0.05); border: 1px solid rgba(2
             </svg>
           </button>
         </div>
-        <p v-if="ve.password" class="text-[11px] text-red-400 mt-1.5">{{ ve.password }}</p>
+        <p v-if="ve.password" class="text-[0.6875rem] text-red-400 mt-1.5">{{ ve.password }}</p>
 
         <!-- Confirm -->
         <label class="block text-xs font-medium text-white/70 mb-1.5 mt-4">Confirm new password</label>
@@ -201,7 +201,7 @@ const fieldStyle = 'background: rgba(255,255,255,0.05); border: 1px solid rgba(2
             </svg>
           </button>
         </div>
-        <p v-if="ve.confirm" class="text-[11px] text-red-400 mt-1.5">{{ ve.confirm }}</p>
+        <p v-if="ve.confirm" class="text-[0.6875rem] text-red-400 mt-1.5">{{ ve.confirm }}</p>
 
         <button
           type="submit"

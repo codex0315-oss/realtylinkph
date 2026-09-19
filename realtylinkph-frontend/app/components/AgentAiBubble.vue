@@ -89,7 +89,7 @@ onUnmounted(() => {
         <img src="/realtylink-ai1.png" alt="" class="h-14 w-14 object-contain drop-shadow" />
         <span class="absolute top-0.5 right-0.5 flex h-4 w-4">
           <span class="animate-ping absolute inline-flex h-full w-full rounded-full bg-brand-navy/40" />
-          <span class="relative inline-flex rounded-full h-4 w-4 bg-brand-navy items-center justify-center text-[8px] font-bold text-white ring-2 ring-white/70">AI</span>
+          <span class="relative inline-flex rounded-full h-4 w-4 bg-brand-navy items-center justify-center text-[0.5rem] font-bold text-white ring-2 ring-white/70">AI</span>
         </span>
       </button>
     </Transition>

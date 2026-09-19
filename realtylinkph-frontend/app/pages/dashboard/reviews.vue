@@ -23,10 +23,10 @@ function fmt(d: string) {
 </script>
 
 <template>
-  <div class="max-w-4xl">
+  <div class="max-w-4xl mx-auto">
     <!-- Header — same shape as the other dashboard pages -->
     <header class="mb-8">
-      <h1 class="font-display text-2xl sm:text-[28px] font-bold text-brand-navy dark:text-white leading-tight">
+      <h1 class="font-display text-2xl sm:text-[1.75rem] font-bold text-brand-navy dark:text-white leading-tight">
         Reviews & Ratings
       </h1>
       <p class="mt-1.5 text-sm text-brand-text-secondary dark:text-white/50">
@@ -89,7 +89,7 @@ function fmt(d: string) {
                 </div>
               </div>
             </div>
-            <span class="text-[11px] text-brand-navy/45 dark:text-white/40 flex-shrink-0">{{ fmt(r.created_at) }}</span>
+            <span class="text-[0.6875rem] text-brand-navy/45 dark:text-white/40 flex-shrink-0">{{ fmt(r.created_at) }}</span>
           </div>
           <p v-if="r.review_text" class="text-sm text-brand-navy/80 dark:text-white/75 mt-3 leading-relaxed whitespace-pre-wrap">{{ r.review_text }}</p>
         </div>

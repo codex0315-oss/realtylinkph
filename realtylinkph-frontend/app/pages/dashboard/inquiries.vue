@@ -17,11 +17,11 @@ function fmt(d: string) {
 </script>
 
 <template>
-  <div class="max-w-4xl">
+  <div class="max-w-4xl mx-auto">
     <!-- Header — same shape as the other dashboard pages -->
     <header class="flex flex-wrap items-end justify-between gap-4 mb-8">
       <div class="min-w-0">
-        <h1 class="font-display text-2xl sm:text-[28px] font-bold text-brand-navy dark:text-white leading-tight">Inquiries</h1>
+        <h1 class="font-display text-2xl sm:text-[1.75rem] font-bold text-brand-navy dark:text-white leading-tight">Inquiries</h1>
         <p class="mt-1.5 text-sm text-brand-text-secondary dark:text-white/50">Messages from buyers interested in your listings.</p>
       </div>
       <div class="flex items-center gap-1 rounded-xl p-1 bg-gray-100 dark:bg-white/[0.06]">
@@ -40,7 +40,7 @@ function fmt(d: string) {
           @click="filter = 'unread'"
         >
           Unread
-          <span v-if="unreadCount" class="bg-brand-gold text-brand-navy text-[10px] font-bold px-1.5 rounded-full">{{ unreadCount }}</span>
+          <span v-if="unreadCount" class="bg-brand-gold text-brand-navy text-[0.625rem] font-bold px-1.5 rounded-full">{{ unreadCount }}</span>
         </button>
       </div>
     </header>
@@ -78,14 +78,14 @@ function fmt(d: string) {
             <div class="flex items-center gap-2 flex-wrap">
               <p class="font-bold text-brand-navy">{{ inq.name }}</p>
               <span v-if="!inq.is_read" class="h-2 w-2 rounded-full bg-brand-gold" />
-              <span v-if="inq.is_ghost_buyer" class="text-[10px] font-bold uppercase tracking-wide bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">Guest</span>
+              <span v-if="inq.is_ghost_buyer" class="text-[0.625rem] font-bold uppercase tracking-wide bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">Guest</span>
             </div>
             <NuxtLink v-if="inq.property" :to="propertyHref(inq.property_id)" class="text-xs text-brand-gold hover:underline">
               {{ inq.property.title }}
             </NuxtLink>
             <p v-else class="text-xs text-gray-400">Property #{{ inq.property_id }}</p>
           </div>
-          <span class="text-[11px] text-gray-400 flex-shrink-0">{{ fmt(inq.created_at) }}</span>
+          <span class="text-[0.6875rem] text-gray-400 flex-shrink-0">{{ fmt(inq.created_at) }}</span>
         </div>
 
         <p class="text-sm text-gray-700 mt-3 whitespace-pre-wrap leading-relaxed">{{ inq.message }}</p>

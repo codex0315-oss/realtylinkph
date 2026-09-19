@@ -314,7 +314,7 @@ if (convStore.conversations.length) {
       <div class="px-5 pt-5 pb-3">
         <div class="flex items-center justify-between mb-3">
           <h2 class="font-bold text-lg text-brand-navy dark:text-white">Messages</h2>
-          <span class="text-[11px] font-semibold text-brand-gold bg-brand-gold/10 px-2 py-0.5 rounded-full">
+          <span class="text-[0.6875rem] font-semibold text-brand-gold bg-brand-gold/10 px-2 py-0.5 rounded-full">
             {{ convStore.conversations.length }}
           </span>
         </div>
@@ -332,7 +332,7 @@ if (convStore.conversations.length) {
         </div>
       </div>
 
-      <p class="px-5 pb-2 text-[10px] font-bold uppercase tracking-[0.15em] text-gray-400 dark:text-white/30">All Messages</p>
+      <p class="px-5 pb-2 text-[0.625rem] font-bold uppercase tracking-[0.15em] text-gray-400 dark:text-white/30">All Messages</p>
 
       <!-- List -->
       <div class="flex-1 overflow-y-auto px-2.5 pb-3">
@@ -378,14 +378,14 @@ if (convStore.conversations.length) {
               <p class="text-sm font-semibold truncate" :class="convStore.activeId === conv.id ? 'text-brand-navy dark:text-white' : 'text-brand-navy dark:text-white/90'">
                 {{ other(conv)?.name ?? 'Unknown' }}
               </p>
-              <span class="text-[10px] text-gray-400 flex-shrink-0">{{ conv.last_message_at ? timeOf(conv.last_message_at) : '' }}</span>
+              <span class="text-[0.625rem] text-gray-400 flex-shrink-0">{{ conv.last_message_at ? timeOf(conv.last_message_at) : '' }}</span>
             </div>
             <div class="flex items-center justify-between gap-2 mt-0.5">
               <p class="text-xs truncate" :class="conv.unread_count ? 'text-brand-navy dark:text-white font-medium' : 'text-gray-400 dark:text-white/40'">
                 <span v-if="conv.latest_message?.is_ai" class="text-brand-gold-deep dark:text-brand-gold font-semibold">AI:</span>
                 {{ conv.latest_message?.body ?? 'Start a conversation' }}
               </p>
-              <span v-if="conv.unread_count" class="flex-shrink-0 bg-brand-gold text-brand-navy text-[10px] font-bold rounded-full h-4.5 min-w-[18px] px-1 flex items-center justify-center" style="height:18px">
+              <span v-if="conv.unread_count" class="flex-shrink-0 bg-brand-gold text-brand-navy text-[0.625rem] font-bold rounded-full h-4.5 min-w-[18px] px-1 flex items-center justify-center" style="height:18px">
                 {{ conv.unread_count }}
               </span>
             </div>
@@ -478,7 +478,7 @@ if (convStore.conversations.length) {
           <template v-for="item in feed" :key="item.id">
             <!-- Date separator -->
             <div v-if="item.kind === 'date'" class="flex items-center justify-center my-4">
-              <span class="text-[11px] font-medium text-gray-400 dark:text-white/40 bg-gray-100 dark:bg-white/5 px-3 py-1 rounded-full">{{ item.label }}</span>
+              <span class="text-[0.6875rem] font-medium text-gray-400 dark:text-white/40 bg-gray-100 dark:bg-white/5 px-3 py-1 rounded-full">{{ item.label }}</span>
             </div>
 
             <!-- Message -->
@@ -508,7 +508,7 @@ if (convStore.conversations.length) {
 
               <div class="max-w-[72%] flex flex-col" :class="isMine(item.message) ? 'items-end' : 'items-start'">
                 <!-- Who this is, when it's the AI — shown once per group, never hidden -->
-                <p v-if="isAi(item.message) && item.showMeta" class="text-[10px] font-semibold text-brand-gold-deep dark:text-brand-gold mb-1 ml-1">
+                <p v-if="isAi(item.message) && item.showMeta" class="text-[0.625rem] font-semibold text-brand-gold-deep dark:text-brand-gold mb-1 ml-1">
                   {{ aiLabel }}
                 </p>
                 <div class="relative group/msg">
@@ -553,14 +553,14 @@ if (convStore.conversations.length) {
                 </div>
 
                 <!-- time -->
-                <span class="text-[10px] text-gray-400 dark:text-white/30 mt-1 px-1">{{ timeOf(item.message.created_at) }}</span>
+                <span class="text-[0.625rem] text-gray-400 dark:text-white/30 mt-1 px-1">{{ timeOf(item.message.created_at) }}</span>
               </div>
             </div>
           </template>
 
           <!-- Seen receipt (under my latest message) -->
           <div v-if="seenText && !otherTyping" class="flex justify-end pr-1 mt-1">
-            <span class="text-[10px] font-medium text-gray-400 dark:text-white/40 flex items-center gap-1">
+            <span class="text-[0.625rem] font-medium text-gray-400 dark:text-white/40 flex items-center gap-1">
               <svg class="h-3 w-3 text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" /></svg>
               {{ seenText }}
             </span>
@@ -588,7 +588,7 @@ if (convStore.conversations.length) {
               </div>
             </div>
             <div>
-              <p class="text-[10px] font-semibold text-brand-gold-deep dark:text-brand-gold mb-1 ml-1">RealtyLink AI is typing…</p>
+              <p class="text-[0.625rem] font-semibold text-brand-gold-deep dark:text-brand-gold mb-1 ml-1">RealtyLink AI is typing…</p>
               <div class="bg-brand-gold/10 dark:bg-brand-gold/15 border border-brand-gold/30 rounded-2xl rounded-bl-md px-4 py-3">
                 <span class="flex gap-1">
                   <span class="h-1.5 w-1.5 rounded-full bg-brand-gold typing-dot" style="animation-delay:0ms" />

@@ -87,7 +87,7 @@ await load()
 
 const fieldClass =
   'w-full px-3.5 py-2.5 text-sm border border-gray-200 dark:border-white/10 rounded-xl bg-gray-50 dark:bg-white/5 dark:text-white focus:bg-white dark:focus:bg-white/10 focus:outline-none focus:ring-2 focus:ring-brand-gold/30 focus:border-brand-gold transition-colors'
-const labelClass = 'block text-[10px] font-bold uppercase tracking-wide text-brand-navy/50 dark:text-white/40 mb-1.5'
+const labelClass = 'block text-[0.625rem] font-bold uppercase tracking-wide text-brand-navy/50 dark:text-white/40 mb-1.5'
 </script>
 
 <template>

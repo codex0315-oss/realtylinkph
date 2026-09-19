@@ -155,7 +155,7 @@ await load()
             <AppBadge :variant="prop.status === 'published' ? 'success' : 'default'">{{ prop.status }}</AppBadge>
             <!-- Featured score (0 = not featurable) -->
             <span
-              class="inline-flex items-center gap-1 text-[10px] font-bold px-2 py-0.5 rounded-full"
+              class="inline-flex items-center gap-1 text-[0.625rem] font-bold px-2 py-0.5 rounded-full"
               :class="(prop.featured_score ?? 0) > 0 ? 'bg-brand-gold/15 text-brand-gold' : 'bg-gray-100 text-gray-400'"
               title="Featured score (0–100)"
             >
@@ -225,10 +225,10 @@ await load()
             autofocus
           />
           <div class="flex items-center justify-between mt-1">
-            <p class="text-[11px] text-brand-text-secondary">
+            <p class="text-[0.6875rem] text-brand-text-secondary">
               This is sent to <span class="font-medium text-brand-navy">{{ unpubTarget.agent?.name ?? 'the agent' }}</span> and shown on their listing until they re-publish.
             </p>
-            <span class="text-[11px] tabular-nums" :class="unpubReason.trim().length < REASON_MIN ? 'text-gray-400' : 'text-emerald-600'">
+            <span class="text-[0.6875rem] tabular-nums" :class="unpubReason.trim().length < REASON_MIN ? 'text-gray-400' : 'text-emerald-600'">
               {{ unpubReason.trim().length }}/500
             </span>
           </div>
@@ -255,7 +255,7 @@ await load()
         <div v-else-if="explainData">
           <!-- AI summary -->
           <div class="rounded-xl bg-brand-gold/5 border border-brand-gold/30 p-4 mb-4">
-            <p class="text-[10px] font-bold uppercase tracking-wide text-brand-gold mb-1 flex items-center gap-1.5">
+            <p class="text-[0.625rem] font-bold uppercase tracking-wide text-brand-gold mb-1 flex items-center gap-1.5">
               <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" /></svg>
               RealtyLink AI
             </p>
@@ -265,7 +265,7 @@ await load()
           <!-- Score + factor breakdown -->
           <div class="flex items-center justify-between mb-2">
             <span class="text-sm font-bold text-brand-navy">Score: {{ explainData.breakdown.total }}/100</span>
-            <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full" :class="explainData.breakdown.eligible ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'">
+            <span class="text-[0.625rem] font-bold uppercase px-2 py-0.5 rounded-full" :class="explainData.breakdown.eligible ? 'bg-emerald-100 text-emerald-700' : 'bg-red-100 text-red-600'">
               {{ explainData.breakdown.eligible ? 'Eligible' : 'Not eligible' }}
             </span>
           </div>
@@ -283,7 +283,7 @@ await load()
               <div class="h-1.5 rounded-full bg-gray-100 mt-1 overflow-hidden">
                 <div class="h-full bg-brand-gold rounded-full" :style="{ width: `${Math.min(100, (f.score / f.max) * 100)}%` }" />
               </div>
-              <p class="text-[11px] text-gray-400 mt-1">{{ f.notes.join(' · ') }}</p>
+              <p class="text-[0.6875rem] text-gray-400 mt-1">{{ f.notes.join(' · ') }}</p>
             </div>
           </div>
         </div>

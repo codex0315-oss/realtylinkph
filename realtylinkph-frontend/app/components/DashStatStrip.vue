@@ -39,7 +39,7 @@ const colsClass = computed(() =>
       :to="s.href"
       class="group px-5 py-4 transition-colors bg-white hover:bg-gray-50 dark:bg-[#0B1A35] dark:hover:bg-[#12233F]"
     >
-      <p class="flex items-center gap-1.5 text-[10px] font-bold uppercase tracking-[0.16em] text-brand-navy/45 dark:text-white/40">
+      <p class="flex items-center gap-1.5 text-[0.625rem] font-bold uppercase tracking-[0.16em] text-brand-navy/45 dark:text-white/40">
         <span
           v-if="s.accent"
           class="h-1.5 w-1.5 rounded-full bg-brand-gold flex-shrink-0"
@@ -48,7 +48,7 @@ const colsClass = computed(() =>
         {{ s.label }}
       </p>
       <p
-        class="mt-2 text-[28px] leading-none font-bold tabular-nums transition-colors"
+        class="mt-2 text-[1.75rem] leading-none font-bold tabular-nums transition-colors"
         :class="s.accent
           ? 'text-brand-gold-deep dark:text-brand-gold'
           : 'text-brand-navy dark:text-white group-hover:text-brand-gold-deep dark:group-hover:text-brand-gold'"

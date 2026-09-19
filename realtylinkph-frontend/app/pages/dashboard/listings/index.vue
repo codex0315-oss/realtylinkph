@@ -92,11 +92,11 @@ const publishedCount = computed(() => properties.value.filter(p => p.status === 
 </script>
 
 <template>
-  <div class="max-w-6xl">
+  <div class="max-w-6xl mx-auto">
     <!-- Header — same shape as the overview pages -->
     <header class="flex flex-wrap items-end justify-between gap-4 mb-8">
       <div class="min-w-0">
-        <h1 class="font-display text-2xl sm:text-[28px] font-bold text-brand-navy dark:text-white leading-tight">
+        <h1 class="font-display text-2xl sm:text-[1.75rem] font-bold text-brand-navy dark:text-white leading-tight">
           My Listings
         </h1>
         <p class="mt-1.5 text-sm text-brand-text-secondary dark:text-white/50">
@@ -154,9 +154,9 @@ const publishedCount = computed(() => properties.value.filter(p => p.status === 
             <svg class="h-9 w-9" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.3" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M4 6h16v12H4z" /></svg>
           </div>
 
-          <span class="absolute top-2.5 left-2.5 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full shadow-sm" :class="prop.offer_type === 'rent' ? 'bg-blue-600 text-white' : 'bg-emerald-600 text-white'">{{ prop.offer_type === 'rent' ? 'For Rent' : 'For Sale' }}</span>
-          <span class="absolute top-2.5 right-2.5 text-[10px] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full shadow-sm" :class="prop.status === 'published' ? 'bg-white/90 text-emerald-700' : 'bg-black/60 text-white'">{{ prop.status === 'draft' && prop.is_complete === false ? 'unfinished' : prop.status }}</span>
-          <span class="absolute bottom-2.5 left-2.5 inline-flex items-center gap-1 text-[10px] font-semibold bg-black/55 text-white px-2 py-0.5 rounded-full">
+          <span class="absolute top-2.5 left-2.5 text-[0.625rem] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full shadow-sm" :class="prop.offer_type === 'rent' ? 'bg-blue-600 text-white' : 'bg-emerald-600 text-white'">{{ prop.offer_type === 'rent' ? 'For Rent' : 'For Sale' }}</span>
+          <span class="absolute top-2.5 right-2.5 text-[0.625rem] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full shadow-sm" :class="prop.status === 'published' ? 'bg-white/90 text-emerald-700' : 'bg-black/60 text-white'">{{ prop.status === 'draft' && prop.is_complete === false ? 'unfinished' : prop.status }}</span>
+          <span class="absolute bottom-2.5 left-2.5 inline-flex items-center gap-1 text-[0.625rem] font-semibold bg-black/55 text-white px-2 py-0.5 rounded-full">
             <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>
             {{ prop.views ?? 0 }}
           </span>

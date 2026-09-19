@@ -193,7 +193,7 @@ async function submitCreate() {
 </script>
 
 <template>
-  <div class="max-w-5xl">
+  <div class="max-w-5xl mx-auto">
     <!-- Header -->
     <div class="flex items-end justify-between gap-3 mb-6">
       <div>
@@ -208,7 +208,7 @@ async function submitCreate() {
       <div v-for="s in statCards" :key="s.label" class="bg-white rounded-2xl border border-gray-200 p-4">
         <div class="flex items-center gap-2">
           <span class="h-2 w-2 rounded-full" :class="s.dot" />
-          <p class="text-[11px] font-bold uppercase tracking-wide text-gray-400">{{ s.label }}</p>
+          <p class="text-[0.6875rem] font-bold uppercase tracking-wide text-gray-400">{{ s.label }}</p>
         </div>
         <p class="text-2xl font-bold text-brand-navy mt-1.5">{{ s.value }}</p>
       </div>
@@ -266,7 +266,7 @@ async function submitCreate() {
 
       <table v-else class="w-full text-sm">
         <thead>
-          <tr class="text-left text-[11px] font-bold uppercase tracking-wide text-gray-400 border-b border-gray-100">
+          <tr class="text-left text-[0.6875rem] font-bold uppercase tracking-wide text-gray-400 border-b border-gray-100">
             <th class="pl-4 pr-1 py-3 w-8">
               <input
                 type="checkbox"
@@ -309,14 +309,14 @@ async function submitCreate() {
                 <div class="min-w-0">
                   <p class="font-semibold text-brand-navy truncate flex items-center gap-1.5">
                     {{ u.name }}
-                    <span v-if="u.id === me" class="text-[9px] font-bold uppercase bg-brand-navy text-white px-1.5 py-0.5 rounded-full">You</span>
+                    <span v-if="u.id === me" class="text-[0.5625rem] font-bold uppercase bg-brand-navy text-white px-1.5 py-0.5 rounded-full">You</span>
                   </p>
                   <p class="text-xs text-gray-400 truncate">{{ u.email }}</p>
                 </div>
               </div>
             </td>
             <td class="px-4 py-3 hidden sm:table-cell">
-              <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full" :class="roleBadge[u.role_type] ?? 'bg-gray-100 text-gray-500'">{{ roleLabel(u.role_type) }}</span>
+              <span class="text-[0.625rem] font-bold uppercase px-2 py-0.5 rounded-full" :class="roleBadge[u.role_type] ?? 'bg-gray-100 text-gray-500'">{{ roleLabel(u.role_type) }}</span>
             </td>
             <td class="px-4 py-3 hidden md:table-cell text-gray-500">{{ joined(u.created_at) }}</td>
             <td class="px-4 py-3 text-right">
@@ -427,7 +427,7 @@ async function submitCreate() {
             <div class="h-full rounded-full bg-red-500 transition-[width] duration-300 ease-out" :style="{ width: bulkProgress + '%' }" />
           </div>
 
-          <p class="text-[11px] text-gray-400 mt-4">Please keep this window open until it finishes.</p>
+          <p class="text-[0.6875rem] text-gray-400 mt-4">Please keep this window open until it finishes.</p>
         </template>
 
         <!-- 3. Summary -->

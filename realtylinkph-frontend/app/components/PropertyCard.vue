@@ -166,7 +166,7 @@ const specs = computed(() => {
            nothing — that promise lives in the top bar and on the detail page.
            A 360° tour is the one thing only some listings have. -->
       <div v-if="has360" class="absolute top-3 left-3">
-        <span class="flex items-center gap-1 bg-black/55 backdrop-blur-sm text-white text-[10px] font-bold px-2.5 py-1 rounded-full ring-1 ring-white/20">
+        <span class="flex items-center gap-1 bg-black/55 backdrop-blur-sm text-white text-[0.625rem] font-bold px-2.5 py-1 rounded-full ring-1 ring-white/20">
           <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12h18M12 3a15 15 0 010 18M12 3a15 15 0 000 18" /></svg>
           360°
         </span>
@@ -194,7 +194,7 @@ const specs = computed(() => {
 
     <!-- Three fixed lines, so a row of cards ends level -->
     <div class="pt-3">
-      <p class="font-semibold text-brand-navy dark:text-white text-[15px] leading-snug truncate">{{ headline }}</p>
+      <p class="font-semibold text-brand-navy dark:text-white text-[0.9375rem] leading-snug truncate">{{ headline }}</p>
       <p class="text-sm text-brand-navy/55 dark:text-white/45 truncate" :title="subtitle">{{ subtitle }}</p>
       <p class="text-sm mt-1">
         <span class="font-bold text-brand-navy dark:text-white">{{ displayPrice }}</span>

@@ -181,14 +181,14 @@ function priceLabel(price: number, offer: string): string {
 
           <div class="absolute top-3 left-3 flex items-center gap-2">
             <span
-              class="text-[10px] font-bold uppercase tracking-[0.16em] px-2.5 py-1 rounded-full shadow-sm"
+              class="text-[0.625rem] font-bold uppercase tracking-[0.16em] px-2.5 py-1 rounded-full shadow-sm"
               :class="c.offer === 'rent' ? 'bg-blue-500 text-white' : 'bg-brand-gold text-brand-navy'"
             >
               {{ c.offer === 'rent' ? 'For Rent' : 'For Sale' }}
             </span>
             <span
               v-if="c.mock"
-              class="text-[10px] font-bold uppercase tracking-[0.16em] px-2.5 py-1 rounded-full
+              class="text-[0.625rem] font-bold uppercase tracking-[0.16em] px-2.5 py-1 rounded-full
                      bg-brand-navy/60 text-white/90 backdrop-blur-sm"
               title="Placeholder content — real listings replace these automatically"
             >

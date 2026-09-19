@@ -136,7 +136,7 @@ const canSubmit = computed(() => !!form.title.trim() && !!form.address.trim() &&
 </script>
 
 <template>
-  <div class="max-w-5xl">
+  <div class="max-w-5xl mx-auto">
     <div class="flex items-center gap-3 mb-6">
       <NuxtLink to="/dashboard/listings" class="text-brand-text-secondary hover:text-brand-navy text-sm">← Back</NuxtLink>
       <h1 class="font-playfair text-2xl font-bold text-brand-navy">Edit Listing</h1>
@@ -152,7 +152,7 @@ const canSubmit = computed(() => !!form.title.trim() && !!form.address.trim() &&
       <aside class="lg:sticky lg:top-6">
         <div class="rounded-2xl p-5 text-white relative overflow-hidden" style="background: linear-gradient(160deg, #10264D 0%, #08152F 70%, #060E1F 100%)">
           <div class="absolute -right-8 -top-8 h-28 w-28 rounded-full border border-brand-gold/10" />
-          <p class="text-brand-gold text-[10px] font-bold uppercase tracking-[0.2em] mb-4 relative">Edit listing</p>
+          <p class="text-brand-gold text-[0.625rem] font-bold uppercase tracking-[0.2em] mb-4 relative">Edit listing</p>
           <ol class="space-y-1 relative">
             <li v-for="s in steps" :key="s.n">
               <button type="button" class="w-full flex items-start gap-3 rounded-xl p-3 text-left transition-colors" :class="step === s.n ? 'bg-white/10' : 'hover:bg-white/5'" @click="step = s.n">
@@ -162,7 +162,7 @@ const canSubmit = computed(() => !!form.title.trim() && !!form.address.trim() &&
                 </span>
                 <span class="min-w-0">
                   <span class="block text-sm font-semibold" :class="step === s.n ? 'text-white' : 'text-white/70'">{{ s.label }}</span>
-                  <span class="block text-[11px] text-white/40 mt-0.5">{{ s.desc }}</span>
+                  <span class="block text-[0.6875rem] text-white/40 mt-0.5">{{ s.desc }}</span>
                 </span>
               </button>
             </li>
@@ -204,19 +204,19 @@ const canSubmit = computed(() => !!form.title.trim() && !!form.address.trim() &&
         <div v-show="step === 2" class="card p-6">
           <div class="flex items-center gap-2">
             <h2 class="font-bold text-brand-navy">Virtual Tour</h2>
-            <span class="text-[10px] font-bold uppercase tracking-wide bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">Optional</span>
+            <span class="text-[0.625rem] font-bold uppercase tracking-wide bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">Optional</span>
           </div>
           <p class="text-xs text-gray-500 mt-1 mb-3">360° / panoramic shots for the draggable virtual tour.</p>
           <div class="flex items-start gap-2.5 rounded-xl border border-brand-gold/25 bg-brand-gold/5 p-3 mb-5">
             <svg class="h-4 w-4 text-brand-gold mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            <p class="text-[11px] text-brand-navy/70 leading-relaxed">
+            <p class="text-[0.6875rem] text-brand-navy/70 leading-relaxed">
               <span class="font-semibold text-brand-navy">Works best with equirectangular 360° photos</span> — a single wide 2:1 wrap-around shot from a 360° camera or app (Insta360, Google Street View, etc.). Regular photos will still upload, but they'll look stretched in the tour viewer.
             </p>
           </div>
           <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
             <div v-for="photo in existing360" :key="photo.id" class="relative aspect-[16/7] rounded-xl overflow-hidden group">
               <img :src="photo.url" class="h-full w-full object-cover" />
-              <span class="absolute top-1.5 left-1.5 text-[9px] font-bold bg-brand-navy text-white px-1.5 py-0.5 rounded">360°</span>
+              <span class="absolute top-1.5 left-1.5 text-[0.5625rem] font-bold bg-brand-navy text-white px-1.5 py-0.5 rounded">360°</span>
               <button type="button" class="absolute top-1.5 right-1.5 bg-black/60 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity" @click="removeExisting(photo.id)">
                 <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
               </button>
@@ -272,7 +272,7 @@ const canSubmit = computed(() => !!form.title.trim() && !!form.address.trim() &&
               </button>
             </div>
             <textarea v-model="form.description" rows="6" class="input-field resize-y" />
-            <p v-if="aiError" class="text-[11px] text-red-500 mt-1">{{ aiError }}</p>
+            <p v-if="aiError" class="text-[0.6875rem] text-red-500 mt-1">{{ aiError }}</p>
           </div>
         </div>
 

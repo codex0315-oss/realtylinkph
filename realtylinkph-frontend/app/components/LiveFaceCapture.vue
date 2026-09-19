@@ -75,11 +75,11 @@ onUnmounted(stop)
       <!-- Face guide -->
       <div v-if="active && !preview" class="absolute inset-0 flex items-center justify-center pointer-events-none">
         <div class="h-52 w-40 border-2 border-brand-gold/70 rounded-[48%]" />
-        <span class="absolute bottom-3 left-1/2 -translate-x-1/2 text-[11px] text-white/80 bg-black/40 px-2 py-1 rounded-full">Center your face in the oval</span>
+        <span class="absolute bottom-3 left-1/2 -translate-x-1/2 text-[0.6875rem] text-white/80 bg-black/40 px-2 py-1 rounded-full">Center your face in the oval</span>
       </div>
 
       <!-- Captured badge -->
-      <div v-if="preview" class="absolute top-3 right-3 flex items-center gap-1 bg-emerald-500 text-white text-[10px] font-bold px-2.5 py-1 rounded-full">
+      <div v-if="preview" class="absolute top-3 right-3 flex items-center gap-1 bg-emerald-500 text-white text-[0.625rem] font-bold px-2.5 py-1 rounded-full">
         <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" /></svg>
         Captured
       </div>

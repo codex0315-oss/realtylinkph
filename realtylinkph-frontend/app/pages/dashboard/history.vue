@@ -142,10 +142,10 @@ async function relist(prop: Property) {
 </script>
 
 <template>
-  <div class="max-w-4xl">
+  <div class="max-w-4xl mx-auto">
     <!-- Header — same shape as the other dashboard pages -->
     <header class="mb-8">
-      <h1 class="font-display text-2xl sm:text-[28px] font-bold text-brand-navy dark:text-white leading-tight">History</h1>
+      <h1 class="font-display text-2xl sm:text-[1.75rem] font-bold text-brand-navy dark:text-white leading-tight">History</h1>
       <p class="mt-1.5 text-sm text-brand-text-secondary dark:text-white/50">
         {{ tab === 'inventory' ? 'Your sold listings — re-list them anytime to find a new buyer or renter.' : 'Your cancelled and past property viewings.' }}
       </p>
@@ -168,7 +168,7 @@ async function relist(prop: Property) {
         @click="tab = 'inventory'"
       >
         Inventory
-        <span v-if="inventory.length" class="text-[10px] font-bold bg-brand-gold/15 text-brand-gold-deep dark:text-brand-gold rounded-full px-1.5 py-0.5">{{ inventory.length }}</span>
+        <span v-if="inventory.length" class="text-[0.625rem] font-bold bg-brand-gold/15 text-brand-gold-deep dark:text-brand-gold rounded-full px-1.5 py-0.5">{{ inventory.length }}</span>
       </button>
     </div>
 
@@ -218,7 +218,7 @@ async function relist(prop: Property) {
               <div class="flex-1 min-w-0">
                 <div class="flex items-center gap-2">
                   <NuxtLink :to="propertyHref(appt.property_id)" class="font-semibold text-brand-navy hover:text-brand-gold transition-colors line-clamp-1">{{ appt.property?.title ?? `Property #${appt.property_id}` }}</NuxtLink>
-                  <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full capitalize flex-shrink-0" :class="statusBadge[appt.status]">{{ appt.status }}</span>
+                  <span class="text-[0.625rem] font-bold uppercase px-2 py-0.5 rounded-full capitalize flex-shrink-0" :class="statusBadge[appt.status]">{{ appt.status }}</span>
                 </div>
                 <p class="text-xs text-gray-500 mt-1 flex items-center gap-1.5">
                   <svg class="h-3.5 w-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
@@ -274,14 +274,14 @@ async function relist(prop: Property) {
             <div v-else class="h-full w-full flex items-center justify-center text-gray-300">
               <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.3" d="M4 16l4.586-4.586a2 2 0 012.828 0L16 16m-2-2l1.586-1.586a2 2 0 012.828 0L20 14M4 6h16v12H4z" /></svg>
             </div>
-            <span class="absolute top-1.5 left-1.5 text-[9px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-brand-navy text-white">Sold</span>
+            <span class="absolute top-1.5 left-1.5 text-[0.5625rem] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded-full bg-brand-navy text-white">Sold</span>
           </div>
 
           <div class="flex-1 min-w-0 flex flex-col">
             <p class="text-sm font-bold text-brand-gold">{{ priceLabel(prop) }}</p>
             <p class="font-semibold text-brand-navy line-clamp-1">{{ prop.title }}</p>
             <p class="text-xs text-gray-400 line-clamp-1">{{ prop.address }}</p>
-            <p v-if="prop.sold_at" class="text-[11px] text-gray-400 mt-0.5">Sold {{ soldDate(prop) }}</p>
+            <p v-if="prop.sold_at" class="text-[0.6875rem] text-gray-400 mt-0.5">Sold {{ soldDate(prop) }}</p>
 
             <div class="flex items-center gap-2 mt-auto pt-2">
               <NuxtLink :to="`/dashboard/listings/${prop.id}/edit`" class="text-xs font-semibold text-brand-navy border border-gray-200 rounded-lg px-3 py-1.5 hover:border-brand-gold transition-colors">Edit</NuxtLink>

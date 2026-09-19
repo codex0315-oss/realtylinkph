@@ -11,6 +11,21 @@
   html {
     @apply text-brand-text-primary font-sans;
     scroll-behavior: smooth;
+    /*
+     * Proportional scaling for large monitors. Every Tailwind size is in rem,
+     * so raising the root font size scales the whole composition — type,
+     * spacing, cards, container caps — instead of just widening it. The UI
+     * was designed at ~1440 px; this keeps it identical up to that width,
+     * then grows linearly: 1.2× at 1920 px, 1.45× at 2560 px, capped at 1.5×.
+     * Anything sized in px on purpose (1px borders, hairlines) stays put.
+     * The public-page container (--content-w) also widens past 1536 px so
+     * card rows fill the screen the way they do on a laptop.
+     */
+    font-size: clamp(16px, 7.2px + 0.625vw, 24px);
+    --content-w: 80rem;
+  }
+  @media (min-width: 1536px) {
+    html { --content-w: 88rem; }
   }
 
   body {
@@ -202,7 +217,7 @@
 
   /* Section eyebrow — gold rule + tracked caps. Used across the landing page. */
   .eyebrow {
-    @apply text-brand-gold text-[11px] font-bold tracking-[0.25em] uppercase;
+    @apply text-brand-gold text-[0.6875rem] font-bold tracking-[0.25em] uppercase;
   }
 
   /* Animated underline for nav links. */

@@ -232,7 +232,7 @@ const fieldClass = `${fieldBase} ${fieldBorder}`
                    bg-brand-cream dark:bg-brand-navy-deep
                    border border-brand-navy/10 dark:border-white/10
                    shadow-[0_40px_100px_rgba(8,21,47,0.28)] dark:shadow-[0_40px_100px_rgba(0,0,0,0.6)]"
-            :class="isLogin ? 'max-w-[420px]' : 'max-w-[620px]'"
+            :class="isLogin ? 'max-w-[26.25rem]' : 'max-w-[38.75rem]'"
           >
             <!-- Ruled grid, same texture as the landing page and Browse -->
             <div class="absolute inset-0 bg-grid-lines mask-radial-fade pointer-events-none" />
@@ -388,7 +388,7 @@ const fieldClass = `${fieldBase} ${fieldBorder}`
                     :class="[fieldBase, ve.name ? fieldBorderErr : fieldBorder]"
                     @input="ve.name = ''"
                   />
-                  <p v-if="ve.name" class="text-[11px] text-red-600 dark:text-red-400">{{ ve.name }}</p>
+                  <p v-if="ve.name" class="text-[0.6875rem] text-red-600 dark:text-red-400">{{ ve.name }}</p>
                 </div>
 
                 <!-- Email -->
@@ -401,7 +401,7 @@ const fieldClass = `${fieldBase} ${fieldBorder}`
                     :class="[fieldBase, ve.email ? fieldBorderErr : fieldBorder]"
                     @input="ve.email = ''"
                   />
-                  <p v-if="ve.email" class="text-[11px] text-red-600 dark:text-red-400">{{ ve.email }}</p>
+                  <p v-if="ve.email" class="text-[0.6875rem] text-red-600 dark:text-red-400">{{ ve.email }}</p>
                 </div>
 
                 <!-- Password -->
@@ -430,8 +430,8 @@ const fieldClass = `${fieldBase} ${fieldBorder}`
                       </svg>
                     </button>
                   </div>
-                  <p v-if="ve.password" class="text-[11px] text-red-600 dark:text-red-400">{{ ve.password }}</p>
-                  <p v-else-if="!isLogin" class="text-[11px] text-brand-navy/45 dark:text-white/40">At least 8 characters, including a letter and a number.</p>
+                  <p v-if="ve.password" class="text-[0.6875rem] text-red-600 dark:text-red-400">{{ ve.password }}</p>
+                  <p v-else-if="!isLogin" class="text-[0.6875rem] text-brand-navy/45 dark:text-white/40">At least 8 characters, including a letter and a number.</p>
                 </div>
 
                 <!-- Confirm password (register only) -->
@@ -460,7 +460,7 @@ const fieldClass = `${fieldBase} ${fieldBorder}`
                       </svg>
                     </button>
                   </div>
-                  <p v-if="ve.confirm" class="text-[11px] text-red-600 dark:text-red-400">{{ ve.confirm }}</p>
+                  <p v-if="ve.confirm" class="text-[0.6875rem] text-red-600 dark:text-red-400">{{ ve.confirm }}</p>
                 </div>
               </div>
 
@@ -507,7 +507,7 @@ const fieldClass = `${fieldBase} ${fieldBorder}`
             <!-- Divider — hidden on the forgot-password detour -->
             <div v-if="view === 'form'" class="flex items-center gap-3 my-4">
               <div class="flex-1 h-px bg-brand-navy/10 dark:bg-white/10" />
-              <span class="text-[11px] text-brand-navy/35 dark:text-white/25 font-medium">or</span>
+              <span class="text-[0.6875rem] text-brand-navy/35 dark:text-white/25 font-medium">or</span>
               <div class="flex-1 h-px bg-brand-navy/10 dark:bg-white/10" />
             </div>
 

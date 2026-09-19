@@ -24,7 +24,7 @@ const badges = [
 
 <template>
   <div class="hidden md:block bg-brand-navy dark:bg-[#03070F] text-white/70 transition-colors duration-500">
-    <div class="max-w-content mx-auto px-4 h-9 flex items-center justify-between text-[11px]">
+    <div class="max-w-content mx-auto px-4 h-9 flex items-center justify-between text-[0.6875rem]">
       <ul class="flex items-center gap-6">
         <li v-for="b in badges" :key="b.label" class="flex items-center gap-1.5">
           <svg class="h-3.5 w-3.5 text-brand-gold flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8">

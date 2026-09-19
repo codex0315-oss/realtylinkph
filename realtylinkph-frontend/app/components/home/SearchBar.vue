@@ -25,9 +25,9 @@ const budget = computed<string>({
 const budgetHint = computed(() => (offer.value === 'rent' ? '30,000' : '5,000,000'))
 
 const field =
-  'w-full border-0 bg-transparent p-0 text-[15px] leading-6 outline-none focus:ring-0 ' +
+  'w-full border-0 bg-transparent p-0 text-[0.9375rem] leading-6 outline-none focus:ring-0 ' +
   'text-brand-navy dark:text-white'
-const labelText = 'text-[11px] font-bold uppercase tracking-wide text-brand-navy/70 dark:text-white/70 mb-0.5'
+const labelText = 'text-[0.6875rem] font-bold uppercase tracking-wide text-brand-navy/70 dark:text-white/70 mb-0.5'
 // Pill only once the cells sit in a row (sm+). Stacked on a phone, a
 // rounded-full cell is a lozenge whose ends clip the label and value.
 const cell =
@@ -94,7 +94,7 @@ function submit() {
     <label :class="[cell, 'flex-1 min-w-0 cursor-text']">
       <span :class="labelText">Max budget</span>
       <span class="flex items-baseline gap-1">
-        <span class="text-[15px] leading-6 text-brand-navy/45 dark:text-white/45 select-none">₱</span>
+        <span class="text-[0.9375rem] leading-6 text-brand-navy/45 dark:text-white/45 select-none">₱</span>
         <input
           v-model="budget"
           type="text"

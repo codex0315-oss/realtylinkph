@@ -23,7 +23,7 @@ const { data: agents } = await useAsyncData(
       <div class="max-w-content mx-auto px-6 relative text-center">
         <div class="flex items-center justify-center gap-3 mb-3">
           <div class="h-px w-8 bg-brand-gold/50" />
-          <span class="text-brand-gold text-[11px] font-bold tracking-[0.25em] uppercase">Trusted Professionals</span>
+          <span class="text-brand-gold text-[0.6875rem] font-bold tracking-[0.25em] uppercase">Trusted Professionals</span>
           <div class="h-px w-8 bg-brand-gold/50" />
         </div>
         <h1 class="font-playfair text-3xl md:text-4xl font-bold text-white leading-tight">Verified Agents</h1>

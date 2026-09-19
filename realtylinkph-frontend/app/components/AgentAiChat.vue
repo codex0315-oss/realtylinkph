@@ -112,9 +112,9 @@ function peso(n: number): string {
       <div class="min-w-0">
         <p class="text-sm font-bold text-brand-navy dark:text-white flex items-center gap-1.5">
           RealtyLink AI
-          <span class="text-[9px] font-bold uppercase tracking-wide bg-brand-gold/15 text-brand-gold px-1.5 py-0.5 rounded">Agent</span>
+          <span class="text-[0.5625rem] font-bold uppercase tracking-wide bg-brand-gold/15 text-brand-gold px-1.5 py-0.5 rounded">Agent</span>
         </p>
-        <p class="text-[11px] text-gray-400 dark:text-white/40">Your listing assistant</p>
+        <p class="text-[0.6875rem] text-gray-400 dark:text-white/40">Your listing assistant</p>
       </div>
 
       <button
@@ -177,7 +177,7 @@ function peso(n: number): string {
               </div>
               <p class="text-sm font-bold text-brand-navy dark:text-white">{{ m.proposal.title }}</p>
               <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-600 dark:text-white/60 mt-1">
-                <span class="text-[10px] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded" :class="m.proposal.offer_type === 'rent' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'">{{ m.proposal.offer_type === 'rent' ? 'For Rent' : 'For Sale' }}</span>
+                <span class="text-[0.625rem] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded" :class="m.proposal.offer_type === 'rent' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'">{{ m.proposal.offer_type === 'rent' ? 'For Rent' : 'For Sale' }}</span>
                 <span class="capitalize">{{ m.proposal.type }}</span>
                 <span class="font-semibold text-brand-gold">{{ peso(m.proposal.price) }}</span>
                 <span v-if="m.proposal.bedrooms">{{ m.proposal.bedrooms }}BR</span>
@@ -255,7 +255,7 @@ function peso(n: number): string {
           <svg class="h-4 w-4 text-brand-navy" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
         </button>
       </div>
-      <p class="text-[10px] text-gray-400 dark:text-white/30 text-center mt-1.5">RealtyLink AI can make mistakes — review drafts before publishing.</p>
+      <p class="text-[0.625rem] text-gray-400 dark:text-white/30 text-center mt-1.5">RealtyLink AI can make mistakes — review drafts before publishing.</p>
     </div>
   </div>
 </template>

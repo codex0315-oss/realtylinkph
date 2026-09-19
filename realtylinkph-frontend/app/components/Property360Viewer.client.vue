@@ -65,5 +65,5 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-  <div ref="el" class="w-full h-[420px] rounded-2xl overflow-hidden bg-black" />
+  <div ref="el" class="w-full h-[26.25rem] rounded-2xl overflow-hidden bg-black" />
 </template>

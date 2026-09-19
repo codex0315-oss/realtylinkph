@@ -211,7 +211,7 @@ const memberSince = computed(() =>
 </script>
 
 <template>
-  <div class="max-w-6xl grid grid-cols-1 lg:grid-cols-3 gap-6">
+  <div class="max-w-6xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
 
     <!-- ════════ Left: profile summary (sticky) ════════ -->
     <aside class="lg:col-span-1">
@@ -232,7 +232,7 @@ const memberSince = computed(() =>
           </div>
           <p class="mt-4 font-bold text-brand-navy dark:text-white text-lg">{{ authStore.user?.name }}</p>
           <p class="text-xs text-gray-400 break-all">{{ authStore.user?.email }}</p>
-          <span class="inline-block mt-2 text-[10px] font-bold uppercase tracking-wide bg-brand-gold/10 text-brand-gold px-3 py-1 rounded-full">{{ roleLabel }}</span>
+          <span class="inline-block mt-2 text-[0.625rem] font-bold uppercase tracking-wide bg-brand-gold/10 text-brand-gold px-3 py-1 rounded-full">{{ roleLabel }}</span>
         </div>
 
         <div class="mt-6 pt-5 border-t border-gray-100 dark:border-white/10 space-y-3.5">
@@ -241,7 +241,7 @@ const memberSince = computed(() =>
               <svg class="h-4 w-4 text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
             </div>
             <div class="min-w-0">
-              <p class="text-[11px] text-gray-400 dark:text-white/40 leading-none">Member since</p>
+              <p class="text-[0.6875rem] text-gray-400 dark:text-white/40 leading-none">Member since</p>
               <p class="text-sm font-semibold text-brand-navy dark:text-white mt-0.5">{{ memberSince }}</p>
             </div>
           </div>
@@ -250,7 +250,7 @@ const memberSince = computed(() =>
               <svg class="h-4 w-4 text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 8l7.89 5.26a2 2 0 002.22 0L21 8M5 19h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v10a2 2 0 002 2z" /></svg>
             </div>
             <div class="min-w-0 flex-1">
-              <p class="text-[11px] text-gray-400 dark:text-white/40 leading-none">Email status</p>
+              <p class="text-[0.6875rem] text-gray-400 dark:text-white/40 leading-none">Email status</p>
               <p class="text-sm font-semibold mt-0.5" :class="authStore.user?.email_verified_at ? 'text-emerald-600' : 'text-amber-600'">
                 {{ authStore.user?.email_verified_at ? 'Verified' : 'Unverified' }}
               </p>
@@ -261,7 +261,7 @@ const memberSince = computed(() =>
               <svg class="h-4 w-4 text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M3 5a2 2 0 012-2h3.28a1 1 0 01.948.684l1.498 4.493a1 1 0 01-.502 1.21l-2.257 1.13a11.042 11.042 0 005.516 5.516l1.13-2.257a1 1 0 011.21-.502l4.493 1.498a1 1 0 01.684.949V19a2 2 0 01-2 2h-1C9.716 21 3 14.284 3 6V5z" /></svg>
             </div>
             <div class="min-w-0">
-              <p class="text-[11px] text-gray-400 dark:text-white/40 leading-none">Phone</p>
+              <p class="text-[0.6875rem] text-gray-400 dark:text-white/40 leading-none">Phone</p>
               <p class="text-sm font-semibold text-brand-navy dark:text-white mt-0.5">{{ authStore.user?.phone || 'Not set' }}</p>
             </div>
           </div>
@@ -302,8 +302,8 @@ const memberSince = computed(() =>
           <label class="block text-sm font-semibold text-brand-navy dark:text-white/80 mb-1.5">Email address</label>
           <div class="flex items-center gap-2">
             <input :value="authStore.user?.email" type="email" disabled class="w-full px-4 py-3 text-sm border border-gray-200 dark:border-white/10 rounded-xl bg-gray-100 dark:bg-white/5 text-gray-500 dark:text-white/40 cursor-not-allowed" />
-            <span v-if="authStore.user?.email_verified_at" class="flex-shrink-0 text-[10px] font-bold uppercase bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-full">Verified</span>
-            <span v-else class="flex-shrink-0 text-[10px] font-bold uppercase bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full">Unverified</span>
+            <span v-if="authStore.user?.email_verified_at" class="flex-shrink-0 text-[0.625rem] font-bold uppercase bg-emerald-100 text-emerald-700 px-2.5 py-1 rounded-full">Verified</span>
+            <span v-else class="flex-shrink-0 text-[0.625rem] font-bold uppercase bg-amber-100 text-amber-700 px-2.5 py-1 rounded-full">Unverified</span>
           </div>
 
           <!-- Email verification (6-digit code) -->
@@ -381,7 +381,7 @@ const memberSince = computed(() =>
     <div v-if="agentApp" class="bg-white dark:bg-[#10264D] rounded-2xl border border-gray-200 dark:border-white/10 p-6 sm:p-8 transition-colors">
       <div class="flex items-center justify-between gap-3 mb-1">
         <h2 class="font-bold text-brand-navy dark:text-white">Agent Application</h2>
-        <span class="text-[10px] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full" :class="appStatusMeta[agentApp.status]?.cls">
+        <span class="text-[0.625rem] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full" :class="appStatusMeta[agentApp.status]?.cls">
           {{ appStatusMeta[agentApp.status]?.label }}
         </span>
       </div>

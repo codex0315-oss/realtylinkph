@@ -124,10 +124,10 @@ const statusBadge: Record<string, string> = {
 </script>
 
 <template>
-  <div class="max-w-4xl">
+  <div class="max-w-4xl mx-auto">
     <!-- Header — same shape as the other dashboard pages -->
     <header class="mb-8">
-      <h1 class="font-display text-2xl sm:text-[28px] font-bold text-brand-navy dark:text-white leading-tight">Appointments</h1>
+      <h1 class="font-display text-2xl sm:text-[1.75rem] font-bold text-brand-navy dark:text-white leading-tight">Appointments</h1>
       <p class="mt-1.5 text-sm text-brand-text-secondary dark:text-white/50">
         Property viewings {{ authStore.isAgent ? 'requested on your listings' : 'you\'ve scheduled' }}.
       </p>
@@ -212,7 +212,7 @@ const statusBadge: Record<string, string> = {
             <div class="flex-1 min-w-0">
               <div class="flex items-center gap-2">
                 <NuxtLink :to="propertyHref(appt.property_id)" class="font-semibold text-brand-navy hover:text-brand-gold transition-colors line-clamp-1">{{ appt.property?.title ?? `Property #${appt.property_id}` }}</NuxtLink>
-                <span class="text-[10px] font-bold uppercase px-2 py-0.5 rounded-full capitalize flex-shrink-0" :class="statusBadge[appt.status]">{{ appt.status }}</span>
+                <span class="text-[0.625rem] font-bold uppercase px-2 py-0.5 rounded-full capitalize flex-shrink-0" :class="statusBadge[appt.status]">{{ appt.status }}</span>
               </div>
               <p class="text-xs text-gray-500 mt-1 flex items-center gap-1.5">
                 <svg class="h-3.5 w-3.5 text-gray-400" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z" /></svg>
@@ -225,7 +225,7 @@ const statusBadge: Record<string, string> = {
                      before it's confirmed. Hidden below the minimum sample. -->
                 <span
                   v-if="otherParty(appt)?.reliability?.has_enough"
-                  class="text-[10px] font-bold px-1.5 py-0.5 rounded-full"
+                  class="text-[0.625rem] font-bold px-1.5 py-0.5 rounded-full"
                   :class="(otherParty(appt)!.reliability!.rate ?? 100) >= 80
                     ? 'bg-emerald-100 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300'
                     : 'bg-amber-100 text-amber-800 dark:bg-amber-500/15 dark:text-amber-300'"

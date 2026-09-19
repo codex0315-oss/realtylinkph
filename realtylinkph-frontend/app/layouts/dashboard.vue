@@ -169,7 +169,7 @@ watch(() => route.path, closeAll)
 
       <!-- Nav -->
       <nav class="flex-1 overflow-y-auto px-4 py-6 space-y-1">
-        <p class="px-3 mb-2 text-[10px] font-bold uppercase tracking-[0.2em] text-brand-navy/40 dark:text-white/30">Menu</p>
+        <p class="px-3 mb-2 text-[0.625rem] font-bold uppercase tracking-[0.2em] text-brand-navy/40 dark:text-white/30">Menu</p>
         <NuxtLink
           v-for="link in navLinks"
           :key="link.href"
@@ -186,7 +186,7 @@ watch(() => route.path, closeAll)
           <span class="flex-1">{{ link.label }}</span>
           <span
             v-if="link.href === '/dashboard/history' && historyCount"
-            class="flex-shrink-0 min-w-[20px] h-5 px-1.5 rounded-full text-[10px] font-bold flex items-center justify-center"
+            class="flex-shrink-0 min-w-[20px] h-5 px-1.5 rounded-full text-[0.625rem] font-bold flex items-center justify-center"
             :class="isActive(link.href)
               ? 'bg-brand-navy/15 text-brand-navy'
               : 'bg-brand-navy/10 text-brand-navy/60 dark:bg-white/10 dark:text-white/70'"
@@ -303,7 +303,7 @@ watch(() => route.path, closeAll)
               </svg>
               <span
                 v-if="notifStore.unreadCount > 0"
-                class="absolute top-1.5 right-1.5 h-4 w-4 bg-brand-gold rounded-full text-[9px] font-bold text-brand-navy flex items-center justify-center"
+                class="absolute top-1.5 right-1.5 h-4 w-4 bg-brand-gold rounded-full text-[0.5625rem] font-bold text-brand-navy flex items-center justify-center"
               >
                 {{ notifStore.unreadCount > 9 ? '9+' : notifStore.unreadCount }}
               </span>
@@ -338,7 +338,7 @@ watch(() => route.path, closeAll)
                     <span class="mt-1.5 h-2 w-2 rounded-full flex-shrink-0" :class="n.read_at ? 'bg-transparent' : 'bg-brand-gold'" />
                     <span class="min-w-0">
                       <span class="block text-xs font-medium text-brand-navy line-clamp-2">{{ notifText(n) }}</span>
-                      <span class="block text-[10px] text-gray-400 mt-0.5">{{ notifTime(n.created_at) }}</span>
+                      <span class="block text-[0.625rem] text-gray-400 mt-0.5">{{ notifTime(n.created_at) }}</span>
                     </span>
                   </button>
                 </div>
@@ -355,7 +355,7 @@ watch(() => route.path, closeAll)
               <AppAvatar :name="authStore.user?.name" :src="authStore.user?.avatar" size="sm" />
               <div class="hidden sm:block text-left">
                 <p class="text-xs font-semibold text-brand-navy dark:text-white leading-none truncate max-w-[120px]">{{ authStore.user?.name }}</p>
-                <p class="text-[10px] text-gray-400 mt-0.5">{{ roleLabel }}</p>
+                <p class="text-[0.625rem] text-gray-400 mt-0.5">{{ roleLabel }}</p>
               </div>
               <svg class="h-4 w-4 text-gray-400 hidden sm:block" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                 <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />

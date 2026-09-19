@@ -86,7 +86,7 @@ function browse(type: PropertyType) {
             {{ item.label }}
           </span>
 
-          <span class="relative mt-1.5 inline-flex items-center gap-1 text-[10px] font-bold uppercase tracking-wider text-brand-gold
+          <span class="relative mt-1.5 inline-flex items-center gap-1 text-[0.625rem] font-bold uppercase tracking-wider text-brand-gold
                        opacity-0 group-hover:opacity-100 translate-y-1 group-hover:translate-y-0 transition-all duration-300">
             Browse
             <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor">

@@ -211,7 +211,7 @@ function startReapply() {
 </script>
 
 <template>
-  <div class="max-w-6xl">
+  <div class="max-w-6xl mx-auto">
 
     <!-- ░░ Submit overlay — real upload progress ░░ -->
     <Teleport to="body">
@@ -244,7 +244,7 @@ function startReapply() {
             </div>
           </div>
 
-          <p class="text-white/30 text-[11px]">Please keep this page open until it finishes.</p>
+          <p class="text-white/30 text-[0.6875rem]">Please keep this page open until it finishes.</p>
         </div>
       </Transition>
     </Teleport>
@@ -276,7 +276,7 @@ function startReapply() {
           <svg class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
           You can re-apply in <span class="font-bold tabular-nums">{{ cooldownText }}</span>
         </div>
-        <p class="text-[11px] text-gray-400 dark:text-white/40 mt-2">There's a 12-hour cool-down before you can submit a new application.</p>
+        <p class="text-[0.6875rem] text-gray-400 dark:text-white/40 mt-2">There's a 12-hour cool-down before you can submit a new application.</p>
       </div>
 
       <button
@@ -453,19 +453,19 @@ function startReapply() {
           <!-- Uploaded documents + face -->
           <div class="grid grid-cols-2 gap-3">
             <div class="rounded-2xl border border-gray-200 dark:border-white/10 p-3">
-              <p class="text-[10px] font-bold uppercase tracking-wide text-gray-400 dark:text-white/40 mb-2">{{ type === 'broker' ? 'License card' : 'Accreditation' }}</p>
+              <p class="text-[0.625rem] font-bold uppercase tracking-wide text-gray-400 dark:text-white/40 mb-2">{{ type === 'broker' ? 'License card' : 'Accreditation' }}</p>
               <img v-if="type === 'broker' ? previews.licenseDoc : previews.accreditationDoc" :src="type === 'broker' ? previews.licenseDoc : previews.accreditationDoc" class="w-full h-28 object-cover rounded-lg" />
               <div v-else class="h-28 flex items-center justify-center text-xs text-gray-400 dark:text-white/40">📄 PDF uploaded</div>
             </div>
             <div class="rounded-2xl border border-gray-200 dark:border-white/10 p-3">
-              <p class="text-[10px] font-bold uppercase tracking-wide text-gray-400 dark:text-white/40 mb-2">Live face scan</p>
+              <p class="text-[0.625rem] font-bold uppercase tracking-wide text-gray-400 dark:text-white/40 mb-2">Live face scan</p>
               <img v-if="previews.faceImage" :src="previews.faceImage" class="w-full h-28 object-cover rounded-lg" />
               <div v-else class="h-28 flex items-center justify-center text-xs text-gray-400 dark:text-white/40">Captured ✓</div>
             </div>
           </div>
 
           <div v-if="type === 'salesperson'" class="rounded-2xl border border-gray-200 dark:border-white/10 p-3">
-            <p class="text-[10px] font-bold uppercase tracking-wide text-gray-400 dark:text-white/40 mb-2">Valid ID</p>
+            <p class="text-[0.625rem] font-bold uppercase tracking-wide text-gray-400 dark:text-white/40 mb-2">Valid ID</p>
             <img v-if="previews.validId" :src="previews.validId" class="w-full h-28 object-cover rounded-lg" />
             <div v-else class="h-28 flex items-center justify-center text-xs text-gray-400 dark:text-white/40">📄 PDF uploaded</div>
           </div>
@@ -529,7 +529,7 @@ function startReapply() {
               </span>
               <div class="min-w-0">
                 <p class="text-xs font-semibold" :class="item.done ? 'text-brand-navy dark:text-white' : 'text-gray-500 dark:text-white/60'">{{ item.label }}</p>
-                <p class="text-[11px] text-gray-400 dark:text-white/40">{{ item.desc }}</p>
+                <p class="text-[0.6875rem] text-gray-400 dark:text-white/40">{{ item.desc }}</p>
               </div>
             </li>
           </ul>
@@ -552,7 +552,7 @@ function startReapply() {
               <p class="text-xs text-gray-600 dark:text-white/70 leading-relaxed pt-0.5">An admin reviews and makes the final approval.</p>
             </li>
           </ol>
-          <p class="text-[11px] text-gray-400 dark:text-white/40 mt-3">Reviews are usually completed within 1–2 business days.</p>
+          <p class="text-[0.6875rem] text-gray-400 dark:text-white/40 mt-3">Reviews are usually completed within 1–2 business days.</p>
         </div>
 
         <!-- Benefits -->
