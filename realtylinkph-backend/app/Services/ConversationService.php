@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Events\MessageSent;
+use App\Events\MessagesReceipt;
 use App\Jobs\SendAiAutoReply;
 use App\Models\Conversation;
 use App\Models\Message;
@@ -119,12 +120,88 @@ class ConversationService
         SendAiAutoReply::dispatch($conversation->id, $message->id)->afterCommit();
     }
 
+    /**
+     * The reader had the thread open: everything from the other party is now
+     * read (and, implicitly, delivered). The sender is told which messages,
+     * so their ticks can turn gold on exactly those.
+     */
     public function markAsRead(Conversation $conversation, User $reader): void
     {
-        Message::where('conversation_id', $conversation->id)
+        $ids = Message::where('conversation_id', $conversation->id)
             ->where('sender_id', '!=', $reader->id)
             ->where('is_read', false)
-            ->update(['is_read' => true, 'read_at' => now()]);
+            ->pluck('id')
+            ->all();
+
+        if ($ids === []) {
+            return;
+        }
+
+        $now = now();
+        Message::whereIn('id', $ids)->update([
+            'is_read'      => true,
+            'read_at'      => $now,
+            'delivered_at' => DB::raw('COALESCE(delivered_at, NOW())'),
+        ]);
+
+        $this->broadcastReceipt($conversation->id, $reader->id, 'read', $ids, $now->toISOString());
+    }
+
+    /**
+     * The recipient's app received these messages (thread not necessarily
+     * open). Only unread, undelivered messages from the other party count.
+     */
+    public function markAsDelivered(Conversation $conversation, User $recipient): void
+    {
+        $ids = Message::where('conversation_id', $conversation->id)
+            ->where('sender_id', '!=', $recipient->id)
+            ->whereNull('delivered_at')
+            ->pluck('id')
+            ->all();
+
+        if ($ids === []) {
+            return;
+        }
+
+        $now = now();
+        Message::whereIn('id', $ids)->update(['delivered_at' => $now]);
+
+        $this->broadcastReceipt($conversation->id, $recipient->id, 'delivered', $ids, $now->toISOString());
+    }
+
+    /**
+     * Everything addressed to this user that is still undelivered — called on
+     * the presence heartbeat, so messages that arrived while they were away
+     * flip to ✓✓ the moment their app comes back, without opening each thread.
+     */
+    public function markAllDeliveredFor(User $user): void
+    {
+        $rows = Message::query()
+            ->join('conversations', 'conversations.id', '=', 'messages.conversation_id')
+            ->where(fn ($q) => $q->where('conversations.buyer_id', $user->id)->orWhere('conversations.agent_id', $user->id))
+            ->where('messages.sender_id', '!=', $user->id)
+            ->whereNull('messages.delivered_at')
+            ->get(['messages.id', 'messages.conversation_id']);
+
+        if ($rows->isEmpty()) {
+            return;
+        }
+
+        $now = now();
+        Message::whereIn('id', $rows->pluck('id'))->update(['delivered_at' => $now]);
+
+        foreach ($rows->groupBy('conversation_id') as $conversationId => $group) {
+            $this->broadcastReceipt((int) $conversationId, $user->id, 'delivered', $group->pluck('id')->all(), $now->toISOString());
+        }
+    }
+
+    private function broadcastReceipt(int $conversationId, int $byUserId, string $kind, array $ids, string $at): void
+    {
+        try {
+            broadcast(new MessagesReceipt($conversationId, $byUserId, $kind, $ids, $at))->toOthers();
+        } catch (\Throwable $e) {
+            Log::warning('MessagesReceipt broadcast failed', ['conversation' => $conversationId, 'kind' => $kind, 'error' => $e->getMessage()]);
+        }
     }
 
     public function listForUser(User $user, int $perPage = 15): LengthAwarePaginator

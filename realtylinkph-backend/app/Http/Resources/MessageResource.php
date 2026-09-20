@@ -18,6 +18,7 @@ class MessageResource extends JsonResource
             'body'            => $this->body,
             'is_ai'           => (bool) $this->is_ai,
             'is_read'         => $this->is_read,
+            'delivered_at'    => $this->delivered_at?->toISOString(),
             'read_at'         => $this->read_at?->toISOString(),
             'created_at'      => $this->created_at?->toISOString(),
             'sender'          => UserResource::make($this->whenLoaded('sender')),

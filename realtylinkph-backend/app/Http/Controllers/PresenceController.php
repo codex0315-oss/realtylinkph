@@ -18,6 +18,9 @@ class PresenceController extends Controller
         // Raw update — no model events / no updated_at bump on a frequent ping.
         DB::table('users')->where('id', $request->user()->id)->update(['last_seen_at' => now()]);
 
+        // Being online means anything sent to you has now reached your app.
+        app(\App\Services\ConversationService::class)->markAllDeliveredFor($request->user());
+
         return ApiResponse::success(null, 'ok', 200);
     }
 

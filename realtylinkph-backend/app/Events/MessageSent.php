@@ -44,6 +44,8 @@ class MessageSent implements ShouldBroadcastNow
             'body'            => $this->message->body,
             'is_ai'           => (bool) $this->message->is_ai,
             'is_read'         => $this->message->is_read,
+            'delivered_at'    => null,
+            'read_at'         => null,
             'created_at'      => $this->message->created_at?->toISOString(),
         ];
     }

@@ -47,20 +47,48 @@ export const useConversation = () => {
     }
   }
 
-  async function sendMessage(conversationId: number, body: string): Promise<Message | null> {
+  /**
+   * Optimistic: the bubble is on screen before the request leaves. On success
+   * the server row replaces it; on failure it stays with a "Not sent" state
+   * and can be retried (which reuses the same bubble).
+   */
+  async function sendMessage(conversationId: number, body: string, retryClientId?: string): Promise<Message | null> {
+    const me = useAuthStore().user?.id ?? 0
+    let clientId = retryClientId
+    if (clientId) {
+      const m = conversationStore.activeMessages.find(m => m.client_id === clientId)
+      if (m) m.local_status = 'sending'
+    } else {
+      clientId = conversationStore.addPending(conversationId, me, body).client_id!
+    }
+
     sending.value = true
     try {
       const res = await api.post<ApiResponse<Message>>(
         `/conversations/${conversationId}/messages`,
         { body }
       )
-      conversationStore.addMessage(res.data)
+      conversationStore.resolvePending(clientId, res.data)
       return res.data
     } catch (e) {
       error.value = extractError(e)
+      conversationStore.failPending(clientId)
       return null
     } finally {
       sending.value = false
+    }
+  }
+
+  function discardFailed(clientId: string): void {
+    conversationStore.removePending(clientId)
+  }
+
+  /** Tell the server (and, via it, the sender) that we received these messages. */
+  async function markDelivered(conversationId: number): Promise<void> {
+    try {
+      await api.post(`/conversations/${conversationId}/delivered`)
+    } catch {
+      // Non-critical
     }
   }
 
@@ -95,6 +123,8 @@ export const useConversation = () => {
     openConversation,
     fetchMessages,
     sendMessage,
+    discardFailed,
+    markDelivered,
     markRead,
     deleteConversation,
   }

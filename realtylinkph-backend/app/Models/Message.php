@@ -15,6 +15,7 @@ class Message extends Model
         'body',
         'is_ai',
         'is_read',
+        'delivered_at',
         'read_at',
     ];
 
@@ -23,6 +24,7 @@ class Message extends Model
         return [
             'is_ai'   => 'boolean',
             'is_read' => 'boolean',
+            'delivered_at' => 'datetime',
             'read_at' => 'datetime',
         ];
     }

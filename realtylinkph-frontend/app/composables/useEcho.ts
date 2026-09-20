@@ -1,4 +1,4 @@
-import type { Message } from '~/types'
+import type { Message, MessagesReceiptEvent } from '~/types'
 
 export const useEcho = () => {
   const { $echo }   = useNuxtApp()
@@ -15,6 +15,13 @@ export const useEcho = () => {
       .listen('.notification.sent', (data: NotificationEvent) => {
         notifStore.addNotification(data) // instant feedback
         onReceive?.()                    // e.g. refetch the persisted list
+
+        // A chat message reached this device → "delivered" for the sender's
+        // ticks, whichever page is open. "Seen" only happens in the thread.
+        const convId = data.type === 'new_message' ? Number(data.payload?.conversation_id) : 0
+        if (convId) {
+          useApi().post(`/conversations/${convId}/delivered`).catch(() => {})
+        }
       })
   }
 
@@ -44,6 +51,17 @@ export const useEcho = () => {
         const msg = 'message' in e ? e.message : e
         if (msg && typeof msg.conversation_id === 'number') onMessage(msg)
       })
+  }
+
+  /**
+   * Server-sent: the other party's app received / read some of our messages.
+   * Unlike the "seen" whisper this is recorded in the database first, so it
+   * works with client events off and agrees with what a refresh shows.
+   */
+  function listenForReceipts(conversationId: number, onReceipt: (e: MessagesReceiptEvent) => void): void {
+    $echo?.private(`conversation.${conversationId}`).listen('.messages.receipt', (e: MessagesReceiptEvent) => {
+      if (e && Array.isArray(e.message_ids)) onReceipt(e)
+    })
   }
 
   /** Server-sent: RealtyLink AI is composing an auto-reply on this thread. */
@@ -111,6 +129,7 @@ export const useEcho = () => {
     onNotificationType,
     listenToConversation,
     listenForAiTyping,
+    listenForReceipts,
     whisperTyping,
     listenForTyping,
     whisperSeen,

@@ -5,7 +5,7 @@ definePageMeta({ layout: 'dashboard' })
 
 const authStore = useAuthStore()
 const convStore = useConversationStore()
-const { fetchConversations, openConversation, fetchMessages, sendMessage, markRead, deleteConversation, loading } = useConversation()
+const { fetchConversations, openConversation, fetchMessages, sendMessage, discardFailed, markDelivered, markRead, deleteConversation, loading } = useConversation()
 const ask   = useConfirm()
 const toast = useToast()
 const route  = useRoute()
@@ -15,7 +15,7 @@ const {
   listenToConversation, stopListeningToConversation,
   whisperTyping, listenForTyping,
   whisperSeen, listenForSeen,
-  onNotificationType, listenForAiTyping,
+  onNotificationType, listenForAiTyping, listenForReceipts,
 } = useEcho()
 
 await fetchConversations()
@@ -45,7 +45,6 @@ onMounted(async () => {
 })
 
 const newMessage = ref('')
-const sending    = ref(false)
 const search     = ref('')
 const otherTyping = ref(false)
 
@@ -200,9 +199,16 @@ async function openConv(id: number) {
     convStore.addMessage(msg)
     otherTyping.value = false
     if (msg.is_ai) { aiTyping.value = false; clearTimeout(aiTypingClear) }
-    // We're looking at the thread → mark their new message read + notify them.
+    // We're looking at the thread → it's read, which implies delivered. The
+    // server records both and pushes the sender a receipt for their ticks.
     if (msg.sender_id !== me.value) { markRead(id); whisperSeen(id) }
     scrollToBottom()
+  })
+  // The other party's app received / read our messages → move the ticks.
+  listenForReceipts(id, (e) => {
+    if (e.by_user_id === me.value) return
+    convStore.applyReceipt(e.kind, e.message_ids, e.at)
+    if (e.kind === 'read') otherSeenAt.value = new Date(e.at).getTime()
   })
   listenForAiTyping(id, () => {
     aiTyping.value = true
@@ -236,12 +242,31 @@ function onType() {
 
 async function send() {
   if (!newMessage.value.trim() || !convStore.activeId) return
-  sending.value = true
-  await sendMessage(convStore.activeId, newMessage.value.trim())
+  const body = newMessage.value.trim()
+  // Clear the box and show the bubble immediately; the request runs behind it.
   newMessage.value = ''
-  sending.value = false
   showEmoji.value = false
+  const p = sendMessage(convStore.activeId, body)
   scrollToBottom()
+  await p
+}
+
+function retrySend(m: Message) {
+  if (!m.client_id || !convStore.activeId) return
+  sendMessage(convStore.activeId, m.body, m.client_id)
+}
+
+/** Tick state for one of my messages: sending → sent → delivered → seen. */
+type Tick = 'sending' | 'failed' | 'sent' | 'delivered' | 'seen'
+function tickOf(m: Message): Tick {
+  if (m.local_status === 'failed')  return 'failed'
+  if (m.local_status === 'sending') return 'sending'
+  if (m.read_at)      return 'seen'
+  if (m.delivered_at) return 'delivered'
+  return 'sent'
+}
+const TICK_TITLE: Record<Tick, string> = {
+  sending: 'Sending…', failed: 'Not sent', sent: 'Sent', delivered: 'Delivered', seen: 'Seen',
 }
 
 function addEmoji(e: string) {
@@ -552,8 +577,28 @@ if (convStore.conversations.length) {
                   <span v-for="e in reactions[item.id]" :key="e" class="text-xs bg-white dark:bg-white/10 border border-gray-200 dark:border-white/10 rounded-full px-1.5 py-0.5 shadow-sm">{{ e }}</span>
                 </div>
 
-                <!-- time -->
-                <span class="text-[0.625rem] text-gray-400 dark:text-white/30 mt-1 px-1">{{ timeOf(item.message.created_at) }}</span>
+                <!-- time + ticks (ticks on my messages only) -->
+                <span class="flex items-center gap-1 text-[0.625rem] text-gray-400 dark:text-white/30 mt-1 px-1">
+                  {{ timeOf(item.message.created_at) }}
+                  <template v-if="isMine(item.message)">
+                    <span :title="TICK_TITLE[tickOf(item.message)]" class="inline-flex items-center">
+                      <!-- sending: clock -->
+                      <svg v-if="tickOf(item.message) === 'sending'" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l2.5 2.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      <!-- failed: exclamation -->
+                      <svg v-else-if="tickOf(item.message) === 'failed'" class="h-3 w-3 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                      <!-- sent: one tick -->
+                      <svg v-else-if="tickOf(item.message) === 'sent'" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+                      <!-- delivered / seen: double tick, gold when seen -->
+                      <svg v-else class="h-3.5 w-4" :class="tickOf(item.message) === 'seen' ? 'text-brand-gold' : ''" fill="none" viewBox="0 0 28 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M2 13l4 4L16 7M11 17l2 2L23 7" /></svg>
+                    </span>
+                  </template>
+                </span>
+                <!-- failed send: retry / discard -->
+                <span v-if="item.message.local_status === 'failed'" class="text-[0.625rem] mt-0.5 px-1 text-red-500 flex items-center gap-2">
+                  Not sent
+                  <button class="underline hover:text-red-600" @click="retrySend(item.message)">Retry</button>
+                  <button class="underline text-gray-400 hover:text-gray-600" @click="discardFailed(item.message.client_id!)">Discard</button>
+                </span>
               </div>
             </div>
           </template>
@@ -623,11 +668,11 @@ if (convStore.conversations.length) {
             <button
               class="h-9 w-9 rounded-full flex items-center justify-center text-white transition-all disabled:opacity-40 flex-shrink-0"
               style="background: linear-gradient(135deg, #D4AF37 0%, #c9a227 100%)"
-              :disabled="sending || !newMessage.trim()"
+              :disabled="!newMessage.trim()"
               @click="send"
             >
-              <svg v-if="!sending" class="h-4 w-4 text-brand-navy" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
-              <svg v-else class="animate-spin h-4 w-4 text-brand-navy" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+              <!-- Never a spinner here: the send is optimistic, the bubble's own tick shows progress. -->
+              <svg class="h-4 w-4 text-brand-navy" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
             </button>
           </div>
         </div>

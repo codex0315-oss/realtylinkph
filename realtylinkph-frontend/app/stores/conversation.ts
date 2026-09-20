@@ -39,6 +39,62 @@ export const useConversationStore = defineStore('conversation', () => {
     }
   }
 
+  /* ── Optimistic sending ──
+   * The bubble goes on screen the instant the user presses Enter, with a
+   * negative temporary id, and is swapped for the server's row when the API
+   * answers. Before this the thread waited a full round trip (≈1 s from the
+   * Philippines to Oregon) before showing anything, which read as "lag". */
+  let tempSeq = 0
+
+  function addPending(conversationId: number, senderId: number, body: string): Message {
+    const msg: Message = {
+      id: -(++tempSeq),
+      client_id: `c${Date.now()}-${tempSeq}`,
+      conversation_id: conversationId,
+      sender_id: senderId,
+      body,
+      is_read: false,
+      delivered_at: null,
+      read_at: null,
+      created_at: new Date().toISOString(),
+      local_status: 'sending',
+    }
+    if (conversationId === activeId.value) activeMessages.value.push(msg)
+    return msg
+  }
+
+  /** The API confirmed: replace the optimistic bubble with the real message. */
+  function resolvePending(clientId: string, real: Message): void {
+    const i = activeMessages.value.findIndex(m => m.client_id === clientId)
+    if (i === -1) { addMessage(real); return }
+    if (activeMessages.value.some(m => m.id === real.id)) {
+      activeMessages.value.splice(i, 1)          // socket echo beat us to it
+    } else {
+      activeMessages.value.splice(i, 1, real)
+    }
+    const conv = conversations.value.find(c => c.id === real.conversation_id)
+    if (conv) { conv.latest_message = real; conv.last_message_at = real.created_at }
+  }
+
+  function failPending(clientId: string): void {
+    const m = activeMessages.value.find(m => m.client_id === clientId)
+    if (m) m.local_status = 'failed'
+  }
+
+  function removePending(clientId: string): void {
+    activeMessages.value = activeMessages.value.filter(m => m.client_id !== clientId)
+  }
+
+  /** Apply a delivered/read receipt from the other party to our messages. */
+  function applyReceipt(kind: 'delivered' | 'read', ids: number[], at: string): void {
+    const set = new Set(ids)
+    for (const m of activeMessages.value) {
+      if (!set.has(m.id)) continue
+      if (!m.delivered_at) m.delivered_at = at
+      if (kind === 'read') { m.read_at = at; m.is_read = true }
+    }
+  }
+
   function decrementUnread(conversationId: number): void {
     const conv = conversations.value.find(c => c.id === conversationId)
     if (conv && conv.unread_count) {
@@ -64,6 +120,11 @@ export const useConversationStore = defineStore('conversation', () => {
     setActive,
     setMessages,
     addMessage,
+    addPending,
+    resolvePending,
+    failPending,
+    removePending,
+    applyReceipt,
     decrementUnread,
     removeConversation,
   }

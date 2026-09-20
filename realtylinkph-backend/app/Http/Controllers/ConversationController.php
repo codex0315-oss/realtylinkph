@@ -83,6 +83,19 @@ class ConversationController extends Controller
         return ApiResponse::success(null, 'Conversation marked as read.', 200);
     }
 
+    /**
+     * The caller's app received the other party's messages (they may not have
+     * the thread open). Lets the sender's ticks go from ✓ to ✓✓.
+     */
+    public function markDelivered(Request $request, Conversation $conversation): JsonResponse
+    {
+        $this->authorize('view', $conversation);
+
+        $this->service->markAsDelivered($conversation, $request->user());
+
+        return ApiResponse::success(null, 'Delivery recorded.', 200);
+    }
+
     /** Remove the conversation from the caller's inbox (the other side keeps it). */
     public function destroy(Request $request, Conversation $conversation): JsonResponse
     {
