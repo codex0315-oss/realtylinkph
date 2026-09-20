@@ -70,6 +70,17 @@ class AgentVerificationController extends Controller
             ? $this->service->approve($profile)
             : $this->service->reject($profile, $request->validated('reason'));
 
+        $profile->loadMissing('user');
+        \App\Support\AdminAudit::log(
+            $action === 'approve' ? 'agent.approved' : 'agent.rejected',
+            $profile,
+            "{$profile->user?->name} ({$profile->user?->email})",
+            array_filter([
+                'applicant_type' => $profile->applicant_type,
+                'reason'         => $action === 'approve' ? null : $request->validated('reason'),
+            ]),
+        );
+
         return ApiResponse::success(
             AgentProfileResource::make($result->load('user')),
             $action === 'approve' ? 'Application approved.' : 'Application rejected.',

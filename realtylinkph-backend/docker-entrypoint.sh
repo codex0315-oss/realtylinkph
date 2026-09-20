@@ -65,6 +65,13 @@ if [ "${RUN_PHOTO_OPTIMIZE}" = "true" ]; then
     php artisan photos:optimize || true
 fi
 
+# One-off: move applicant documents from the public bucket to the private one
+# after DOCUMENT_DISK=s3-private is set. Idempotent; remove the flag after.
+if [ "${RUN_DOCS_MOVE}" = "true" ]; then
+    echo "==> Moving applicant documents to the private disk"
+    php artisan documents:move-private || true
+fi
+
 # ── Keep-alive ───────────────────────────────────────────────────────────────
 # Render spins a free web service down after 15 minutes without *inbound*
 # traffic, and waking it takes 30–60 s — long enough that the home page's

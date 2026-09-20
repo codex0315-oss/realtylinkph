@@ -24,9 +24,7 @@ class AppointmentResource extends JsonResource
             'notes'              => $this->notes,
             // Cancellation record — both parties see why, and whether it counted.
             'cancel_reason_code' => $this->cancel_reason_code,
-            'cancel_reason'      => $this->cancel_reason_code
-                ? (Appointment::reasonsFor($this->cancelled_by_id === $this->agent_id)[$this->cancel_reason_code] ?? $this->cancel_reason_code)
-                : null,
+            'cancel_reason'      => Appointment::reasonLabel($this->cancel_reason_code, $this->cancelled_by_id === $this->agent_id),
             'cancel_reason_note' => $this->cancel_reason_note,
             'cancelled_by_id'    => $this->cancelled_by_id,
             'cancelled_at'       => $this->cancelled_at?->toISOString(),

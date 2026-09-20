@@ -5,14 +5,17 @@ declare(strict_types=1);
 namespace App\Http\Controllers;
 
 use App\Helpers\ApiResponse;
+use App\Http\Resources\AdminActionResource;
 use App\Http\Resources\AgentProfileResource;
 use App\Http\Resources\PropertyResource;
 use App\Http\Resources\ReviewResource;
 use App\Http\Resources\UserResource;
+use App\Models\AdminAction;
 use App\Models\AgentProfile;
 use App\Models\AgentReview;
 use App\Models\Property;
 use App\Models\User;
+use App\Support\AdminAudit;
 use App\Services\FeaturedScoreService;
 use App\Services\GeminiService;
 use Illuminate\Http\JsonResponse;
@@ -76,6 +79,25 @@ class AdminController extends Controller
         return ApiResponse::paginated(ReviewResource::collection($reviews), 'Reviews retrieved.');
     }
 
+    /**
+     * The audit trail: what every administrator did, newest first. Filterable
+     * by action type and by admin so "who unpublished this?" is one query.
+     */
+    public function actions(Request $request): JsonResponse
+    {
+        $actions = AdminAction::query()
+            ->when($request->filled('action'), fn ($q) => $q->where('action', $request->query('action')))
+            ->when($request->filled('admin_id'), fn ($q) => $q->where('admin_id', (int) $request->query('admin_id')))
+            ->when($request->filled('search'), function ($q) use ($request): void {
+                $term = '%' . $request->query('search') . '%';
+                $q->where(fn ($w) => $w->where('subject_label', 'ilike', $term)->orWhere('admin_name', 'ilike', $term));
+            })
+            ->orderByDesc('id')
+            ->paginate(25);
+
+        return ApiResponse::paginated(AdminActionResource::collection($actions), 'Admin activity retrieved.');
+    }
+
     /** Headline counts for the admin dashboard. */
     public function stats(): JsonResponse
     {
@@ -113,6 +135,11 @@ class AdminController extends Controller
 
         $property->loadMissing('agent');
 
+        AdminAudit::log('listing.unpublished', $property, $property->title, [
+            'reason' => $data['reason'],
+            'agent'  => $property->agent?->name,
+        ]);
+
         if ($property->agent) {
             app(\App\Services\NotificationService::class)->send($property->agent, 'listing_unpublished', [
                 'property_id'    => $property->id,
@@ -128,6 +155,12 @@ class AdminController extends Controller
 
     public function deleteProperty(Property $property): JsonResponse
     {
+        $property->loadMissing('agent');
+        AdminAudit::log('listing.deleted', $property, $property->title ?: "Untitled listing #{$property->id}", [
+            'agent'  => $property->agent?->name,
+            'status' => $property->status,
+        ]);
+
         app(\App\Services\PropertyService::class)->delete($property);
 
         return ApiResponse::success(null, 'Listing deleted.', 200);
@@ -154,6 +187,8 @@ class AdminController extends Controller
         $admin->email_verified_at = now();
         $admin->save();
 
+        AdminAudit::log('admin.created', $admin, "{$admin->name} ({$admin->email})");
+
         return ApiResponse::success(UserResource::make($admin), 'Admin created.', 201);
     }
 
@@ -167,6 +202,8 @@ class AdminController extends Controller
         if ($user->isAdmin() && User::whereIn('role_type', ['admin', 'super_admin'])->count() <= 1) {
             return ApiResponse::error('You cannot delete the last admin.', [], 422);
         }
+
+        AdminAudit::log('user.deleted', $user, "{$user->name} ({$user->email})", ['role' => $user->role_type]);
 
         $user->delete();
 

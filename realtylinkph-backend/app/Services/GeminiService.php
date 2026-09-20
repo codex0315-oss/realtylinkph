@@ -7,7 +7,7 @@ namespace App\Services;
 use App\Models\Property;
 use App\Models\User;
 use App\Support\AgentCredentialReference;
-use App\Support\Uploads;
+use App\Support\Documents;
 use Illuminate\Support\Facades\Http;
 use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Facades\Storage;
@@ -411,10 +411,10 @@ class GeminiService
             // Read through the disk, not a filesystem path: on S3/R2 there is
             // no local file to stat, so `->path()` would have skipped every
             // document and the AI would have reviewed an empty application.
-            if (! Uploads::disk()->exists($doc['path'])) {
+            if (! Documents::disk()->exists($doc['path'])) {
                 continue;
             }
-            $bytes = Uploads::disk()->get($doc['path']);
+            $bytes = Documents::disk()->get($doc['path']);
             if ($bytes === null || $bytes === '') {
                 continue;
             }

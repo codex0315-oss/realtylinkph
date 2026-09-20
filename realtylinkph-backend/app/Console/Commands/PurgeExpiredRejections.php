@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Console\Commands;
 
 use App\Models\AgentProfile;
-use App\Support\Uploads;
+use App\Support\Documents;
 use Illuminate\Console\Command;
 use Illuminate\Support\Facades\Storage;
 
@@ -63,8 +63,8 @@ class PurgeExpiredRejections extends Command
             }
 
             foreach ($paths as $path) {
-                if (Uploads::disk()->exists($path)) {
-                    Uploads::disk()->delete($path);
+                if (Documents::disk()->exists($path)) {
+                    Documents::disk()->delete($path);
                 }
                 $files++;
             }

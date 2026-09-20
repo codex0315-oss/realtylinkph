@@ -1,5 +1,5 @@
 export type { ApiResponse, PaginatedResponse, PaginatedMeta, ApiError, LoginRequest, RegisterRequest } from './api'
-export type { User, UserRole } from './user'
+export type { User, UserRole, AdminAction } from './user'
 export type { Agent, AgentProfile, VerificationStatus, BlockedDate } from './agent'
 export type {
   Property,

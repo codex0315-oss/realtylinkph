@@ -277,6 +277,20 @@ that existed have no thumbnail — the API falls back to the main image for
 them — and may be full-size phone originals. Set `RUN_PHOTO_OPTIMIZE=true`
 for one deploy to run `php artisan photos:optimize` at boot, then remove it.
 
+**Applicant documents live in a private bucket.** Government IDs, licence
+cards and selfies are written to the `documents` disk (`DOCUMENT_DISK`), never
+the public one, and admins only ever receive 15-minute signed URLs. Setup:
+
+1. Supabase → Storage → New bucket → name `realtylinkph-private`, **Public
+   bucket OFF**. Same S3 keys work for both buckets.
+2. Render env: `DOCUMENT_DISK=s3-private` (and `AWS_PRIVATE_BUCKET` only if you
+   used a different name).
+3. One deploy with `RUN_DOCS_MOVE=true` moves the files already uploaded to
+   the public bucket across, then remove the flag.
+
+Until step 2 is done the app falls back to `DOCUMENT_DISK=local`, which on
+Render is wiped on every deploy — so do it before anyone applies.
+
 There is no Shell on Render's free tier, which is why these are boot flags.
 
 `php artisan storage:link` is handled by the entrypoint and is a no-op when
@@ -352,6 +366,62 @@ What now keeps it fast, and where to look if it regresses:
 
 ---
 
+## Moving the backend to Singapore (optional, ~1–2 h)
+
+Measured from Cebu on 2026-09-20: a TCP round trip to AWS Singapore is
+~110 ms, to Oregon ~280 ms. Every API call pays that at least once, so
+moving Render + Neon to Singapore takes the per-call floor from ~250 ms to
+~80 ms. Nothing in the code changes; it is all account work. Keep the old
+service running until the new one is verified — there is no downtime and
+the old one is the rollback.
+
+**1. New Neon project in Singapore (5 min)**
+- Neon → New project → region **AWS Asia Pacific (Singapore)** `ap-southeast-1`,
+  Postgres 17. Copy the *direct* (non-pooler) connection string.
+
+**2. Copy the data (10 min)** — from this PC, PostgreSQL 18 client is installed:
+```
+set PGSSLMODE=require
+"C:\Program Files\PostgreSQL\18\bin\pg_dump.exe" -Fc --no-owner --no-privileges ^
+  "postgresql://neondb_owner:<OLD_PASSWORD>@ep-proud-mud-arfxks88.c-4.us-west-2.aws.neon.tech/neondb" ^
+  -f realtylinkph.dump
+"C:\Program Files\PostgreSQL\18\bin\pg_restore.exe" --no-owner --no-privileges -d ^
+  "postgresql://neondb_owner:<NEW_PASSWORD>@<NEW_HOST>.ap-southeast-1.aws.neon.tech/neondb" ^
+  realtylinkph.dump
+```
+Do this right before switching over (step 5) so nothing written in between
+is lost, or put the old service in maintenance first.
+
+**3. New Render web service in Singapore (15 min)**
+- Render → New → Web Service → same repo, branch `main`, Root Directory
+  `realtylinkph-backend`, Language **Docker**, Region **Singapore**, Free.
+- Environment: copy every variable from the Oregon service (Render →
+  old service → Environment → the "copy" icon copies them all), then change
+  `DB_HOST` / `DB_PASSWORD` to the new Neon values. Leave `SKIP_MIGRATIONS`
+  unset — the boot migration is a no-op on a restored database.
+- Deploy. Wait for `==> Keep-alive pinging` in the logs. Note the new URL,
+  e.g. `https://realtylinkph-api-sg.onrender.com`.
+
+**4. Point the other services at it (10 min)**
+- Vercel → Environment Variables → `NUXT_PUBLIC_API_BASE` =
+  `https://<new>.onrender.com/api` → Redeploy.
+- Google Cloud → APIs & Services → Credentials → the OAuth client → add the
+  new host to **Authorized redirect URIs** wherever the old one appears
+  (sign-in callback and calendar callback). Keep the old entries until the
+  old service is gone.
+- Render (new service) → `APP_URL` = the new URL, `FRONTEND_URL` unchanged.
+- `nuxt.config.ts` → the detour default `NUXT_API_PROXY_TARGET` fallback
+  should be updated to the new host (one line), or set the env var on Vercel.
+
+**5. Verify, then retire Oregon**
+- Run through the demo checklist above against the new URL, including one
+  Google sign-in, one calendar connect, one photo upload and one password
+  reset email.
+- Render → old service → Settings → **Suspend** (not delete, for a week).
+- Neon → old project can be deleted after the same week.
+
+---
+
 ## If the API is unreachable from the venue's network
 
 Seen on 2026-09-19: the browser got `ERR_CONNECTION_TIMED_OUT` for every
@@ -372,13 +442,19 @@ failed from the same machine. Nothing in the app was wrong.
 
 ## Known limitations (be ready to say these out loud)
 
-- **No automated tests.** Everything has been verified by hand.
+- **Tests cover the five core workflows** (`php artisan test`, ~20 tests /
+  180 assertions on a local Postgres): auth, agent onboarding + admin
+  review, draft→published listing with photos, book→confirm→remind→
+  auto-complete→review, and admin moderation with the audit trail. Screens
+  are still verified by hand.
 - **Queue and scheduler run inside the web container** because the free tier
-  has no worker. They stop while the instance is asleep.
+  has no worker. The scheduler runs hourly: featured scoring, rejected-document
+  purge, viewing reminders (`appointments:send-reminders`) and viewing
+  auto-completion / request expiry (`appointments:complete-past`).
 - **Free-tier cold starts** — mitigated by the in-container keep-alive, but
   Neon still pauses the database after 5 idle minutes (~1 s on the first
   query afterwards) and a redeploy always starts cold.
-- **Agent documents share the public bucket** — fine for a demo, would need a
-  private bucket with signed URLs for real use.
+- **Agent documents** are in a private bucket behind 15-minute signed URLs
+  (§5). The AI pre-screen reads them server-side, never via URL.
 - **No admin UI to waive a cancellation strike** — the data model supports it,
   but it currently needs a database edit.

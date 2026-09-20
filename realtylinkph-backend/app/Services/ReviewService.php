@@ -21,8 +21,8 @@ class ReviewService
     public function submit(User $buyer, Appointment $appointment, array $data): AgentReview
     {
         $review = DB::transaction(function () use ($buyer, $appointment, $data): AgentReview {
-            if (! in_array($appointment->status, ['confirmed', 'completed'], true)) {
-                throw new \RuntimeException('You can review an agent only after a confirmed or completed viewing.');
+            if (! $appointment->isReviewable()) {
+                throw new \RuntimeException('You can review an agent once the viewing has taken place.');
             }
 
             if ($appointment->buyer_id !== $buyer->id) {
@@ -73,7 +73,12 @@ class ReviewService
         return Appointment::with('property.photos')
             ->where('buyer_id', $buyer->id)
             ->where('agent_id', $agent->id)
-            ->whereIn('status', ['confirmed', 'completed'])
+            ->where(function ($q): void {
+                // Completed, or confirmed and already in the past (the hourly
+                // job will mark it completed; no need to make the buyer wait).
+                $q->where('status', 'completed')
+                    ->orWhere(fn ($w) => $w->where('status', 'confirmed')->where('preferred_datetime', '<', now()));
+            })
             ->whereDoesntHave('review')
             ->latest('preferred_datetime')
             ->get();

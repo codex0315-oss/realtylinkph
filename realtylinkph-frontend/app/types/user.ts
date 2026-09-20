@@ -27,3 +27,18 @@ export interface ViewingReliability {
   rate: number | null
   has_enough: boolean
 }
+
+/** One row of the admin audit trail (GET /admin/actions). */
+export interface AdminAction {
+  id: number
+  admin_id: number | null
+  admin_name: string
+  action: string
+  label: string
+  subject_type: string | null
+  subject_id: number | null
+  subject_label: string
+  details: Record<string, unknown> | null
+  ip: string | null
+  created_at: string
+}

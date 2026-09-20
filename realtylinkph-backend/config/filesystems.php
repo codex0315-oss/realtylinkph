@@ -33,6 +33,15 @@ return [
     'uploads' => env('UPLOAD_DISK', 'public'),
 
     /*
+    | Applicant documents (government ID, licence card, live selfie) never go
+    | on the public disk. They live here and are only ever handed out as
+    | short-lived signed URLs (see App\Support\Documents). Local disk in
+    | development (Laravel serves it through a signed route), a second,
+    | non-public bucket in production.
+    */
+    'documents' => env('DOCUMENT_DISK', 'local'),
+
+    /*
     |--------------------------------------------------------------------------
     | Filesystem Disks
     |--------------------------------------------------------------------------
@@ -81,6 +90,24 @@ return [
             // every visit re-downloads every image.
             'options' => [
                 'CacheControl' => 'public, max-age=31536000, immutable',
+            ],
+        ],
+
+        // Same account and endpoint as `s3`, different bucket, no public URL.
+        // Objects are reachable only through presigned URLs.
+        's3-private' => [
+            'driver' => 's3',
+            'key' => env('AWS_ACCESS_KEY_ID'),
+            'secret' => env('AWS_SECRET_ACCESS_KEY'),
+            'region' => env('AWS_DEFAULT_REGION'),
+            'bucket' => env('AWS_PRIVATE_BUCKET', 'realtylinkph-private'),
+            'endpoint' => env('AWS_ENDPOINT'),
+            'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
+            'visibility' => 'private',
+            'throw' => false,
+            'report' => false,
+            'options' => [
+                'CacheControl' => 'private, no-store',
             ],
         ],
 

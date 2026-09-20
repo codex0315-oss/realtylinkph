@@ -72,7 +72,12 @@ class AuthController extends Controller
 
     public function logout(Request $request): JsonResponse
     {
-        $request->user()->currentAccessToken()->delete();
+        // A bearer token is revoked; a session-authenticated caller (Sanctum's
+        // TransientToken) has nothing to delete.
+        $token = $request->user()->currentAccessToken();
+        if ($token instanceof \Laravel\Sanctum\PersonalAccessToken) {
+            $token->delete();
+        }
 
         return ApiResponse::success(null, 'Logged out successfully.', 200);
     }

@@ -37,9 +37,24 @@ class Appointment extends Model
         'other'                  => 'Other',
     ];
 
+    /** Reasons only the system uses (never offered in the cancel dialog). */
+    public const SYSTEM_REASONS = [
+        'expired' => 'No response from the agent before the viewing time',
+    ];
+
     public static function reasonsFor(bool $isAgent): array
     {
         return $isAgent ? self::AGENT_REASONS : self::BUYER_REASONS;
+    }
+
+    /** Human label for a stored reason code, whoever recorded it. */
+    public static function reasonLabel(?string $code, bool $isAgent): ?string
+    {
+        if ($code === null) {
+            return null;
+        }
+
+        return self::reasonsFor($isAgent)[$code] ?? self::SYSTEM_REASONS[$code] ?? $code;
     }
 
     protected $fillable = [
@@ -51,6 +66,7 @@ class Appointment extends Model
         'gcal_event_id',
         'gcal_event_id_buyer',
         'notes',
+        'reminded_at',
         'cancel_reason_code',
         'cancel_reason_note',
         'cancelled_by_id',
@@ -63,10 +79,28 @@ class Appointment extends Model
     {
         return [
             'preferred_datetime' => 'datetime',
+            'reminded_at'        => 'datetime',
             'cancelled_at'       => 'datetime',
             'strike_waived_at'   => 'datetime',
             'late_cancellation'  => 'boolean',
         ];
+    }
+
+    /**
+     * A buyer may review the agent once the viewing has actually taken place:
+     * the agent marked it completed, or it was confirmed and the slot is now
+     * in the past (the hourly job completes those a day later). Never before
+     * — a review of a viewing that hasn't happened isn't a review.
+     */
+    public function isReviewable(): bool
+    {
+        if ($this->status === 'completed') {
+            return true;
+        }
+
+        return $this->status === 'confirmed'
+            && $this->preferred_datetime !== null
+            && $this->preferred_datetime->isPast();
     }
 
     /**
@@ -165,7 +199,7 @@ class Appointment extends Model
         if (! $user || $user->id !== $this->buyer_id) {
             return false;
         }
-        if (! in_array($this->status, ['confirmed', 'completed'], true)) {
+        if (! $this->isReviewable()) {
             return false;
         }
 

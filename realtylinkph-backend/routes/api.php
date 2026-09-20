@@ -180,6 +180,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
     Route::middleware('admin')->prefix('admin')->group(function (): void {
         Route::get('/stats', [AdminController::class, 'stats']);
+        Route::get('/actions', [AdminController::class, 'actions']);
         Route::get('/users', [AdminController::class, 'users']);
         Route::post('/admins', [AdminController::class, 'createAdmin']);
         Route::delete('/users/{user}', [AdminController::class, 'deleteUser']);

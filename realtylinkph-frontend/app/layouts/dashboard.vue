@@ -101,6 +101,7 @@ const adminLinks = [
   { label: 'Agents',   href: '/admin/agents',   icon: 'user' },
   { label: 'Listings', href: '/admin/listings', icon: 'home' },
   { label: 'Reviews',  href: '/admin/reviews',  icon: 'star' },
+  { label: 'Activity', href: '/admin/activity', icon: 'clock' },
 ]
 
 const navLinks = computed(() => {

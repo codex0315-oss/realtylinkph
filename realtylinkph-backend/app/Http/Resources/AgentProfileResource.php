@@ -5,7 +5,7 @@ declare(strict_types=1);
 namespace App\Http\Resources;
 
 use Illuminate\Http\Request;
-use App\Support\Uploads;
+use App\Support\Documents;
 use Illuminate\Http\Resources\Json\JsonResource;
 
 class AgentProfileResource extends JsonResource
@@ -35,11 +35,11 @@ class AgentProfileResource extends JsonResource
             'reviewed_at'        => $this->reviewed_at?->toISOString(),
             // When a rejected applicant may re-apply (12h after rejection); null otherwise.
             'reapply_at'         => $this->reapplyAt()?->toISOString(),
-            // Document images — admin only (privacy).
-            'license_doc'        => $this->when($isAdmin, Uploads::url($this->license_doc)),
-            'accreditation_doc'  => $this->when($isAdmin, Uploads::url($this->accreditation_doc)),
-            'valid_id'           => $this->when($isAdmin, Uploads::url($this->valid_id)),
-            'face_image'         => $this->when($isAdmin, Uploads::url($this->face_image)),
+            // Document images — admin only, and as 15-minute signed URLs (Documents::url).
+            'license_doc'        => $this->when($isAdmin, Documents::url($this->license_doc)),
+            'accreditation_doc'  => $this->when($isAdmin, Documents::url($this->accreditation_doc)),
+            'valid_id'           => $this->when($isAdmin, Documents::url($this->valid_id)),
+            'face_image'         => $this->when($isAdmin, Documents::url($this->face_image)),
             'has_gcal'           => $this->google_access_token !== null,
             'created_at'         => $this->created_at?->toISOString(),
             'user'               => UserResource::make($this->whenLoaded('user')),

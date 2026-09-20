@@ -64,6 +64,13 @@ class ReviewController extends Controller
 
         $review = $this->service->toggleVisibility($review);
 
+        $review->loadMissing(['buyer', 'agent']);
+        \App\Support\AdminAudit::log(
+            $review->is_visible ? 'review.shown' : 'review.hidden',
+            $review,
+            "{$review->buyer?->name} → {$review->agent?->name} ({$review->rating}/5)",
+        );
+
         return ApiResponse::success(ReviewResource::make($review), 'Review visibility toggled.', 200);
     }
 }
