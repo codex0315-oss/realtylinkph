@@ -50,7 +50,10 @@ return [
     |
     */
 
-    'expiration' => null,
+    // 30 days. Tokens used to live forever; a stolen one now dies on its own.
+    // The SPA signs the user out on the first 401 (useAuth.fetchMe), so an
+    // expired token just means logging in again.
+    'expiration' => 43200,
 
     /*
     |--------------------------------------------------------------------------

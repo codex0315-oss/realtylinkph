@@ -1,4 +1,57 @@
 // https://nuxt.com/docs/api/configuration/nuxt-config
+
+/*
+ * Security headers, sent with every page (routeRules '/**' below).
+ *
+ * The Content-Security-Policy lists every origin the app is allowed to talk
+ * to, so an injected script could not load code from elsewhere, the page
+ * cannot be framed (clickjacking), and plugins/embeds are off. Scripts and
+ * styles keep 'unsafe-inline' because Nuxt hydrates through inline
+ * <script> tags and components use inline styles; a nonce-based policy
+ * would need a build-time integration and isn't worth it at this scale.
+ *
+ * Hosts are derived from the same env vars the app uses, so moving the API
+ * (e.g. to Singapore) only needs the env change, not this file.
+ */
+const apiOrigin     = new URL(process.env.NUXT_PUBLIC_API_BASE || 'http://127.0.0.1:8000/api').origin
+// A local API may hand out photo URLs under the other loopback name.
+const apiOrigins    = /127\.0\.0\.1|localhost/.test(apiOrigin)
+  ? `${apiOrigin} http://127.0.0.1:8000 http://localhost:8000`
+  : apiOrigin
+const storageOrigin = 'https://uhhmaixvxyzvvktcivmv.storage.supabase.co'
+const isProd        = process.env.NODE_ENV === 'production'
+// Self-hosted Reverb (local dev) — production uses Pusher, allowed below.
+const reverbHost    = process.env.NUXT_PUBLIC_REVERB_HOST || '127.0.0.1'
+const reverbPort    = process.env.NUXT_PUBLIC_REVERB_PORT || '8080'
+const reverbSockets = ` ws://${reverbHost}:${reverbPort} wss://${reverbHost}:${reverbPort}`
+const devSockets    = (isProd ? '' : ' ws://localhost:24678 ws://127.0.0.1:24678 ws://localhost:8080') + reverbSockets
+
+const csp = [
+  "default-src 'self'",
+  "script-src 'self' 'unsafe-inline'",
+  "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
+  "font-src 'self' data: https://fonts.gstatic.com",
+  `img-src 'self' data: blob: ${apiOrigins} ${storageOrigin} https://*.tile.openstreetmap.org https://*.googleusercontent.com`,
+  `connect-src 'self' ${apiOrigins} ${storageOrigin} https://api.geoapify.com https://*.pusher.com wss://*.pusher.com https://*.tile.openstreetmap.org${devSockets}`,
+  "media-src 'self' blob:",
+  "worker-src 'self' blob:",
+  "frame-src 'self'",
+  "frame-ancestors 'none'",
+  "object-src 'none'",
+  "base-uri 'self'",
+  "form-action 'self'",
+  ...(isProd ? ['upgrade-insecure-requests'] : []),
+].join('; ')
+
+const securityHeaders = {
+  'Content-Security-Policy': csp,
+  'X-Frame-Options': 'DENY',
+  'X-Content-Type-Options': 'nosniff',
+  'Referrer-Policy': 'strict-origin-when-cross-origin',
+  // The agent-verification wizard uses the camera; nothing needs mic or GPS.
+  'Permissions-Policy': 'camera=(self), microphone=(), geolocation=(), payment=()',
+}
+
 export default defineNuxtConfig({
   compatibilityDate: '2025-07-15',
   devtools: { enabled: true },
@@ -13,6 +66,7 @@ export default defineNuxtConfig({
   // client-side so the server never redirects before the session loads
   // (fixes "refresh on dashboard kicks me to the landing page").
   routeRules: {
+    '/**':           { headers: securityHeaders },
     '/dashboard/**': { ssr: false },
     '/admin/**':     { ssr: false },
     // Public pages are rendered on the server, which means the Vercel function

@@ -440,6 +440,27 @@ failed from the same machine. Nothing in the app was wrong.
 
 ---
 
+## Security posture (what to say if asked)
+
+In place: bcrypt passwords with a length/letters/numbers policy; Sanctum
+bearer tokens that expire after 30 days; rate limits on login (10/min),
+registration, password reset (5/min), enquiries and AI calls; policy-based
+authorization on every owned resource with tests for stranger access; no raw
+SQL, no `v-html`; uploads validated by MIME and size and re-encoded through
+GD; applicant IDs in a private bucket behind 15-minute signed URLs; CORS
+locked to the Vercel origin; `APP_DEBUG=false`; HSTS (preload) plus a
+Content-Security-Policy, `X-Frame-Options: DENY`, `nosniff`, a referrer
+policy and a permissions policy on every page (`nuxt.config.ts`); an admin
+audit trail. Secrets are never committed; `.env.example` is the template.
+
+Known gaps for a production release: email verification isn't enforced
+before booking/messaging; no admin 2FA; the CSP allows inline scripts and
+styles (Nuxt hydrates through inline tags); free-tier hosting has no WAF or
+alerting; every key pasted during setup must be rotated after the defense
+and the seeded admin password changed before it.
+
+---
+
 ## Known limitations (be ready to say these out loud)
 
 - **Tests cover the five core workflows** (`php artisan test`, ~20 tests /
