@@ -76,6 +76,44 @@ class MessagingWorkflowTest extends TestCase
         $this->assertNotNull($row['read_at']);
     }
 
+    public function test_a_buyer_may_review_an_agent_only_after_the_agent_replied(): void
+    {
+        Event::fake([MessageSent::class, MessagesReceipt::class]);
+
+        $agent   = $this->agent(['last_seen_at' => now()]);
+        $buyer   = $this->buyer();
+        $listing = $this->listing($agent);
+        $convId  = $this->actingAsUser($buyer)->postJson("/api/properties/{$listing->id}/conversations")->json('data.id');
+
+        // The buyer's own message alone is not a basis — nobody can rate an agent they never dealt with.
+        $this->actingAsUser($buyer)->postJson("/api/conversations/{$convId}/messages", ['body' => 'hi'])->assertCreated();
+        $this->assertFalse($this->actingAsUser($buyer)->getJson("/api/agents/{$agent->id}/reviewable")->json('data.eligible'));
+        $this->actingAsUser($buyer)->postJson('/api/reviews', ['agent_id' => $agent->id, 'rating' => 1])->assertStatus(422);
+
+        // An AI away-reply doesn't count either.
+        Message::create(['conversation_id' => $convId, 'sender_id' => $agent->id, 'body' => 'Auto-reply', 'is_ai' => true, 'is_read' => false]);
+        $this->assertFalse($this->actingAsUser($buyer)->getJson("/api/agents/{$agent->id}/reviewable")->json('data.eligible'));
+
+        // The agent replies → chat basis, no badge.
+        $this->actingAsUser($agent)->postJson("/api/conversations/{$convId}/messages", ['body' => 'Yes, still available!'])->assertCreated();
+        $elig = $this->actingAsUser($buyer)->getJson("/api/agents/{$agent->id}/reviewable")->assertOk();
+        $this->assertTrue($elig->json('data.eligible'));
+        $this->assertSame('conversation', $elig->json('data.basis'));
+        $this->assertSame($convId, $elig->json('data.conversation_id'));
+
+        $review = $this->actingAsUser($buyer)->postJson('/api/reviews', ['agent_id' => $agent->id, 'rating' => 4, 'review_text' => 'Quick and clear answers.'])
+            ->assertCreated()
+            ->assertJsonPath('data.is_verified', false)
+            ->assertJsonPath('data.appointment_id', null)
+            ->assertJsonPath('data.conversation_id', $convId);
+
+        // Eligibility now reports the existing review, so the UI offers Edit instead of a second review.
+        $this->assertSame($review->json('data.id'), $this->actingAsUser($buyer)->getJson("/api/agents/{$agent->id}/reviewable")->json('data.review.id'));
+
+        // Agents never rate anyone.
+        $this->actingAsUser($agent)->postJson('/api/reviews', ['agent_id' => $agent->id, 'rating' => 5])->assertForbidden();
+    }
+
     public function test_heartbeat_marks_everything_delivered_at_once(): void
     {
         Event::fake([MessageSent::class, MessagesReceipt::class]);

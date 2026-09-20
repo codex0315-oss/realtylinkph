@@ -14,6 +14,7 @@ class AgentReview extends Model
         'agent_id',
         'buyer_id',
         'appointment_id',
+        'conversation_id',
         'rating',
         'review_text',
         'is_visible',
@@ -40,6 +41,23 @@ class AgentReview extends Model
     public function appointment(): BelongsTo
     {
         return $this->belongsTo(Appointment::class);
+    }
+
+    public function conversation(): BelongsTo
+    {
+        return $this->belongsTo(Conversation::class);
+    }
+
+    /**
+     * "Verified viewing": the review rests on a viewing that actually took
+     * place. A review based on a chat, or on a viewing the agent cancelled,
+     * still counts — it just doesn't carry the badge.
+     */
+    public function isVerifiedViewing(): bool
+    {
+        $a = $this->appointment;
+
+        return $a !== null && in_array($a->status, ['completed', 'confirmed'], true);
     }
 
     public function scopeVisible(Builder $query): Builder

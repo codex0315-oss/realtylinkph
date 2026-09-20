@@ -83,13 +83,21 @@ function fmt(d: string) {
             <div class="flex items-center gap-3">
               <AppAvatar :name="r.buyer?.name" :src="r.buyer?.avatar" size="sm" />
               <div>
-                <p class="text-sm font-semibold text-brand-navy dark:text-white">{{ r.buyer?.name ?? 'Buyer' }}</p>
+                <p class="text-sm font-semibold text-brand-navy dark:text-white flex items-center gap-2 flex-wrap">
+                  {{ r.buyer?.name ?? 'Buyer' }}
+                  <span
+                    v-if="r.is_verified"
+                    class="inline-flex items-center gap-1 text-[0.625rem] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
+                    :title="r.property_title ? `Viewed ${r.property_title}` : 'Based on a viewing that took place'"
+                  >Verified viewing</span>
+                  <span v-else class="text-[0.625rem] font-semibold uppercase tracking-wide text-brand-navy/40 dark:text-white/35">{{ r.appointment_id ? 'cancelled viewing' : 'via chat' }}</span>
+                </p>
                 <div class="flex items-center gap-0.5 mt-0.5">
                   <svg v-for="s in 5" :key="s" class="h-3.5 w-3.5" :class="s <= r.rating ? 'text-brand-gold' : 'text-gray-200 dark:text-white/15'" fill="currentColor" viewBox="0 0 20 20"><path d="M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z" /></svg>
                 </div>
               </div>
             </div>
-            <span class="text-[0.6875rem] text-brand-navy/45 dark:text-white/40 flex-shrink-0">{{ fmt(r.created_at) }}</span>
+            <span class="text-[0.6875rem] text-brand-navy/45 dark:text-white/40 flex-shrink-0">{{ fmt(r.created_at) }}<template v-if="r.is_edited"> · edited</template></span>
           </div>
           <p v-if="r.review_text" class="text-sm text-brand-navy/80 dark:text-white/75 mt-3 leading-relaxed whitespace-pre-wrap">{{ r.review_text }}</p>
         </div>

@@ -1,4 +1,4 @@
-import type { ApiResponse, AgentReview, Appointment, PaginatedResponse } from '~/types'
+import type { ApiResponse, AgentReview, PaginatedResponse, ReviewEligibility } from '~/types'
 
 export const useReview = () => {
   const api = useApi()
@@ -24,8 +24,10 @@ export const useReview = () => {
     }
   }
 
+  /** Create the buyer's review of an agent — by agent, or pinned to one viewing. */
   async function submitReview(payload: {
-    appointment_id: number
+    agent_id?: number
+    appointment_id?: number
     rating: number
     review_text?: string
   }): Promise<AgentReview | null> {
@@ -42,13 +44,30 @@ export const useReview = () => {
     }
   }
 
-  // The buyer's confirmed-but-unreviewed viewings with this agent (what they can rate).
-  async function fetchReviewableAppointments(agentId: number): Promise<Appointment[]> {
+  /** Edit your own review (rating / text). */
+  async function updateReview(reviewId: number, payload: { rating: number; review_text?: string }): Promise<AgentReview | null> {
+    loading.value = true
+    error.value   = null
     try {
-      const res = await api.get<ApiResponse<Appointment[]>>(`/agents/${agentId}/reviewable`)
+      const res = await api.put<ApiResponse<AgentReview>>(`/reviews/${reviewId}`, payload)
+      return res.data
+    } catch (e) {
+      error.value = extractError(e)
+      return null
+    } finally {
+      loading.value = false
+    }
+  }
+
+  const NOT_ELIGIBLE: ReviewEligibility = { eligible: false, basis: null, verified: false, appointments: [], conversation_id: null, review: null }
+
+  /** May the signed-in buyer review this agent, on what basis, and have they already? */
+  async function fetchEligibility(agentId: number): Promise<ReviewEligibility> {
+    try {
+      const res = await api.get<ApiResponse<ReviewEligibility>>(`/agents/${agentId}/reviewable`)
       return res.data
     } catch {
-      return []
+      return NOT_ELIGIBLE
     }
   }
 
@@ -75,7 +94,8 @@ export const useReview = () => {
     averageRating,
     fetchAgentReviews,
     submitReview,
-    fetchReviewableAppointments,
+    updateReview,
+    fetchEligibility,
     toggleVisibility,
   }
 }

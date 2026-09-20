@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { Appointment } from '~/types'
+import type { Appointment, ReviewEligibility } from '~/types'
 
 // Shared agent profile body — rendered by the public /agents/[id] page (default
 // layout) AND the in-account /dashboard/agents/[id] page (dashboard layout), so
@@ -10,13 +10,20 @@ const authStore = useAuthStore()
 
 const { profile, loading: agentLoading, fetchAgent } = useAgent()
 const { properties, loading: propLoading, fetchProperties } = useProperty()
-const { reviews, averageRating, loading: revLoading, error: reviewError, fetchAgentReviews, submitReview, fetchReviewableAppointments } = useReview()
+const { reviews, averageRating, loading: revLoading, error: reviewError, fetchAgentReviews, submitReview, updateReview, fetchEligibility } = useReview()
 
-const reviewable = ref<Appointment[]>([])
+/*
+ * Who may rate: a buyer who actually dealt with this agent — a viewing that
+ * took place (verified), a viewing the agent cancelled / never answered, or
+ * a chat the agent replied in. The server decides; we only show the reason.
+ */
+const NONE: ReviewEligibility = { eligible: false, basis: null, verified: false, appointments: [], conversation_id: null, review: null }
+const eligibility = ref<ReviewEligibility>(NONE)
+const reviewable  = computed(() => eligibility.value.appointments)
 async function loadReviewable() {
-  reviewable.value = authStore.isAuthenticated && authStore.isBuyer
-    ? await fetchReviewableAppointments(agentId)
-    : []
+  eligibility.value = authStore.isAuthenticated && authStore.isBuyer
+    ? await fetchEligibility(agentId)
+    : NONE
 }
 
 await Promise.all([
@@ -32,7 +39,21 @@ const activeTab = ref<'listings' | 'reviews'>('listings')
 onMounted(loadReviewable)
 
 // ── Rating ───────────────────────────────────────────────────────────────────
-const canRate    = computed(() => reviewable.value.length > 0)
+const canRate    = computed(() => eligibility.value.eligible)
+const myReview   = computed(() => eligibility.value.review)
+const agentFirst = computed(() => (profile.value?.name ?? 'this agent').split(' ')[0])
+/** Why the buyer may rate — shown in the prompt and the modal. */
+const basisText = computed(() => {
+  const e = eligibility.value
+  const a = e.appointments[0]
+  const when = a ? new Date(a.preferred_datetime).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' }) : ''
+  switch (e.basis) {
+    case 'viewing':         return `You viewed ${a?.property?.title ?? 'a property'} with ${agentFirst.value} on ${when}.`
+    case 'agent_cancelled': return `Your viewing on ${when} was cancelled or never confirmed by ${agentFirst.value} — you can rate that experience.`
+    case 'conversation':    return `You've chatted with ${agentFirst.value}. Rate how they handled your enquiry.`
+    default:                return ''
+  }
+})
 const showRate   = ref(false)
 const submitting = ref(false)
 const rateError  = ref('')
@@ -51,27 +72,33 @@ function apptLabel(a: Appointment): string {
 }
 
 function openRate() {
+  const mine = myReview.value
+  // An existing review is re-opened for editing, with its tag line split back out.
+  const firstLine = mine?.review_text?.split('\n')[0] ?? ''
+  const hasTags   = firstLine.startsWith('👍 ')
   rateForm.appointment_id = reviewable.value[0]?.id ?? null
-  rateForm.rating         = 0
-  rateForm.review_text    = ''
-  rateForm.tags           = []
+  rateForm.rating         = mine?.rating ?? 0
+  rateForm.review_text    = mine ? (hasTags ? mine.review_text!.split('\n').slice(1).join('\n') : mine.review_text ?? '') : ''
+  rateForm.tags           = hasTags ? firstLine.slice(2).split(' · ').filter(t => STANDOUT_TAGS.includes(t)) : []
   rateError.value         = ''
   showRate.value          = true
 }
 
 async function submitRating() {
-  if (!rateForm.appointment_id) { rateError.value = 'Please choose which viewing to review.'; return }
-  if (!rateForm.rating)         { rateError.value = 'Please tap a star rating.'; return }
+  if (!rateForm.rating) { rateError.value = 'Please tap a star rating.'; return }
 
   submitting.value = true
   rateError.value  = ''
   const tagLine = rateForm.tags.length ? `👍 ${rateForm.tags.join(' · ')}` : ''
   const body    = [tagLine, rateForm.review_text.trim()].filter(Boolean).join('\n')
-  const res = await submitReview({
-    appointment_id: rateForm.appointment_id,
-    rating:         rateForm.rating,
-    review_text:    body || undefined,
-  })
+  const res = myReview.value
+    ? await updateReview(myReview.value.id, { rating: rateForm.rating, review_text: body || undefined })
+    : await submitReview({
+        agent_id:       agentId,
+        appointment_id: rateForm.appointment_id ?? undefined,
+        rating:         rateForm.rating,
+        review_text:    body || undefined,
+      })
   submitting.value = false
 
   if (res) {
@@ -158,7 +185,7 @@ function goBack() {
         </div>
 
         <!-- Rate this agent -->
-        <AppButton v-if="canRate" variant="primary" @click="openRate">★ Rate this agent</AppButton>
+        <AppButton v-if="canRate" variant="primary" @click="openRate">{{ myReview ? '✎ Edit your review' : '★ Rate this agent' }}</AppButton>
       </div>
 
       <!-- Tabs -->
@@ -191,11 +218,13 @@ function goBack() {
       <div v-else class="mt-6 space-y-4">
         <!-- Rate prompt / eligibility hint -->
         <div v-if="canRate" class="card p-4 flex items-center justify-between gap-3 bg-brand-gold/5 border-brand-gold/30 dark:bg-brand-gold/10">
-          <p class="text-sm text-brand-navy dark:text-white font-medium">You had a viewing with this agent — share your experience.</p>
-          <AppButton variant="primary" size="sm" @click="openRate">★ Rate this agent</AppButton>
+          <p class="text-sm text-brand-navy dark:text-white font-medium">
+            {{ myReview ? 'You reviewed this agent — you can update it any time.' : basisText }}
+          </p>
+          <AppButton variant="primary" size="sm" @click="openRate">{{ myReview ? '✎ Edit' : '★ Rate' }}</AppButton>
         </div>
         <p v-else-if="authStore.isBuyer" class="text-xs text-brand-text-light dark:text-white/40">
-          You can rate this agent after a confirmed viewing with them.
+          You can rate this agent after a viewing with them, or once they've replied to you in chat.
         </p>
 
         <div v-if="revLoading">
@@ -218,10 +247,18 @@ function goBack() {
                 <div class="flex items-center gap-2 flex-wrap">
                   <span class="text-sm font-semibold text-brand-text-primary dark:text-white">{{ review.buyer?.name ?? 'Anonymous' }}</span>
                   <AppRating :value="review.rating" size="sm" readonly />
+                  <span
+                    v-if="review.is_verified"
+                    class="inline-flex items-center gap-1 text-[0.625rem] font-bold uppercase tracking-wide px-2 py-0.5 rounded-full bg-emerald-50 text-emerald-700 dark:bg-emerald-500/15 dark:text-emerald-300"
+                    :title="review.property_title ? `Viewed ${review.property_title}` : 'Based on a viewing that took place'"
+                  >
+                    <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12l2 2 4-4m6 2a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    Verified viewing
+                  </span>
                 </div>
                 <p v-if="review.review_text" class="text-sm text-brand-text-secondary dark:text-white/70 mt-1">{{ review.review_text }}</p>
                 <p class="text-xs text-brand-text-light dark:text-white/40 mt-1">
-                  {{ new Date(review.created_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }) }}
+                  {{ new Date(review.created_at).toLocaleDateString('en-PH', { year: 'numeric', month: 'short', day: 'numeric' }) }}<span v-if="review.is_edited"> · edited</span>
                 </p>
               </div>
             </div>
@@ -233,7 +270,7 @@ function goBack() {
     <div v-else class="text-center py-16 text-brand-text-secondary dark:text-white/50">Agent not found.</div>
 
     <!-- Rate modal -->
-    <AppModal :open="showRate" title="Rate this agent" @close="showRate = false">
+    <AppModal :open="showRate" :title="myReview ? 'Edit your review' : 'Rate this agent'" @close="showRate = false">
       <div class="p-6 space-y-4">
         <!-- which viewing -->
         <div v-if="reviewable.length > 1">
@@ -242,9 +279,7 @@ function goBack() {
             <option v-for="a in reviewable" :key="a.id" :value="a.id">{{ apptLabel(a) }}</option>
           </select>
         </div>
-        <p v-else-if="reviewable.length === 1" class="text-sm text-brand-text-secondary">
-          Reviewing your viewing: <span class="font-medium text-brand-navy">{{ apptLabel(reviewable[0]!) }}</span>
-        </p>
+        <p v-else class="text-sm text-brand-text-secondary">{{ basisText }}</p>
 
         <!-- stars -->
         <div>

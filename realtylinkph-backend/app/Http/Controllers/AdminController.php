@@ -71,7 +71,7 @@ class AdminController extends Controller
 
     public function reviews(Request $request): JsonResponse
     {
-        $reviews = AgentReview::with(['agent', 'buyer'])
+        $reviews = AgentReview::with(['agent', 'buyer', 'appointment.property'])
             ->when($request->query('visible') !== null, fn ($q) => $q->where('is_visible', $request->boolean('visible')))
             ->latest()
             ->paginate(15);

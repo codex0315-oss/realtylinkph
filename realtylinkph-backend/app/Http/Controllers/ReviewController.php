@@ -27,35 +27,61 @@ class ReviewController extends Controller
     }
 
     /**
-     * The current buyer's confirmed-but-unreviewed viewings with this agent,
-     * i.e. the viewings they're allowed to rate. Empty for guests/non-buyers.
+     * May the current buyer review this agent, and on what basis? Returns the
+     * basis, the viewings it rests on (for the "which viewing?" picker), and
+     * their existing review if they already left one (so the UI offers Edit).
      */
     public function reviewable(Request $request, User $agent): JsonResponse
     {
         $user = $request->user();
 
-        if (! $user || $user->role_type !== 'buyer') {
-            return ApiResponse::success([], 'No reviewable viewings.');
+        if (! $user || $user->role_type !== 'buyer' || $user->id === $agent->id) {
+            return ApiResponse::success([
+                'eligible' => false, 'basis' => null, 'verified' => false,
+                'appointments' => [], 'conversation_id' => null, 'review' => null,
+            ], 'Not eligible to review.');
         }
 
-        $appointments = $this->service->reviewableAppointments($user, $agent);
+        $e = $this->service->eligibility($user, $agent);
 
-        return ApiResponse::success(AppointmentResource::collection($appointments), 'Reviewable viewings retrieved.');
+        return ApiResponse::success([
+            'eligible'        => $e['eligible'],
+            'basis'           => $e['basis'],
+            'verified'        => $e['verified'],
+            'appointments'    => AppointmentResource::collection($e['appointments']),
+            'conversation_id' => $e['conversation_id'],
+            'review'          => $e['review'] ? ReviewResource::make($e['review']->load(['appointment.property'])) : null,
+        ], 'Review eligibility retrieved.');
     }
 
     public function submit(SubmitReviewRequest $request): JsonResponse
     {
         $this->authorize('create', AgentReview::class);
 
-        $appointment = Appointment::findOrFail($request->validated('appointment_id'));
+        $data = $request->validated();
+
+        // A viewing id pins the review to that viewing; the agent follows from it.
+        $agent = isset($data['appointment_id'])
+            ? User::findOrFail(Appointment::findOrFail($data['appointment_id'])->agent_id)
+            : User::findOrFail($data['agent_id']);
 
         try {
-            $review = $this->service->submit($request->user(), $appointment, $request->validated());
+            $review = $this->service->submit($request->user(), $agent, $data);
         } catch (\RuntimeException $e) {
             return ApiResponse::error($e->getMessage(), [], 422);
         }
 
         return ApiResponse::success(ReviewResource::make($review), 'Review submitted.', 201);
+    }
+
+    /** Edit your own review — rating and text only; the basis stays as recorded. */
+    public function update(SubmitReviewRequest $request, AgentReview $review): JsonResponse
+    {
+        $this->authorize('update', $review);
+
+        $review = $this->service->update($review, $request->validated());
+
+        return ApiResponse::success(ReviewResource::make($review), 'Review updated.', 200);
     }
 
     public function toggleVisibility(AgentReview $review): JsonResponse
@@ -64,7 +90,7 @@ class ReviewController extends Controller
 
         $review = $this->service->toggleVisibility($review);
 
-        $review->loadMissing(['buyer', 'agent']);
+        $review->loadMissing(['buyer', 'agent', 'appointment.property']);
         \App\Support\AdminAudit::log(
             $review->is_visible ? 'review.shown' : 'review.hidden',
             $review,

@@ -103,6 +103,14 @@ class Appointment extends Model
             && $this->preferred_datetime->isPast();
     }
 
+    /** Cancelled by the agent, or expired because the agent never answered. */
+    public function wasCancelledByAgent(): bool
+    {
+        return $this->status === 'cancelled'
+            && ($this->cancel_reason_code === 'expired'
+                || ($this->cancelled_by_id !== null && $this->cancelled_by_id === $this->agent_id));
+    }
+
     /**
      * Would cancelling right now count against the canceller? True only for a
      * confirmed viewing whose slot is less than LATE_WINDOW_HOURS away (and
@@ -199,12 +207,12 @@ class Appointment extends Model
         if (! $user || $user->id !== $this->buyer_id) {
             return false;
         }
-        if (! $this->isReviewable()) {
+        if (! $this->isReviewable() && ! $this->wasCancelledByAgent()) {
             return false;
         }
 
-        $hasReview = $this->relationLoaded('review') ? $this->review !== null : $this->review()->exists();
-
-        return ! $hasReview;
+        // One review per buyer per agent — if they already left one, History
+        // shows nothing here; they edit it from the agent's profile.
+        return ! AgentReview::where('buyer_id', $user->id)->where('agent_id', $this->agent_id)->exists();
     }
 }

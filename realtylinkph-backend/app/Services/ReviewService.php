@@ -6,82 +6,165 @@ namespace App\Services;
 
 use App\Models\AgentReview;
 use App\Models\Appointment;
+use App\Models\Conversation;
+use App\Models\Message;
 use App\Models\User;
 use App\Notifications\ReviewReceived;
 use Illuminate\Contracts\Pagination\LengthAwarePaginator;
-use Illuminate\Database\Eloquent\Collection;
 use Illuminate\Support\Facades\DB;
 
+/**
+ * Who may review whom, and on what basis.
+ *
+ * A buyer may review an agent they have actually dealt with:
+ *  - a viewing that took place (completed, or confirmed and past) — this is
+ *    the "verified viewing" basis and earns the badge;
+ *  - a viewing the agent cancelled, or a request that expired unanswered —
+ *    the agent's reliability is exactly what the buyer should be able to rate;
+ *  - a conversation in which the agent replied at least once themselves (not
+ *    RealtyLink AI's away-reply). One "hi" from the buyer alone is not enough,
+ *    or anyone could rate an agent they never dealt with.
+ *
+ * One review per buyer per agent, editable — a buyer who chatted, then
+ * viewed, updates the same review rather than stacking a second one.
+ */
 class ReviewService
 {
     public function __construct(
         private readonly NotificationService $notificationService,
     ) {}
 
-    public function submit(User $buyer, Appointment $appointment, array $data): AgentReview
+    /**
+     * @return array{
+     *   eligible: bool, basis: 'viewing'|'agent_cancelled'|'conversation'|null,
+     *   verified: bool, appointments: \Illuminate\Support\Collection<int, Appointment>,
+     *   conversation_id: int|null, review: AgentReview|null
+     * }
+     */
+    public function eligibility(User $buyer, User $agent): array
     {
-        $review = DB::transaction(function () use ($buyer, $appointment, $data): AgentReview {
-            if (! $appointment->isReviewable()) {
-                throw new \RuntimeException('You can review an agent once the viewing has taken place.');
-            }
+        $existing = AgentReview::where('buyer_id', $buyer->id)->where('agent_id', $agent->id)->first();
 
-            if ($appointment->buyer_id !== $buyer->id) {
-                throw new \RuntimeException('You can only review appointments you attended.');
-            }
+        $appointments = Appointment::with('property.photos')
+            ->where('buyer_id', $buyer->id)
+            ->where('agent_id', $agent->id)
+            ->latest('preferred_datetime')
+            ->get();
 
-            if ($appointment->review()->exists()) {
-                throw new \RuntimeException('You have already reviewed this viewing.');
-            }
+        $viewings  = $appointments->filter(fn (Appointment $a) => $a->isReviewable())->values();
+        $cancelled = $appointments->filter(fn (Appointment $a) => $a->wasCancelledByAgent())->values();
 
-            return AgentReview::create([
-                'agent_id'       => $appointment->agent_id,
-                'buyer_id'       => $buyer->id,
-                'appointment_id' => $appointment->id,
-                'rating'         => $data['rating'],
-                'review_text'    => $data['review_text'] ?? null,
-                'is_visible'     => true,
-            ]);
-        });
+        $conversationId = Conversation::where('buyer_id', $buyer->id)
+            ->where('agent_id', $agent->id)
+            ->whereExists(fn ($q) => $q->select(DB::raw(1))->from('messages')
+                ->whereColumn('messages.conversation_id', 'conversations.id')
+                ->where('messages.sender_id', $agent->id)
+                ->where('messages.is_ai', false))
+            ->latest('last_message_at')
+            ->value('id');
 
-        // Notify the agent — in-app (instant) + email (queued).
-        $agent    = $appointment->agent ?? User::find($appointment->agent_id);
-        $property = $appointment->property;
+        $basis = $viewings->isNotEmpty() ? 'viewing'
+            : ($cancelled->isNotEmpty() ? 'agent_cancelled'
+            : ($conversationId ? 'conversation' : null));
 
-        if ($agent) {
-            $this->notificationService->send($agent, 'new_review', [
-                'review_id'      => $review->id,
-                'buyer_name'     => $buyer->name,
-                'rating'         => $review->rating,
-                'property_title' => $property?->title,
-                'message'        => "{$buyer->name} left you a {$review->rating}-star review.",
-            ]);
+        return [
+            'eligible'        => $basis !== null,
+            'basis'           => $basis,
+            'verified'        => $basis === 'viewing',
+            'appointments'    => $basis === 'viewing' ? $viewings : $cancelled,
+            'conversation_id' => $conversationId,
+            'review'          => $existing,
+        ];
+    }
 
-            $agent->notify(new ReviewReceived($review->loadMissing(['buyer', 'appointment.property'])));
+    /**
+     * Create the buyer's review of this agent. `appointment_id` (optional)
+     * pins it to a specific viewing when they had several.
+     */
+    public function submit(User $buyer, User $agent, array $data): AgentReview
+    {
+        if ($buyer->id === $agent->id) {
+            throw new \RuntimeException('You cannot review yourself.');
         }
+
+        $e = $this->eligibility($buyer, $agent);
+
+        if (! $e['eligible']) {
+            throw new \RuntimeException('You can review an agent after a viewing with them, or once they have replied to you in chat.');
+        }
+        if ($e['review'] !== null) {
+            throw new \RuntimeException('You have already reviewed this agent — you can edit your review instead.');
+        }
+
+        $appointmentId = $this->pickAppointment($e, $data['appointment_id'] ?? null);
+
+        $review = AgentReview::create([
+            'agent_id'        => $agent->id,
+            'buyer_id'        => $buyer->id,
+            'appointment_id'  => $appointmentId,
+            'conversation_id' => $appointmentId === null ? $e['conversation_id'] : null,
+            'rating'          => $data['rating'],
+            'review_text'     => $data['review_text'] ?? null,
+            'is_visible'      => true,
+        ]);
+
+        $review->load(['appointment.property', 'buyer', 'agent']);
+        $this->notifyAgent($agent, $buyer, $review, isEdit: false);
 
         return $review;
     }
 
-    /**
-     * The buyer's confirmed viewings with this agent that haven't been reviewed
-     * yet — i.e. the appointments they're allowed to rate.
-     *
-     * @return Collection<int, Appointment>
-     */
-    public function reviewableAppointments(User $buyer, User $agent): Collection
+    /** Edit an existing review (rating / text). Basis stays as recorded. */
+    public function update(AgentReview $review, array $data): AgentReview
     {
-        return Appointment::with('property.photos')
-            ->where('buyer_id', $buyer->id)
-            ->where('agent_id', $agent->id)
-            ->where(function ($q): void {
-                // Completed, or confirmed and already in the past (the hourly
-                // job will mark it completed; no need to make the buyer wait).
-                $q->where('status', 'completed')
-                    ->orWhere(fn ($w) => $w->where('status', 'confirmed')->where('preferred_datetime', '<', now()));
-            })
-            ->whereDoesntHave('review')
-            ->latest('preferred_datetime')
-            ->get();
+        $review->update([
+            'rating'      => $data['rating'],
+            'review_text' => $data['review_text'] ?? null,
+        ]);
+
+        $review->loadMissing(['agent', 'buyer', 'appointment.property']);
+        $this->notifyAgent($review->agent, $review->buyer, $review, isEdit: true);
+
+        return $review->fresh(['appointment.property', 'buyer', 'agent']);
+    }
+
+    /** The viewing this review is about: the one the buyer chose, else the latest eligible one. */
+    private function pickAppointment(array $eligibility, ?int $requested): ?int
+    {
+        /** @var \Illuminate\Support\Collection<int, Appointment> $candidates */
+        $candidates = $eligibility['appointments'];
+        if ($candidates->isEmpty()) {
+            return null;
+        }
+        if ($requested !== null) {
+            $match = $candidates->firstWhere('id', $requested);
+            if ($match === null) {
+                throw new \RuntimeException('That viewing is not one you can review.');
+            }
+
+            return $match->id;
+        }
+
+        return $candidates->first()->id;
+    }
+
+    private function notifyAgent(User $agent, User $buyer, AgentReview $review, bool $isEdit): void
+    {
+        $property = $review->appointment?->property;
+
+        $this->notificationService->send($agent, 'new_review', [
+            'review_id'      => $review->id,
+            'buyer_name'     => $buyer->name,
+            'rating'         => $review->rating,
+            'property_title' => $property?->title,
+            'message'        => $isEdit
+                ? "{$buyer->name} updated their review of you — now {$review->rating} stars."
+                : "{$buyer->name} left you a {$review->rating}-star review.",
+        ]);
+
+        if (! $isEdit) {
+            $agent->notify(new ReviewReceived($review->loadMissing(['buyer', 'appointment.property'])));
+        }
     }
 
     public function toggleVisibility(AgentReview $review): AgentReview
@@ -98,13 +181,5 @@ class ReviewService
             ->visible()
             ->latest()
             ->paginate($perPage);
-    }
-
-    public function getAverageRating(User $agent): float
-    {
-        return round(
-            AgentReview::where('agent_id', $agent->id)->visible()->avg('rating') ?? 0,
-            1
-        );
     }
 }

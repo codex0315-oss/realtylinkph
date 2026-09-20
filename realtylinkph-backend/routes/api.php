@@ -171,6 +171,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
 
     // Reviews
     Route::post('/reviews', [ReviewController::class, 'submit']);
+    Route::put('/reviews/{review}', [ReviewController::class, 'update']);
     Route::get('/agents/{agent}/reviewable', [ReviewController::class, 'reviewable']);
 
     // AI description generator (authenticated agents only)

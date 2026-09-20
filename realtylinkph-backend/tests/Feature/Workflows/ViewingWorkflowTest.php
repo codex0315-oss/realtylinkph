@@ -93,15 +93,23 @@ class ViewingWorkflowTest extends TestCase
         $this->assertSame('completed', Appointment::find($id)->status);
         $this->assertDatabaseHas('notifications', ['notifiable_id' => $buyer->id, 'type' => 'appointment_completed']);
 
-        // 5. Now the buyer can review the agent — once.
-        $this->actingAsUser($buyer)->postJson('/api/reviews', [
+        // 5. Now the buyer can review the agent — a verified-viewing review, once.
+        $elig = $this->actingAsUser($buyer)->getJson("/api/agents/{$agent->id}/reviewable")->assertOk();
+        $this->assertTrue($elig->json('data.eligible'));
+        $this->assertSame('viewing', $elig->json('data.basis'));
+
+        $review = $this->actingAsUser($buyer)->postJson('/api/reviews', [
             'appointment_id' => $id,
             'rating'         => 5,
             'review_text'    => 'Punctual and knew the building well.',
-        ])->assertCreated()->assertJsonPath('data.rating', 5);
+        ])->assertCreated()->assertJsonPath('data.rating', 5)->assertJsonPath('data.is_verified', true);
 
+        // Second review of the same agent is refused; editing the first is how you change it.
         $this->actingAsUser($buyer)->postJson('/api/reviews', ['appointment_id' => $id, 'rating' => 1])
             ->assertStatus(422);
+        $this->actingAsUser($buyer)->putJson("/api/reviews/{$review->json('data.id')}", ['rating' => 4, 'review_text' => 'Still good.'])
+            ->assertOk()->assertJsonPath('data.rating', 4);
+        $this->actingAsUser($this->buyer())->putJson("/api/reviews/{$review->json('data.id')}", ['rating' => 1])->assertForbidden();
 
         // The agent cannot review themselves, and a stranger cannot review this viewing.
         $this->actingAsUser($agent)->postJson('/api/reviews', ['appointment_id' => $id, 'rating' => 5])->assertForbidden();
@@ -110,6 +118,7 @@ class ViewingWorkflowTest extends TestCase
         // Public agent profile now carries the review.
         $reviews = $this->asGuest()->getJson("/api/agents/{$agent->id}/reviews")->assertOk();
         $this->assertCount(1, $reviews->json('data'));
+        $this->assertSame(4, $reviews->json('data.0.rating'));
 
         Carbon::setTestNow();
     }
@@ -148,6 +157,13 @@ class ViewingWorkflowTest extends TestCase
         $this->actingAsUser($buyer)->postJson("/api/properties/{$listing->id}/appointments", [
             'preferred_datetime' => Carbon::now('Asia/Manila')->addDays(2)->setTime(14, 0)->toIso8601String(),
         ])->assertCreated();
+
+        // An agent who never answered can be rated for exactly that — without the verified badge.
+        $elig = $this->actingAsUser($buyer)->getJson("/api/agents/{$agent->id}/reviewable")->assertOk();
+        $this->assertSame('agent_cancelled', $elig->json('data.basis'));
+        $this->assertFalse($elig->json('data.verified'));
+        $this->actingAsUser($buyer)->postJson('/api/reviews', ['agent_id' => $agent->id, 'rating' => 1, 'review_text' => 'Never replied.'])
+            ->assertCreated()->assertJsonPath('data.is_verified', false)->assertJsonPath('data.appointment_id', $id);
 
         Carbon::setTestNow();
     }
