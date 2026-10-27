@@ -91,44 +91,22 @@ async function submit() {
 }
 
 function close() { if (!sending.value) emit('close') }
-function onKey(e: KeyboardEvent) { if (e.key === 'Escape' && props.open) close() }
-onMounted(() => window.addEventListener('keydown', onKey))
-onUnmounted(() => window.removeEventListener('keydown', onKey))
 </script>
 
 <template>
-  <Teleport to="body">
-    <Transition name="ad-backdrop">
-      <div v-if="open && application" class="fixed inset-0 z-[95] flex items-end sm:items-center justify-center sm:p-4 bg-brand-navy-deep/60 backdrop-blur-sm" @click.self="close">
-        <Transition name="ad-panel" appear>
-          <form
-            v-if="open"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="ad-title"
-            class="relative w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-[1.75rem] sm:rounded-[1.75rem] p-6 sm:p-7
-                   bg-white dark:bg-[#0d2550] ring-1 ring-brand-navy/[0.06] dark:ring-white/10 shadow-[0_40px_100px_-30px_rgba(6,24,58,0.6)]"
-            @submit.prevent="submit"
-          >
-            <button
-              v-if="!sending"
-              type="button"
-              class="absolute top-4 right-4 h-9 w-9 rounded-full flex items-center justify-center text-brand-navy/60 hover:text-brand-navy hover:bg-brand-navy/5 dark:text-white/60 dark:hover:text-white dark:hover:bg-white/10 transition"
-              aria-label="Close"
-              @click="close"
-            >
-              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
-
-            <p class="text-[0.6875rem] font-bold uppercase tracking-[0.16em]" :class="mode === 'approve' ? 'text-brand-gold-deep dark:text-brand-gold' : 'text-red-600 dark:text-red-400'">
-              {{ mode === 'approve' ? 'Approve application' : 'Reject application' }}
-            </p>
-            <h2 id="ad-title" class="mt-1 pr-10 font-heading text-2xl font-semibold tracking-[-0.01em] text-brand-navy dark:text-white">
-              {{ mode === 'approve' ? `Make ${first} a verified agent?` : `Why isn't ${first} approved?` }}
-            </h2>
-
+  <AppDialog
+    :open="open && !!application"
+    :title="mode === 'approve' ? `Make ${first} a verified agent?` : `Why isn't ${first} approved?`"
+    :subtitle="mode === 'approve' ? 'Approve application' : 'Reject application: they’ll see your reason'"
+    :tone="mode === 'approve' ? 'primary' : 'danger'"
+    :icon="mode === 'approve' ? 'check' : 'user'"
+    :busy="sending"
+    size="md"
+    @close="close"
+  >
+          <form v-if="application" @submit.prevent="submit">
             <!-- Who -->
-            <div class="mt-5 flex items-center gap-3 rounded-2xl p-3 bg-brand-cream dark:bg-white/[0.05] ring-1 ring-brand-navy/[0.05] dark:ring-white/10">
+            <div class="flex items-center gap-3 rounded-2xl p-3 bg-brand-cream dark:bg-white/[0.05] ring-1 ring-brand-navy/[0.05] dark:ring-white/10">
               <AppAvatar :name="application.user?.name" :src="application.user?.avatar" size="md" />
               <div class="min-w-0">
                 <p class="truncate text-sm font-semibold text-brand-navy dark:text-white">{{ name }}</p>
@@ -216,33 +194,15 @@ onUnmounted(() => window.removeEventListener('keydown', onKey))
               </div>
             </template>
 
-            <p v-if="failed" class="mt-4 rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-400" role="alert">That didn't go through. Please try again.</p>
-
-            <div class="mt-6 flex flex-col-reverse sm:flex-row gap-3">
-              <button type="button" class="flex-1 rounded-full px-5 py-3 text-sm font-semibold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20 dark:hover:ring-brand-gold transition" :disabled="sending" @click="close">Cancel</button>
-              <button
-                type="submit"
-                class="flex-1 inline-flex items-center justify-center gap-2 rounded-full px-5 py-3 text-sm font-bold transition disabled:opacity-50 disabled:shadow-none"
-                :class="mode === 'approve'
-                  ? 'bg-brand-gold text-[#0B2A5C] shadow-[0_4px_14px_rgba(212,165,74,0.45)] hover:bg-brand-gold-light'
-                  : 'bg-red-600 text-white shadow-[0_4px_14px_rgba(220,38,38,0.35)] hover:bg-red-700'"
-                :disabled="!ready || sending"
-              >
-                <svg v-if="sending" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity="0.25" stroke-width="3" /><path d="M21 12a9 9 0 00-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round" /></svg>
-                {{ sending ? (mode === 'approve' ? 'Approving…' : 'Rejecting…') : (mode === 'approve' ? 'Approve agent' : 'Reject and notify') }}
-              </button>
-            </div>
+            <p v-if="failed" class="mt-4 rounded-2xl bg-red-500/[0.08] px-4 py-3 text-sm text-red-700 ring-1 ring-red-500/20 dark:text-red-300" role="alert">That didn't go through. Please try again.</p>
           </form>
-        </Transition>
-      </div>
-    </Transition>
-  </Teleport>
-</template>
 
-<style scoped>
-.ad-backdrop-enter-active, .ad-backdrop-leave-active { transition: opacity 0.22s ease; }
-.ad-backdrop-enter-from, .ad-backdrop-leave-to { opacity: 0; }
-.ad-panel-enter-active { transition: opacity 0.25s ease, transform 0.35s cubic-bezier(0.22, 1, 0.36, 1); }
-.ad-panel-enter-from { opacity: 0; transform: translateY(24px) scale(0.98); }
-@media (prefers-reduced-motion: reduce) { .ad-panel-enter-active { transition: none; } }
-</style>
+    <template #footer>
+      <button type="button" :class="DIALOG_BTN.cancel" :disabled="sending" @click="close">Cancel</button>
+      <button type="button" :class="mode === 'approve' ? DIALOG_BTN.primary : DIALOG_BTN.danger" :disabled="!ready || sending" @click="submit">
+        <svg v-if="sending" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity="0.25" stroke-width="3" /><path d="M21 12a9 9 0 00-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round" /></svg>
+        {{ sending ? (mode === 'approve' ? 'Approving…' : 'Rejecting…') : (mode === 'approve' ? 'Approve agent' : 'Reject and notify') }}
+      </button>
+    </template>
+  </AppDialog>
+</template>

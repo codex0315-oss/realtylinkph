@@ -85,14 +85,18 @@ function removeNewPhoto(i: number) { newPhotos.value.splice(i, 1); newPhotoView.
 function removeNewPano(i: number)  { newPanoramas.value.splice(i, 1); newPanoView.value.splice(i, 1) }
 /* A saved photo is deleted straight away, so ask first. */
 async function removeExisting(photoId: number) {
+  const photo = property.value?.photos?.find(p => p.id === photoId)
   const ok = await ask({
     title: 'Remove this photo?',
     message: 'It’s deleted from the listing right away. Buyers stop seeing it.',
+    preview: photo ? { image: photo.thumb_url ?? photo.url, title: photo.is_360 ? '360° panorama' : 'Listing photo', meta: property.value?.title } : undefined,
     confirmLabel: 'Remove photo',
+    busyLabel: 'Removing…',
     tone: 'danger',
+    icon: 'photo',
+    action: () => deletePhoto(id, photoId).then(ok => ok || 'Couldn’t remove the photo. Please try again.'),
   })
   if (!ok) return
-  await deletePhoto(id, photoId)
   await fetchProperty(id)
 }
 

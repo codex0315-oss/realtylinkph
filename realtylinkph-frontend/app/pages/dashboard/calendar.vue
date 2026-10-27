@@ -194,7 +194,8 @@ async function blockWholeDay() {
       title: 'Block a day with viewings?',
       message: 'Blocking stops new bookings on this day. Viewings already booked stay as they are, so cancel or reschedule them yourself if you can’t make it.',
       confirmLabel: 'Block the day',
-      tone: 'primary',
+      tone: 'warning',
+      icon: 'calendar',
     })
     if (!ok) return
   }

@@ -136,19 +136,20 @@ async function remove() {
     title: 'Remove your cover photo?',
     message: 'Your profile will show the default banner instead. You can add a new cover any time.',
     confirmLabel: 'Remove cover',
+    busyLabel: 'Removing…',
     tone: 'danger',
+    icon: 'photo',
+    action: async () => {
+      try {
+        const res = await api.del<ApiResponse<User>>('/me/cover')
+        authStore.setUser(res.data)
+        return true
+      } catch {
+        return 'Couldn’t remove the cover. Please try again.'
+      }
+    },
   })
-  if (!ok) return
-  busy.value = true
-  try {
-    const res = await api.del<ApiResponse<User>>('/me/cover')
-    authStore.setUser(res.data)
-    toast.success('Cover photo removed')
-  } catch {
-    toast.error('Could not remove the cover.')
-  } finally {
-    busy.value = false
-  }
+  if (ok) toast.success('Cover photo removed')
 }
 
 const ctrl =

@@ -5,7 +5,7 @@ definePageMeta({ layout: 'dashboard' })
 
 const authStore = useAuthStore()
 const { appointments, loading, fetchMyAppointments } = useAppointment()
-const { properties: inventory, fetchInventory, relistProperty } = useProperty()
+const { properties: inventory, fetchInventory, relistProperty, error: propError } = useProperty()
 const toast = useToast()
 const ask   = useConfirm()
 
@@ -27,23 +27,20 @@ async function relist(prop: Property) {
   const ok = await ask({
     title:   'Re-list this property?',
     message: 'It comes back as a draft so you can review the details before it goes live again.',
-    subject: prop.title,
+    preview: listingPreview(prop),
     consequences: [
       'It returns to My Listings as a draft',
       'Buyers will not see it until you publish it',
       'We will open the edit form so you can update the price',
     ],
     confirmLabel: 'Re-list as draft',
-    tone: 'primary',
+    busyLabel: 'Re-listing…',
+    icon: 'relist',
+    action: async () => !!(await relistProperty(prop.id)) || propError.value || false,
   })
   if (!ok) return
-
-  if (await relistProperty(prop.id)) {
-    toast.success('Back in your listings as a draft')
-    await navigateTo(`/dashboard/listings/${prop.id}/edit`)
-  } else {
-    toast.error('Could not re-list this property')
-  }
+  toast.success('Back in your listings as a draft', { description: 'Check the details, then publish it again.' })
+  await navigateTo(`/dashboard/listings/${prop.id}/edit`)
 }
 </script>
 

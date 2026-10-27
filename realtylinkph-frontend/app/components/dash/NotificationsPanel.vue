@@ -138,12 +138,17 @@ async function clear() {
     title: 'Clear read notifications?',
     message: `This removes ${readCount.value} read ${readCount.value === 1 ? 'notification' : 'notifications'}. Unread ones stay.`,
     confirmLabel: 'Clear read',
+    busyLabel: 'Clearing…',
     tone: 'danger',
+    icon: 'bell',
+    action: async () => {
+      cleared = await clearRead()
+      return cleared > 0 || 'Couldn’t clear them. Please try again.'
+    },
   })
-  if (!ok) return
-  const n = await clearRead()
-  if (n) toast.success(`Cleared ${n} ${n === 1 ? 'notification' : 'notifications'}`)
+  if (ok) toast.success(`Cleared ${cleared} ${cleared === 1 ? 'notification' : 'notifications'}`)
 }
+let cleared = 0
 
 const iconBtn =
   'h-7 w-7 rounded-full flex items-center justify-center text-brand-navy/50 hover:text-brand-navy hover:bg-brand-navy/[0.06] ' +

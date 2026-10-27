@@ -199,21 +199,18 @@ async function remove(u: User) {
           'This cannot be undone',
         ],
     confirmLabel: isAdmin ? 'Remove admin' : 'Delete account',
+    busyLabel: isAdmin ? 'Removing…' : 'Deleting…',
     tone: 'danger',
+    icon: isAdmin ? 'user' : 'trash',
+    // Deleting an account can't be undone; removing an admin only revokes access.
+    typeToConfirm: isAdmin ? undefined : 'DELETE',
+    action: async () => (await deleteUser(u.id)) || error.value || 'Could not remove this user.',
   })
   if (!ok) return
 
-  busy.value = u.id
-  const done = await deleteUser(u.id)
-  busy.value = null
-
-  if (done) {
-    toast.success(isAdmin ? 'Administrator removed' : 'Account deleted')
-    if (drawerUser.value?.id === u.id) closeDetails()
-    await Promise.all([load(), fetchStats()])
-  } else {
-    toast.error(error.value || 'Could not remove this user.')
-  }
+  toast.success(isAdmin ? 'Administrator removed' : 'Account deleted', { description: u.name })
+  if (drawerUser.value?.id === u.id) closeDetails()
+  await Promise.all([load(), fetchStats()])
 }
 
 // ── Bulk delete ──
@@ -248,8 +245,10 @@ function clearSelection() { selected.value = new Set() }
 const bulk = reactive({ open: false, running: false, finished: false, total: 0, done: 0, failed: 0, current: '' })
 const bulkProgress = computed(() => bulk.total ? Math.round(((bulk.done + bulk.failed) / bulk.total) * 100) : 0)
 
+const bulkTyped = ref('')
 function openBulk() {
   if (!selected.value.size) return
+  bulkTyped.value = ''
   Object.assign(bulk, { open: true, running: false, finished: false, total: selected.value.size, done: 0, failed: 0, current: '' })
 }
 /** The modal can't be dismissed mid-run — closing it wouldn't stop the deletes. */
@@ -602,96 +601,80 @@ function since(iso: string): string {
     <CreateAdminDialog :open="showCreate" @close="showCreate = false" @created="onAdminCreated" />
 
     <!-- Bulk delete: confirm → progress → summary, in one dialog -->
-    <AppModal :open="bulk.open" size="sm" @close="closeBulk">
-      <div class="p-6">
+    <AppDialog
+      :open="bulk.open"
+      :title="bulk.running ? 'Deleting accounts…' : bulk.finished ? (bulk.failed ? 'Finished with some failures' : 'All done') : `Delete ${bulk.total} account${bulk.total === 1 ? '' : 's'}?`"
+      :subtitle="bulk.running ? 'Please keep this window open until it finishes.' : bulk.finished ? '' : 'This permanently deletes each account and everything attached to it.'"
+      :tone="bulk.finished ? (bulk.failed ? 'warning' : 'primary') : 'danger'"
+      :icon="bulk.finished ? (bulk.failed ? 'warning' : 'check') : 'trash'"
+      :busy="bulk.running"
+      @close="closeBulk"
+    >
+      <!-- 1. Confirm -->
+      <template v-if="!bulk.running && !bulk.finished">
+        <ul class="max-h-40 overflow-y-auto rounded-2xl bg-brand-cream dark:bg-white/[0.05] ring-1 ring-brand-navy/[0.06] dark:ring-white/10 divide-y divide-brand-navy/[0.06] dark:divide-white/[0.08] text-sm">
+          <li v-for="u in selectedUsers" :key="u.id" class="flex items-center justify-between gap-3 px-4 py-2.5">
+            <span class="font-semibold text-brand-navy dark:text-white truncate">{{ u.name }}</span>
+            <span class="text-xs text-brand-navy/50 dark:text-white/45 truncate">{{ u.email }}</span>
+          </li>
+        </ul>
+        <ul class="mt-4 space-y-2 text-sm text-brand-navy/70 dark:text-white/65">
+          <li class="flex items-start gap-2.5"><span class="mt-[0.45rem] h-1.5 w-1.5 flex-none rounded-full bg-red-500" />Their listings, photos, viewings, messages and reviews are deleted</li>
+          <li class="flex items-start gap-2.5"><span class="mt-[0.45rem] h-1.5 w-1.5 flex-none rounded-full bg-red-500" />This cannot be undone</li>
+        </ul>
+        <label class="mt-5 block">
+          <span class="mb-1.5 block text-xs font-semibold text-brand-navy/70 dark:text-white/65">Type <span class="font-mono font-bold tracking-wider text-red-600 dark:text-red-400">DELETE</span> to confirm</span>
+          <input v-model="bulkTyped" type="text" autocomplete="off" spellcheck="false" placeholder="DELETE" :class="DIALOG_FIELD" class="font-mono tracking-wider uppercase" data-autofocus />
+        </label>
+      </template>
 
-        <!-- 1. Confirm -->
+      <!-- 2. Progress -->
+      <template v-else-if="bulk.running">
+        <p class="text-sm text-brand-navy/70 dark:text-white/65 truncate">
+          {{ Math.min(bulk.done + bulk.failed + 1, bulk.total) }} of {{ bulk.total }}<span v-if="bulk.current"> · {{ bulk.current }}</span>
+        </p>
+        <div class="mt-3 flex items-center justify-between text-xs font-semibold text-brand-navy/55 dark:text-white/50">
+          <span>Progress</span>
+          <span class="text-brand-navy dark:text-white tabular-nums">{{ bulkProgress }}%</span>
+        </div>
+        <div class="mt-1.5 h-2.5 w-full rounded-full bg-brand-navy/[0.08] dark:bg-white/10 overflow-hidden" role="progressbar" :aria-valuenow="bulkProgress" aria-valuemin="0" aria-valuemax="100">
+          <div class="h-full rounded-full bg-red-500 transition-[width] duration-300 ease-out" :style="{ width: bulkProgress + '%' }" />
+        </div>
+      </template>
+
+      <!-- 3. Summary -->
+      <template v-else>
+        <p class="text-sm text-brand-navy/70 dark:text-white/65">
+          <span class="font-semibold text-brand-navy dark:text-white">{{ bulk.done }}</span> deleted<template v-if="bulk.failed">,
+          <span class="font-semibold text-amber-700 dark:text-amber-400">{{ bulk.failed }}</span> could not be removed; they're still in the list</template>.
+        </p>
+        <div class="mt-3 h-2.5 w-full rounded-full bg-brand-navy/[0.08] dark:bg-white/10 overflow-hidden">
+          <div class="h-full w-full rounded-full" :class="bulk.failed ? 'bg-amber-500' : 'bg-emerald-500'" />
+        </div>
+      </template>
+
+      <template #footer>
         <template v-if="!bulk.running && !bulk.finished">
-          <div class="flex items-start gap-3 mb-4">
-            <div class="h-10 w-10 rounded-full bg-red-50 flex items-center justify-center flex-shrink-0">
-              <svg class="h-5 w-5 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
-              </svg>
-            </div>
-            <div>
-              <h3 class="font-bold text-brand-navy text-base leading-snug">
-                Delete {{ bulk.total }} account{{ bulk.total === 1 ? '' : 's' }}?
-              </h3>
-              <p class="text-sm text-gray-500 mt-1">This permanently deletes each account and everything attached to it.</p>
-            </div>
-          </div>
-
-          <ul class="max-h-40 overflow-y-auto rounded-xl bg-gray-50 border border-gray-100 divide-y divide-gray-100 mb-4 text-sm">
-            <li v-for="u in selectedUsers" :key="u.id" class="flex items-center justify-between px-3 py-2">
-              <span class="font-medium text-brand-navy truncate">{{ u.name }}</span>
-              <span class="text-xs text-gray-400 truncate ml-3">{{ u.email }}</span>
-            </li>
-          </ul>
-
-          <ul class="text-xs text-gray-500 space-y-1 mb-5">
-            <li class="flex gap-2"><span class="text-red-400">•</span> Their listings, photos, viewings, messages and reviews are deleted</li>
-            <li class="flex gap-2"><span class="text-red-400">•</span> This cannot be undone</li>
-          </ul>
-
-          <div class="flex gap-3">
-            <AppButton variant="ghost" full-width @click="closeBulk">Cancel</AppButton>
-            <button
-              class="w-full rounded-xl bg-red-500 hover:bg-red-600 text-white text-sm font-bold py-2.5 transition-colors"
-              @click="runBulk"
-            >Delete {{ bulk.total }} account{{ bulk.total === 1 ? '' : 's' }}</button>
-          </div>
+          <button type="button" :class="DIALOG_BTN.cancel" @click="closeBulk">Cancel</button>
+          <button type="button" :class="DIALOG_BTN.danger" :disabled="bulkTyped.trim().toUpperCase() !== 'DELETE'" @click="runBulk">Delete {{ bulk.total }} account{{ bulk.total === 1 ? '' : 's' }}</button>
         </template>
-
-        <!-- 2. Progress -->
-        <template v-else-if="bulk.running">
-          <h3 class="font-bold text-brand-navy text-base mb-1">Deleting accounts…</h3>
-          <p class="text-sm text-gray-500 mb-4 truncate">
-            {{ Math.min(bulk.done + bulk.failed + 1, bulk.total) }} of {{ bulk.total }}<span v-if="bulk.current"> · {{ bulk.current }}</span>
-          </p>
-
-          <div class="flex items-center justify-between text-xs font-semibold text-gray-500 mb-1.5">
-            <span>Progress</span>
-            <span class="text-brand-navy tabular-nums">{{ bulkProgress }}%</span>
-          </div>
-          <div class="h-2.5 w-full rounded-full bg-gray-100 overflow-hidden" role="progressbar" :aria-valuenow="bulkProgress" aria-valuemin="0" aria-valuemax="100">
-            <div class="h-full rounded-full bg-red-500 transition-[width] duration-300 ease-out" :style="{ width: bulkProgress + '%' }" />
-          </div>
-
-          <p class="text-[0.6875rem] text-gray-400 mt-4">Please keep this window open until it finishes.</p>
-        </template>
-
-        <!-- 3. Summary -->
-        <template v-else>
-          <div class="flex items-start gap-3 mb-4">
-            <div class="h-10 w-10 rounded-full flex items-center justify-center flex-shrink-0" :class="bulk.failed ? 'bg-amber-50' : 'bg-emerald-50'">
-              <svg v-if="!bulk.failed" class="h-5 w-5 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
-              <svg v-else class="h-5 w-5 text-amber-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01M12 5a7 7 0 100 14 7 7 0 000-14z" /></svg>
-            </div>
-            <div>
-              <h3 class="font-bold text-brand-navy text-base leading-snug">
-                {{ bulk.failed ? 'Finished with some failures' : 'All done' }}
-              </h3>
-              <p class="text-sm text-gray-500 mt-1">
-                <span class="font-semibold text-brand-navy">{{ bulk.done }}</span> deleted<template v-if="bulk.failed">,
-                <span class="font-semibold text-amber-700">{{ bulk.failed }}</span> could not be removed — they're still in the list</template>.
-              </p>
-            </div>
-          </div>
-
-          <div class="h-2.5 w-full rounded-full bg-gray-100 overflow-hidden mb-5">
-            <div class="h-full rounded-full transition-[width] duration-300" :class="bulk.failed ? 'bg-amber-500' : 'bg-emerald-500'" style="width: 100%" />
-          </div>
-
-          <AppButton variant="primary" full-width @click="closeBulk">Done</AppButton>
-        </template>
-
-      </div>
-    </AppModal>
+        <button v-else-if="bulk.finished" type="button" :class="DIALOG_BTN.primary" @click="closeBulk">Done</button>
+      </template>
+    </AppDialog>
 
     <!-- Remove cover — reason required, sent to the agent -->
-    <AppModal :open="!!coverTarget" title="Remove this cover photo" @close="coverTarget = null">
-      <div v-if="coverTarget" class="p-6 space-y-4">
-        <div class="overflow-hidden rounded-xl border border-gray-200">
+    <AppDialog
+      :open="!!coverTarget"
+      title="Remove this cover photo?"
+      subtitle="The agent's profile goes back to the default banner, and they're told why."
+      tone="danger"
+      icon="photo"
+      :busy="coverSending"
+      size="md"
+      @close="coverTarget = null"
+    >
+      <template v-if="coverTarget">
+        <div class="overflow-hidden rounded-2xl ring-1 ring-brand-navy/[0.08] dark:ring-white/10">
           <img
             v-if="coverTarget.cover_url"
             :src="coverTarget.cover_url"
@@ -699,40 +682,33 @@ function since(iso: string): string {
             class="h-28 w-full object-cover"
             :style="{ objectPosition: `50% ${coverTarget.cover_position ?? 50}%` }"
           />
-          <p class="px-3 py-2 text-xs text-brand-text-secondary">Cover of <span class="font-semibold text-brand-navy">{{ coverTarget.name }}</span></p>
+          <p class="px-4 py-2.5 text-xs text-brand-navy/60 dark:text-white/55 bg-brand-cream dark:bg-white/[0.05]">Cover of <span class="font-semibold text-brand-navy dark:text-white">{{ coverTarget.name }}</span></p>
         </div>
 
-        <div>
-          <label class="text-sm font-medium text-brand-text-primary block mb-1">
-            Reason <span class="text-red-500">*</span>
-          </label>
-          <textarea
-            v-model="coverReason"
-            rows="3"
-            maxlength="500"
-            class="input-field resize-none"
-            placeholder="e.g. The cover shows another brokerage's logo. Please use a photo of your own work."
-          />
-          <div class="flex items-center justify-between mt-1">
-            <p class="text-[0.6875rem] text-brand-text-secondary">
-              Sent to <span class="font-medium text-brand-navy">{{ coverTarget.name }}</span> and kept in the activity log.
-            </p>
-            <span class="text-[0.6875rem] tabular-nums" :class="coverReason.trim().length < COVER_REASON_MIN ? 'text-gray-400' : 'text-emerald-600'">
-              {{ coverReason.trim().length }}/500
-            </span>
-          </div>
+        <label class="mt-4 mb-1.5 block text-sm font-semibold text-brand-navy dark:text-white">Reason <span class="text-red-500">*</span></label>
+        <textarea
+          v-model="coverReason"
+          rows="3"
+          maxlength="500"
+          :class="DIALOG_FIELD"
+          class="resize-none"
+          placeholder="e.g. The cover shows another brokerage's logo. Please use a photo of your own work."
+        />
+        <div class="mt-1 flex items-start justify-between gap-3">
+          <p class="text-xs text-brand-navy/55 dark:text-white/50">Sent to {{ coverTarget.name }} and kept in Activity.</p>
+          <span class="flex-none text-xs tabular-nums" :class="coverReason.trim().length < COVER_REASON_MIN ? 'text-brand-navy/40 dark:text-white/35' : 'text-emerald-600 dark:text-emerald-400'">{{ coverReason.trim().length }}/500</span>
         </div>
 
-        <p v-if="coverError" class="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">{{ coverError }}</p>
+        <p v-if="coverError" class="mt-4 rounded-2xl bg-red-500/[0.08] px-4 py-3 text-sm text-red-700 ring-1 ring-red-500/20 dark:text-red-300" role="alert">{{ coverError }}</p>
+      </template>
 
-        <div class="flex gap-3">
-          <AppButton variant="ghost" full-width :disabled="coverSending" @click="coverTarget = null">Cancel</AppButton>
-          <AppButton variant="primary" full-width :disabled="coverSending || coverReason.trim().length < COVER_REASON_MIN" @click="confirmCoverRemoval">
-            {{ coverSending ? 'Removing…' : 'Remove & notify agent' }}
-          </AppButton>
-        </div>
-      </div>
-    </AppModal>
+      <template #footer>
+        <button type="button" :class="DIALOG_BTN.cancel" :disabled="coverSending" @click="coverTarget = null">Cancel</button>
+        <button type="button" :class="DIALOG_BTN.danger" :disabled="coverSending || coverReason.trim().length < COVER_REASON_MIN" @click="confirmCoverRemoval">
+          {{ coverSending ? 'Removing…' : 'Remove & notify agent' }}
+        </button>
+      </template>
+    </AppDialog>
 
     <!-- ── Details drawer ── -->
     <Teleport to="body">

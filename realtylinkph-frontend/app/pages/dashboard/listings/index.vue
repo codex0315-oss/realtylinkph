@@ -68,32 +68,31 @@ onUnmounted(() => document.removeEventListener('click', closeMenu))
 /* ── Actions ── */
 const busy = ref<number | null>(null)
 
+/*
+ * Each action asks first, then runs inside the dialog: it shows a spinner,
+ * closes when done, and keeps any server error on screen for a retry.
+ */
 async function remove(prop: Property) {
   closeMenu()
   const ok = await confirm({
     title:   'Delete this listing?',
     message: 'The listing and all of its photos will be permanently removed. This cannot be undone.',
-    subject: prop.title,
+    preview: listingPreview(prop),
     consequences: [
       'Buyers will no longer see it anywhere on the site',
       'Its inquiries and viewing history are removed with it',
       'To hide it temporarily instead, use Unpublish',
     ],
     confirmLabel: 'Delete listing',
+    busyLabel: 'Deleting…',
     tone: 'danger',
+    icon: 'trash',
+    typeToConfirm: 'DELETE',
+    action: async () => (await deleteProperty(prop.id)) || error.value || false,
   })
   if (!ok) return
-
-  busy.value = prop.id
-  const deleted = await deleteProperty(prop.id)
-  busy.value = null
-
-  if (deleted) {
-    toast.success('Listing deleted')
-    await fetchMyListings()
-  } else {
-    toast.error('Could not delete this listing')
-  }
+  toast.success('Listing deleted', { description: `“${prop.title}” is gone for good.` })
+  await fetchMyListings()
 }
 
 async function sell(prop: Property) {
@@ -101,43 +100,64 @@ async function sell(prop: Property) {
   const ok = await confirm({
     title:   'Mark this listing as sold?',
     message: 'Use this once the deal has closed.',
-    subject: prop.title,
+    preview: listingPreview(prop),
     consequences: [
       'It is hidden from buyers and removed from search',
       'It moves to your Inventory, under History',
       'You can re-list it at any time',
     ],
     confirmLabel: 'Mark as sold',
-    tone: 'primary',
+    busyLabel: 'Updating…',
+    icon: 'sold',
+    action: async () => !!(await markSold(prop.id)) || error.value || false,
   })
   if (!ok) return
-
-  busy.value = prop.id
-  const sold = await markSold(prop.id)
-  busy.value = null
-
-  if (sold) {
-    toast.success('Moved to your Inventory')
-    await fetchMyListings()
-  } else {
-    toast.error('Could not update this listing')
-  }
+  toast.success('Marked as sold 🎉', { description: 'It moved to History.', action: { label: 'View', run: () => navigateTo('/dashboard/history') } })
+  await fetchMyListings()
 }
-async function publish(id: number) {
-  busy.value = id
-  const ok = await publishProperty(id)
-  if (ok) { toast.success('Published. Buyers can see it now'); await fetchMyListings() }
-  // The server refuses to publish a listing that's missing a title, price,
-  // address or photo, and says which — that message is the useful part.
-  else toast.error(error.value || 'Could not publish this listing.')
-  busy.value = null
+
+async function publish(prop: Property) {
+  const ok = await confirm({
+    title:   'Publish this listing?',
+    message: 'It goes live for every buyer on RealtyLink PH.',
+    preview: listingPreview(prop),
+    consequences: [
+      'It appears on Browse right away, and on the home page within a couple of minutes',
+      'Buyers can save it, message you and book viewings',
+      'You can unpublish it any time',
+    ],
+    confirmLabel: 'Publish now',
+    busyLabel: 'Publishing…',
+    icon: 'publish',
+    // The server refuses a listing that's missing a title, price, address or
+    // photo, and says which: that message shows in the dialog.
+    action: async () => !!(await publishProperty(prop.id)) || error.value || false,
+  })
+  if (!ok) return
+  toast.success('Published', { description: 'Buyers can see it now.', action: { label: 'View live', run: () => navigateTo(propertyHref(prop.id)) } })
+  await fetchMyListings()
 }
-async function unpublish(id: number) {
+
+async function unpublish(prop: Property) {
   closeMenu()
-  busy.value = id
-  const ok = await unpublishProperty(id)
-  if (ok) { toast.success('Unpublished. It’s hidden from buyers'); await fetchMyListings() }
-  busy.value = null
+  const ok = await confirm({
+    title:   'Unpublish this listing?',
+    message: 'It’s hidden from buyers and goes back to your drafts.',
+    preview: listingPreview(prop),
+    consequences: [
+      'It disappears from Browse, search and the home page',
+      'Chats and booked viewings stay as they are',
+      'Publish it again whenever you’re ready',
+    ],
+    confirmLabel: 'Unpublish',
+    busyLabel: 'Unpublishing…',
+    tone: 'warning',
+    icon: 'hide',
+    action: async () => !!(await unpublishProperty(prop.id)) || error.value || false,
+  })
+  if (!ok) return
+  toast.success('Unpublished', { description: 'It’s back in your drafts.' })
+  await fetchMyListings()
 }
 
 /* ── Display ── */
@@ -336,7 +356,7 @@ function statusOf(p: Property) {
               v-else-if="prop.status === 'draft'"
               type="button"
               class="flex-1 rounded-full bg-brand-gold py-2 text-xs font-bold text-[#0B2A5C] shadow-[0_4px_14px_rgba(212,165,74,0.35)] hover:bg-brand-gold-light transition"
-              @click="publish(prop.id)"
+              @click="publish(prop)"
             >Publish</button>
             <NuxtLink
               v-else
@@ -364,7 +384,7 @@ function statusOf(p: Property) {
                   <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
                   Mark as sold
                 </button>
-                <button v-if="prop.status === 'published'" type="button" class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-brand-navy hover:bg-brand-navy/[0.05] dark:text-white dark:hover:bg-white/[0.06]" @click="unpublish(prop.id)">
+                <button v-if="prop.status === 'published'" type="button" class="flex w-full items-center gap-2 rounded-xl px-3 py-2 text-left text-sm text-brand-navy hover:bg-brand-navy/[0.05] dark:text-white dark:hover:bg-white/[0.06]" @click="unpublish(prop)">
                   <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" /></svg>
                   Unpublish
                 </button>

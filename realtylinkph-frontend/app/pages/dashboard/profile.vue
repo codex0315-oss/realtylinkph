@@ -316,7 +316,9 @@ onBeforeRouteLeave(async () => {
     title: 'Leave without saving?',
     message: 'Your changes to your name, phone or photo haven’t been saved.',
     confirmLabel: 'Leave page',
-    tone: 'danger',
+    cancelLabel: 'Keep editing',
+    tone: 'warning',
+    icon: 'leave',
   })
 })
 function onBeforeUnload(e: BeforeUnloadEvent) {

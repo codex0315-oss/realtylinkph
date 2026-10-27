@@ -60,18 +60,15 @@ async function startDisconnect() {
     message: 'RealtyLink PH will stop adding your viewings to Google Calendar.',
     consequences: ['New and changed viewings won’t sync any more', 'Viewings already in your calendar stay there', 'You can connect again any time'],
     confirmLabel: 'Disconnect',
+    busyLabel: 'Disconnecting…',
     tone: 'danger',
+    icon: 'calendar',
+    action: async () => (await disconnectGcal()) || 'Couldn’t disconnect. Please try again.',
   })
   if (!ok) return
-  busy.value = true
-  if (await disconnectGcal()) {
-    await fetchMe()
-    updateAction({ done: true })
-    toast.success('Google Calendar disconnected.')
-  } else {
-    toast.error('Couldn’t disconnect. Please try again.')
-  }
-  busy.value = false
+  await fetchMe()
+  updateAction({ done: true })
+  toast.success('Google Calendar disconnected')
 }
 
 /* ── Password ── */

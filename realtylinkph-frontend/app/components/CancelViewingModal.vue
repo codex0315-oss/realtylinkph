@@ -68,10 +68,19 @@ function fmtWhen(iso?: string) {
 </script>
 
 <template>
-  <AppModal :open="open" :title="isDecline ? 'Decline this request' : 'Cancel this viewing'" @close="emit('close')">
-    <div v-if="appointment" class="p-6 space-y-4">
+  <AppDialog
+    :open="open && !!appointment"
+    :title="isDecline ? 'Decline this request?' : 'Cancel this viewing?'"
+    :subtitle="isDecline ? 'The buyer is told right away and can book another time.' : `${otherParty} is told right away.`"
+    tone="danger"
+    icon="calendar"
+    :busy="sending"
+    size="md"
+    @close="emit('close')"
+  >
+    <div v-if="appointment" class="space-y-4">
       <!-- What's being cancelled -->
-      <div class="rounded-xl bg-gray-50 dark:bg-white/5 border border-gray-200 dark:border-white/10 p-3">
+      <div class="rounded-2xl bg-brand-cream dark:bg-white/[0.05] ring-1 ring-brand-navy/[0.06] dark:ring-white/10 px-4 py-3">
         <p class="text-sm font-semibold text-brand-navy dark:text-white truncate">
           {{ appointment.property?.title ?? `Property #${appointment.property_id}` }}
         </p>
@@ -83,7 +92,7 @@ function fmtWhen(iso?: string) {
       <!-- The consequence, stated before they act -->
       <div
         v-if="isLate"
-        class="rounded-xl border border-amber-300 bg-amber-50 dark:bg-amber-500/10 dark:border-amber-500/30 px-4 py-3"
+        class="rounded-2xl ring-1 ring-amber-400/40 bg-amber-500/[0.08] px-4 py-3"
       >
         <p class="text-sm font-bold text-amber-900 dark:text-amber-300 flex items-center gap-1.5">
           <svg class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v2m0 4h.01M10.29 3.86L1.82 18a2 2 0 001.71 3h16.94a2 2 0 001.71-3L13.71 3.86a2 2 0 00-3.42 0z" /></svg>
@@ -110,10 +119,10 @@ function fmtWhen(iso?: string) {
             v-for="[value, label] in reasons"
             :key="value"
             type="button"
-            class="text-left text-sm px-3 py-2.5 rounded-xl border transition-colors"
+            class="text-left text-sm px-3.5 py-2.5 rounded-2xl ring-1 transition"
             :class="code === value
-              ? 'border-brand-gold bg-brand-gold/10 text-brand-navy dark:text-white font-semibold'
-              : 'border-gray-200 dark:border-white/15 text-brand-navy/75 dark:text-white/70 hover:border-brand-gold/50'"
+              ? 'ring-2 ring-brand-gold bg-brand-gold/10 text-brand-navy dark:text-white font-semibold'
+              : 'ring-brand-navy/10 dark:ring-white/15 text-brand-navy/75 dark:text-white/70 hover:ring-brand-gold/60'"
             @click="code = value"
           >{{ label }}</button>
         </div>
@@ -133,20 +142,21 @@ function fmtWhen(iso?: string) {
           v-model="note"
           rows="3"
           maxlength="500"
-          class="input-field resize-none"
+          :class="DIALOG_FIELD" class="resize-none"
           :placeholder="isAgent ? 'This is shared with the buyer.' : 'This is shared with the agent.'"
         />
         <p v-if="touched && noteRequired && !note.trim()" class="text-xs text-red-600 dark:text-red-400 mt-1.5">
           Please describe the reason when choosing "Other".
         </p>
       </div>
-
-      <div class="flex gap-3 pt-1">
-        <AppButton variant="ghost" full-width :disabled="sending" @click="emit('close')">Keep it</AppButton>
-        <AppButton variant="danger" full-width :disabled="sending || !canSubmit" @click="submit">
-          {{ sending ? 'Cancelling…' : (isDecline ? 'Decline request' : 'Cancel viewing') }}
-        </AppButton>
-      </div>
     </div>
-  </AppModal>
+
+    <template #footer>
+      <button type="button" :class="DIALOG_BTN.cancel" :disabled="sending" @click="emit('close')">Keep it</button>
+      <button type="button" :class="DIALOG_BTN.danger" :disabled="sending || !canSubmit" @click="submit">
+        <svg v-if="sending" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity="0.25" stroke-width="3" /><path d="M21 12a9 9 0 00-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round" /></svg>
+        {{ sending ? (isDecline ? 'Declining…' : 'Cancelling…') : (isDecline ? 'Decline request' : 'Cancel viewing') }}
+      </button>
+    </template>
+  </AppDialog>
 </template>

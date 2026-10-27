@@ -95,12 +95,14 @@ async function remove(r: AgentReview) {
   const sure = await ask({
     title: 'Remove your reply?',
     message: 'It disappears from your public profile. The review itself stays.',
+    subject: `${r.buyer?.name ?? 'Buyer'} · ${'★'.repeat(r.rating)}`,
     confirmLabel: 'Remove reply',
+    busyLabel: 'Removing…',
     tone: 'danger',
+    icon: 'chat',
+    action: async () => !!(await replyToReview(r.id, null)) || 'Couldn’t remove it. Please try again.',
   })
-  if (!sure) return
-  if (await replyToReview(r.id, null)) toast.success('Reply removed')
-  else toast.error('Couldn’t remove it. Please try again.')
+  if (sure) toast.success('Reply removed')
 }
 
 /* ── Review text: "👍 tag · tag" line → chips, the rest → note ── */

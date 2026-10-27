@@ -247,14 +247,21 @@ async function removeChat(c: Conversation) {
   const name = other(c)?.name ?? 'this person'
   const ok = await confirm({
     title: 'Delete this conversation?',
-    message: `Your chat with ${name}${c.property?.title ? ` about “${c.property.title}”` : ''} will be removed from your inbox. ${name} keeps their copy, and the chat comes back if either of you sends a new message.`,
+    message: 'It will be removed from your inbox.',
+    subject: `${name}${c.property?.title ? ` · ${c.property.title}` : ''}`,
+    consequences: [
+      `${name} keeps their copy; this only clears it from your side`,
+      'If either of you sends a new message, it comes back',
+    ],
     confirmLabel: 'Delete conversation',
+    busyLabel: 'Deleting…',
     tone: 'danger',
+    icon: 'chat',
+    action: async () => (await deleteConversation(c.id)) || 'Couldn’t delete the conversation. Please try again.',
   })
   if (!ok) return
   if (openId.value === c.id) closeThread()
-  if (await deleteConversation(c.id)) toast.success('Conversation deleted')
-  else toast.error('Couldn’t delete the conversation. Please try again.')
+  toast.success('Conversation deleted')
 }
 </script>
 

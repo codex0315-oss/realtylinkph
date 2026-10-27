@@ -315,9 +315,6 @@ const leaveBusy   = ref(false)
 /* "Discard" needs a second tap: it deletes the photos as well. */
 const discardArmed = ref(false)
 function closeLeave() { leaveModal.value = false; discardArmed.value = false }
-function onLeaveKey(e: KeyboardEvent) { if (e.key === 'Escape' && leaveModal.value && !leaveBusy.value) closeLeave() }
-onMounted(() => window.addEventListener('keydown', onLeaveKey))
-onUnmounted(() => window.removeEventListener('keydown', onLeaveKey))
 let leaveTarget   = '/dashboard/listings'
 
 onBeforeRouteLeave((to) => {
@@ -692,97 +689,63 @@ onUnmounted(() => {
 
     <!-- Leaving mid-listing. Everything is already saved, so this is a choice,
          not a warning: keep the draft for later, or throw it away. -->
-    <Teleport to="body">
-      <Transition name="leave">
-        <div v-if="leaveModal" class="fixed inset-0 z-[95] flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="leave-title">
-          <div class="absolute inset-0 bg-[#06183A]/55 backdrop-blur-sm" @click="leaveBusy ? undefined : closeLeave()" />
+    <AppDialog
+      :open="leaveModal"
+      title="Finish this listing later?"
+      subtitle="Everything you've added is kept as a draft in My Listings. Buyers won't see it until you publish it."
+      icon="leave"
+      :busy="leaveBusy"
+      @close="closeLeave"
+    >
+      <!-- The draft at a glance -->
+      <div class="flex items-center gap-3 rounded-2xl p-2.5 pr-4 bg-brand-cream dark:bg-white/[0.05] ring-1 ring-brand-navy/[0.06] dark:ring-white/10">
+        <span class="h-14 w-16 flex-none overflow-hidden rounded-xl bg-brand-navy/[0.06] dark:bg-white/10 flex items-center justify-center">
+          <img v-if="coverUrl" :src="coverUrl" alt="" class="h-full w-full object-cover" />
+          <svg v-else class="h-6 w-6 text-brand-navy/30 dark:text-white/30" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75" /></svg>
+        </span>
+        <div class="min-w-0">
+          <p class="truncate text-sm font-semibold text-brand-navy dark:text-white">{{ form.title || 'Untitled listing' }}</p>
+          <p class="mt-1 flex flex-wrap gap-1.5 text-[0.6875rem] font-semibold text-brand-navy/70 dark:text-white/65">
+            <span class="rounded-full bg-brand-navy/[0.06] dark:bg-white/10 px-2 py-0.5">{{ gallery.length }} {{ gallery.length === 1 ? 'photo' : 'photos' }}</span>
+            <span v-if="panos.length" class="rounded-full bg-brand-navy/[0.06] dark:bg-white/10 px-2 py-0.5">{{ panos.length }} 360°</span>
+            <span v-if="form.price > 0" class="rounded-full bg-brand-gold/20 px-2 py-0.5 text-brand-gold-deep dark:text-brand-gold">{{ priceText }}</span>
+          </p>
+        </div>
+      </div>
 
-          <div class="leave-card relative w-full sm:max-w-md overflow-hidden rounded-t-3xl sm:rounded-3xl bg-white dark:bg-[#0B1A35] ring-1 ring-brand-navy/10 dark:ring-white/10 shadow-[0_30px_80px_-20px_rgba(6,24,58,0.6)]">
-            <!-- What's being kept: the draft at a glance -->
-            <div class="relative overflow-hidden bg-brand-navy px-6 pt-6 pb-5 text-white">
-              <div class="absolute inset-0 bg-grid-gold opacity-[0.07] pointer-events-none" />
-              <div class="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-brand-gold/20 blur-3xl pointer-events-none" />
-              <div class="relative flex items-center gap-4">
-                <span class="h-16 w-20 flex-none overflow-hidden rounded-2xl bg-white/10 ring-2 ring-brand-gold/50">
-                  <img v-if="coverUrl" :src="coverUrl" alt="" class="h-full w-full object-cover" />
-                  <span v-else class="h-full w-full flex items-center justify-center text-brand-gold">
-                    <svg class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75" /></svg>
-                  </span>
-                </span>
-                <div class="min-w-0">
-                  <p class="text-[0.6875rem] font-bold uppercase tracking-[0.16em] text-brand-gold">Your draft</p>
-                  <p class="mt-0.5 truncate font-semibold">{{ form.title || 'Untitled listing' }}</p>
-                  <p class="mt-1 flex flex-wrap gap-1.5 text-[0.6875rem] font-semibold">
-                    <span class="rounded-full bg-white/10 px-2 py-0.5">{{ gallery.length }} {{ gallery.length === 1 ? 'photo' : 'photos' }}</span>
-                    <span v-if="panos.length" class="rounded-full bg-white/10 px-2 py-0.5">{{ panos.length }} 360°</span>
-                    <span v-if="form.price > 0" class="rounded-full bg-brand-gold/20 px-2 py-0.5 text-brand-gold">{{ priceText }}</span>
-                  </p>
-                </div>
-              </div>
-            </div>
-
-            <div class="px-6 pt-5 pb-10 sm:pb-6">
-              <h3 id="leave-title" class="font-heading text-xl font-semibold text-brand-navy dark:text-white">Finish this listing later?</h3>
-              <p class="mt-1.5 text-sm leading-relaxed text-brand-text-secondary dark:text-white/55">
-                Everything you've added is kept as a draft in <span class="font-semibold text-brand-navy dark:text-white">My Listings</span>. Buyers won't see it until you publish it.
-              </p>
-
-              <div class="mt-5 space-y-2">
-                <button
-                  type="button"
-                  class="w-full inline-flex items-center justify-center gap-2 rounded-full bg-brand-gold px-5 py-3 text-sm font-bold text-[#0B2A5C] shadow-[0_6px_20px_rgba(212,165,74,0.45)] hover:bg-brand-gold-light transition disabled:opacity-60"
-                  :disabled="leaveBusy"
-                  @click="leaveSaving"
-                >
-                  <svg v-if="leaveBusy && !discardArmed" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-                  <svg v-else class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4"><path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z" /></svg>
-                  {{ leaveBusy && !discardArmed ? 'Saving…' : 'Save draft and leave' }}
-                </button>
-                <button
-                  type="button"
-                  class="w-full rounded-full px-5 py-3 text-sm font-bold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20 transition disabled:opacity-60"
-                  :disabled="leaveBusy"
-                  @click="closeLeave"
-                >Keep editing</button>
-              </div>
-
-              <!-- Discard asks twice: it deletes the photos too -->
-              <div class="mt-4 border-t border-brand-navy/[0.06] dark:border-white/10 pt-4">
-                <button
-                  v-if="!discardArmed"
-                  type="button"
-                  class="w-full inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-red-600 hover:text-red-700 dark:text-red-400 transition disabled:opacity-50"
-                  :disabled="leaveBusy"
-                  @click="discardArmed = true"
-                >
-                  <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>
-                  Discard this draft
-                </button>
-                <div v-else class="rounded-2xl bg-red-500/[0.07] ring-1 ring-red-500/20 p-3">
-                  <p class="text-xs text-red-700 dark:text-red-300">This deletes the draft and its {{ gallery.length + panos.length }} {{ gallery.length + panos.length === 1 ? 'photo' : 'photos' }} for good.</p>
-                  <div class="mt-2 flex gap-2">
-                    <button type="button" class="flex-1 rounded-full bg-red-600 px-4 py-2 text-xs font-bold text-white hover:bg-red-700 transition disabled:opacity-60" :disabled="leaveBusy" @click="leaveDiscarding">{{ leaveBusy ? 'Deleting…' : 'Yes, delete it' }}</button>
-                    <button type="button" class="flex-1 rounded-full px-4 py-2 text-xs font-bold text-brand-navy ring-1 ring-brand-navy/15 dark:text-white dark:ring-white/20" :disabled="leaveBusy" @click="discardArmed = false">Cancel</button>
-                  </div>
-                </div>
-              </div>
-            </div>
+      <!-- Discard asks twice: it deletes the photos too -->
+      <div class="mt-4">
+        <button
+          v-if="!discardArmed"
+          type="button"
+          class="inline-flex items-center gap-1.5 text-xs font-semibold text-red-600 hover:text-red-700 dark:text-red-400 transition disabled:opacity-50"
+          :disabled="leaveBusy"
+          @click="discardArmed = true"
+        >
+          <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" :d="DIALOG_ICON.trash" /></svg>
+          Discard this draft instead
+        </button>
+        <div v-else class="rounded-2xl bg-red-500/[0.07] ring-1 ring-red-500/20 p-3.5">
+          <p class="text-sm text-red-700 dark:text-red-300">This deletes the draft and its {{ gallery.length + panos.length }} {{ gallery.length + panos.length === 1 ? 'photo' : 'photos' }} for good.</p>
+          <div class="mt-3 flex flex-col-reverse sm:flex-row gap-2">
+            <button type="button" :class="DIALOG_BTN.cancel" class="sm:flex-1 !py-2" :disabled="leaveBusy" @click="discardArmed = false">Keep it</button>
+            <button type="button" :class="DIALOG_BTN.danger" class="sm:flex-1 !py-2" :disabled="leaveBusy" @click="leaveDiscarding">{{ leaveBusy && discardArmed ? 'Deleting…' : 'Yes, delete it' }}</button>
           </div>
         </div>
-      </Transition>
-    </Teleport>
+      </div>
+
+      <template #footer>
+        <button type="button" :class="DIALOG_BTN.cancel" :disabled="leaveBusy" @click="closeLeave">Keep editing</button>
+        <button type="button" :class="DIALOG_BTN.primary" :disabled="leaveBusy" data-autofocus @click="leaveSaving">
+          <svg v-if="leaveBusy && !discardArmed" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24" aria-hidden="true"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+          {{ leaveBusy && !discardArmed ? 'Saving…' : 'Save draft and leave' }}
+        </button>
+      </template>
+    </AppDialog>
   </div>
 </template>
 
 <style scoped>
 .fade-enter-active, .fade-leave-active { transition: opacity .2s ease; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
-/* Leave dialog: fades in, the card rises (a sheet from the bottom on phones). */
-.leave-enter-active, .leave-leave-active { transition: opacity .2s ease; }
-.leave-enter-active .leave-card, .leave-leave-active .leave-card { transition: transform .28s cubic-bezier(0.22, 1, 0.36, 1); }
-.leave-enter-from, .leave-leave-to { opacity: 0; }
-.leave-enter-from .leave-card, .leave-leave-to .leave-card { transform: translateY(24px); }
-@media (prefers-reduced-motion: reduce) {
-  .leave-enter-active, .leave-leave-active, .leave-enter-active .leave-card, .leave-leave-active .leave-card { transition: none; }
-}
 </style>

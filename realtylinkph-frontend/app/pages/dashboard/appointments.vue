@@ -68,15 +68,13 @@ async function doComplete(appt: Appointment) {
       'The buyer is then able to leave you a review',
     ],
     confirmLabel: 'Mark as done',
-    tone: 'primary',
+    busyLabel: 'Updating…',
+    icon: 'calendar',
+    action: async () => (await complete(appt.id)) || apptError.value || 'Could not update this viewing.',
   })
   if (!ok) return
-
-  busy.value = appt.id
-  const done = await complete(appt.id)
-  busy.value = null
-  if (done) { toast.success('Viewing marked as done'); await fetchMyAppointments() }
-  else toast.error('Could not update this viewing')
+  toast.success('Viewing marked as done', { description: 'The buyer can now leave you a review.' })
+  await fetchMyAppointments()
 }
 
 </script>

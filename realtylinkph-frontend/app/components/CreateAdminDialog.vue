@@ -88,9 +88,6 @@ function close() {
   if (step.value === 'sending') return
   emit('close')
 }
-function onKey(e: KeyboardEvent) { if (e.key === 'Escape' && props.open) close() }
-onMounted(() => window.addEventListener('keydown', onKey))
-onUnmounted(() => window.removeEventListener('keydown', onKey))
 
 const POWERS = [
   'Approve or reject agent applications',
@@ -102,37 +99,20 @@ const label = 'mb-1.5 block text-sm font-semibold text-brand-navy dark:text-whit
 </script>
 
 <template>
-  <Teleport to="body">
-    <Transition name="ca-backdrop">
-      <div v-if="open" class="fixed inset-0 z-[95] flex items-end sm:items-center justify-center sm:p-4 bg-brand-navy-deep/60 backdrop-blur-sm" @click.self="close">
-        <Transition name="ca-panel" appear>
-          <div
-            v-if="open"
-            role="dialog"
-            aria-modal="true"
-            aria-labelledby="ca-title"
-            class="relative w-full sm:max-w-lg max-h-[92vh] overflow-y-auto rounded-t-[1.75rem] sm:rounded-[1.75rem]
-                   bg-white dark:bg-[#0d2550] ring-1 ring-brand-navy/[0.06] dark:ring-white/10 shadow-[0_40px_100px_-30px_rgba(6,24,58,0.6)]"
-          >
-            <button
-              v-if="step !== 'sending'"
-              type="button"
-              class="absolute top-4 right-4 z-10 h-9 w-9 rounded-full flex items-center justify-center text-brand-navy/60 hover:text-brand-navy hover:bg-brand-navy/5 dark:text-white/60 dark:hover:text-white dark:hover:bg-white/10 transition"
-              aria-label="Close"
-              @click="close"
-            >
-              <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-            </button>
-
+  <AppDialog
+    :open="open"
+    :title="step === 'done' ? 'Admin account created' : 'Create an admin account'"
+    :subtitle="step === 'done' ? `${created?.name ?? 'They'} can sign in now. Share these details privately.` : 'Useful for sharing the work, or handing over before you step down.'"
+    :icon="step === 'done' ? null : 'user'"
+    :busy="step === 'sending'"
+    size="md"
+    @close="close"
+  >
             <Transition name="ca-step" mode="out-in">
               <!-- ░░ Form ░░ -->
-              <form v-if="step !== 'done'" key="form" class="p-6 sm:p-7" autocomplete="off" novalidate @submit.prevent="submit">
-                <p class="text-[0.6875rem] font-bold uppercase tracking-[0.16em] text-brand-gold-deep dark:text-brand-gold">New administrator</p>
-                <h2 id="ca-title" class="mt-1 pr-10 font-heading text-2xl font-semibold tracking-[-0.01em] text-brand-navy dark:text-white">Create an admin account</h2>
-                <p class="mt-1.5 text-sm text-brand-text-secondary dark:text-white/60">Useful for sharing the work, or handing over before you step down.</p>
-
+              <form v-if="step !== 'done'" key="form" autocomplete="off" novalidate @submit.prevent="submit">
                 <!-- What they'll be able to do -->
-                <div class="mt-5 rounded-2xl p-4 bg-brand-cream dark:bg-white/[0.05] ring-1 ring-brand-navy/[0.05] dark:ring-white/10">
+                <div class="rounded-2xl p-4 bg-brand-cream dark:bg-white/[0.05] ring-1 ring-brand-navy/[0.05] dark:ring-white/10">
                   <p class="flex items-center gap-2 text-xs font-bold uppercase tracking-[0.12em] text-brand-navy/60 dark:text-white/55">
                     <svg class="h-4 w-4 text-brand-gold-deep dark:text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z" /></svg>
                     Full admin access
@@ -196,32 +176,19 @@ const label = 'mb-1.5 block text-sm font-semibold text-brand-navy dark:text-whit
                   </div>
                 </div>
 
-                <p v-if="fieldError" class="mt-4 rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-400" role="alert">{{ fieldError }}</p>
-
-                <div class="mt-6 flex flex-col-reverse sm:flex-row gap-3">
-                  <button type="button" class="flex-1 rounded-full px-5 py-3 text-sm font-semibold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20 dark:hover:ring-brand-gold transition" :disabled="step === 'sending'" @click="close">Cancel</button>
-                  <button
-                    type="submit"
-                    class="flex-1 inline-flex items-center justify-center gap-2 rounded-full bg-brand-gold px-5 py-3 text-sm font-bold text-[#0B2A5C] shadow-[0_4px_14px_rgba(212,165,74,0.45)] hover:bg-brand-gold-light disabled:opacity-50 disabled:shadow-none transition"
-                    :disabled="!ready || step === 'sending'"
-                  >
-                    <svg v-if="step === 'sending'" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity="0.25" stroke-width="3" /><path d="M21 12a9 9 0 00-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round" /></svg>
-                    {{ step === 'sending' ? 'Creating…' : 'Create admin' }}
-                  </button>
-                </div>
+                <p v-if="fieldError" class="mt-4 rounded-2xl bg-red-500/[0.08] px-4 py-3 text-sm text-red-700 ring-1 ring-red-500/20 dark:text-red-300" role="alert">{{ fieldError }}</p>
+                <button type="submit" class="sr-only" tabindex="-1">Create admin</button>
               </form>
 
               <!-- ░░ Done ░░ -->
-              <div v-else key="done" class="p-6 sm:p-7 text-center" role="status" aria-live="polite">
-                <div class="relative mx-auto mt-2 h-20 w-20">
+              <div v-else key="done" class="text-center" role="status" aria-live="polite">
+                <div class="relative mx-auto h-20 w-20">
                   <span class="absolute inset-0 rounded-full bg-emerald-500/15 ca-pop" aria-hidden="true" />
                   <svg class="absolute inset-0 h-20 w-20 text-emerald-500" viewBox="0 0 80 80" fill="none" aria-hidden="true">
                     <circle cx="40" cy="40" r="30" stroke="currentColor" stroke-width="3" class="ca-ring" />
                     <path d="M27 41l9 9 18-19" stroke="currentColor" stroke-width="4" stroke-linecap="round" stroke-linejoin="round" class="ca-check" />
                   </svg>
                 </div>
-                <h2 id="ca-title" class="mt-5 font-heading text-2xl font-semibold text-brand-navy dark:text-white">Admin account created</h2>
-                <p class="mt-1.5 text-sm text-brand-text-secondary dark:text-white/60">{{ created?.name }} can sign in now. Share these details privately.</p>
 
                 <dl class="mt-5 space-y-2.5 rounded-2xl bg-brand-cream dark:bg-white/[0.05] ring-1 ring-brand-navy/[0.05] dark:ring-white/10 p-4 text-left text-sm">
                   <div class="flex justify-between gap-3">
@@ -234,28 +201,29 @@ const label = 'mb-1.5 block text-sm font-semibold text-brand-navy dark:text-whit
                   </div>
                 </dl>
                 <p class="mt-2 text-xs text-brand-navy/50 dark:text-white/45">Ask them to change the password after their first sign-in.</p>
-
-                <div class="mt-6 flex flex-col-reverse sm:flex-row gap-3">
-                  <button type="button" class="flex-1 rounded-full px-5 py-3 text-sm font-semibold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20 dark:hover:ring-brand-gold transition" @click="close">Done</button>
-                  <button type="button" class="flex-1 inline-flex items-center justify-center gap-2 rounded-full bg-brand-gold px-5 py-3 text-sm font-bold text-[#0B2A5C] shadow-[0_4px_14px_rgba(212,165,74,0.45)] hover:bg-brand-gold-light transition" @click="copyDetails">
-                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" /></svg>
-                    Copy sign-in details
-                  </button>
-                </div>
               </div>
             </Transition>
-          </div>
-        </Transition>
-      </div>
-    </Transition>
-  </Teleport>
+
+    <template #footer>
+      <template v-if="step === 'done'">
+        <button type="button" :class="DIALOG_BTN.cancel" @click="close">Done</button>
+        <button type="button" :class="DIALOG_BTN.primary" @click="copyDetails">
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.666 3.888A2.25 2.25 0 0013.5 2.25h-3c-1.03 0-1.9.693-2.166 1.638m7.332 0c.055.194.084.4.084.612v0a.75.75 0 01-.75.75H9a.75.75 0 01-.75-.75v0c0-.212.03-.418.084-.612m7.332 0c.646.049 1.288.11 1.927.184 1.1.128 1.907 1.077 1.907 2.185V19.5a2.25 2.25 0 01-2.25 2.25H6.75A2.25 2.25 0 014.5 19.5V6.257c0-1.108.806-2.057 1.907-2.185a48.208 48.208 0 011.927-.184" /></svg>
+          Copy sign-in details
+        </button>
+      </template>
+      <template v-else>
+        <button type="button" :class="DIALOG_BTN.cancel" :disabled="step === 'sending'" @click="close">Cancel</button>
+        <button type="button" :class="DIALOG_BTN.primary" :disabled="!ready || step === 'sending'" @click="submit">
+          <svg v-if="step === 'sending'" class="h-4 w-4 animate-spin" fill="none" viewBox="0 0 24 24" aria-hidden="true"><circle cx="12" cy="12" r="9" stroke="currentColor" stroke-opacity="0.25" stroke-width="3" /><path d="M21 12a9 9 0 00-9-9" stroke="currentColor" stroke-width="3" stroke-linecap="round" /></svg>
+          {{ step === 'sending' ? 'Creating…' : 'Create admin' }}
+        </button>
+      </template>
+    </template>
+  </AppDialog>
 </template>
 
 <style scoped>
-.ca-backdrop-enter-active, .ca-backdrop-leave-active { transition: opacity 0.22s ease; }
-.ca-backdrop-enter-from, .ca-backdrop-leave-to { opacity: 0; }
-.ca-panel-enter-active { transition: opacity 0.25s ease, transform 0.35s cubic-bezier(0.22, 1, 0.36, 1); }
-.ca-panel-enter-from { opacity: 0; transform: translateY(24px) scale(0.98); }
 .ca-step-enter-active, .ca-step-leave-active { transition: opacity 0.2s ease, transform 0.25s cubic-bezier(0.22, 1, 0.36, 1); }
 .ca-step-enter-from { opacity: 0; transform: translateY(10px); }
 .ca-step-leave-to   { opacity: 0; transform: translateY(-6px); }
@@ -266,6 +234,6 @@ const label = 'mb-1.5 block text-sm font-semibold text-brand-navy dark:text-whit
 @keyframes ca-pop { from { transform: scale(0.6); opacity: 0; } to { transform: scale(1); opacity: 1; } }
 @media (prefers-reduced-motion: reduce) {
   .ca-ring, .ca-check { animation: none; stroke-dashoffset: 0; }
-  .ca-panel-enter-active, .ca-step-enter-active, .ca-step-leave-active { transition: none; }
+  .ca-step-enter-active, .ca-step-leave-active { transition: none; }
 }
 </style>

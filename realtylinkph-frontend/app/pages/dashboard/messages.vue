@@ -309,15 +309,15 @@ async function confirmDelete(conv: Conversation) {
       'If either of you sends a new message, it reappears here',
     ],
     confirmLabel: 'Delete conversation',
+    busyLabel: 'Deleting…',
     tone: 'danger',
+    icon: 'chat',
+    action: async () => (await deleteConversation(conv.id)) || 'Couldn’t delete this conversation. Please try again.',
   })
   if (!ok) return
 
   const wasActive = convStore.activeId === conv.id
   if (wasActive) stopListeningToConversation(conv.id)
-
-  const done = await deleteConversation(conv.id)
-  if (!done) { toast.error('Could not delete this conversation'); return }
 
   toast.success('Conversation deleted')
   // If the open thread was the one deleted, fall through to the next one.
