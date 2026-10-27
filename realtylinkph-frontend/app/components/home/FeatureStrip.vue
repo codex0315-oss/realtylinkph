@@ -48,7 +48,7 @@ const items = [
                  border border-brand-navy/10 dark:border-white/10
                  hover:bg-white/85 dark:hover:bg-white/[0.07]
                  hover:border-brand-gold/45
-                 hover:shadow-[0_14px_38px_rgba(8,21,47,0.10)] dark:hover:shadow-[0_14px_38px_rgba(0,0,0,0.45)]
+                 hover:shadow-[0_14px_38px_rgba(11,42,92,0.10)] dark:hover:shadow-[0_14px_38px_rgba(0,0,0,0.45)]
                  hover:-translate-y-1
                  transition-all duration-300"
         >

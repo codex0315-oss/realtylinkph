@@ -33,7 +33,7 @@ const TONES: Record<ConfirmTone, {
   primary: {
     ring:   'bg-brand-gold/10 border-brand-gold/30 text-brand-gold',
     icon:   'text-brand-gold',
-    button: 'bg-brand-gold hover:bg-brand-gold-light text-brand-navy shadow-[0_4px_16px_rgba(212,175,55,0.4)] hover:shadow-[0_6px_22px_rgba(212,175,55,0.6)]',
+    button: 'bg-brand-gold hover:bg-brand-gold-light text-brand-navy shadow-[0_4px_16px_rgba(212,165,74,0.4)] hover:shadow-[0_6px_22px_rgba(212,165,74,0.6)]',
     path:   'M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z',
   },
 }
@@ -105,7 +105,7 @@ onUnmounted(() => {
             class="relative w-full max-w-[27.5rem] rounded-2xl overflow-hidden
                    bg-white dark:bg-brand-navy-mid
                    border border-gray-200 dark:border-white/10
-                   shadow-[0_30px_80px_rgba(8,21,47,0.35)] dark:shadow-[0_30px_80px_rgba(0,0,0,0.7)]"
+                   shadow-[0_30px_80px_rgba(11,42,92,0.35)] dark:shadow-[0_30px_80px_rgba(0,0,0,0.7)]"
           >
             <div class="px-6 pt-6 pb-5">
               <!-- Icon -->

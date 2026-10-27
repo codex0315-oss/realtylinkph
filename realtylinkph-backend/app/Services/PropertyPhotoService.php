@@ -25,7 +25,7 @@ class PropertyPhotoService
     public function upload(Property $property, UploadedFile $file, bool $is360 = false): PropertyPhoto
     {
         return DB::transaction(function () use ($property, $file, $is360): PropertyPhoto {
-            [$path, $thumbPath] = $this->store($property->id, $file, $is360);
+            [$path, $thumbPath, $previewPath] = $this->store($property->id, $file, $is360);
 
             $nextOrder = $property->photos()->max('sort_order') + 1;
 
@@ -33,6 +33,7 @@ class PropertyPhotoService
                 'property_id' => $property->id,
                 'url'         => $path,
                 'thumb_url'   => $thumbPath,
+                'preview_url' => $previewPath,
                 'is_360'      => $is360,
                 'sort_order'  => $nextOrder,
             ]);
@@ -40,11 +41,12 @@ class PropertyPhotoService
     }
 
     /**
-     * Resize and write the two sizes. Returns [mainPath, thumbPath]; thumbPath
-     * is null (and the original is stored untouched) only when the image can't
-     * be decoded — the upload still succeeds rather than failing on an odd file.
+     * Resize and write the sizes. Returns [mainPath, thumbPath, previewPath];
+     * thumbPath is null (and the original is stored untouched) only when the
+     * image can't be decoded — the upload still succeeds rather than failing on
+     * an odd file. previewPath is set for big 360° panoramas only.
      *
-     * @return array{0: string, 1: string|null}
+     * @return array{0: string, 1: string|null, 2: string|null}
      */
     public function store(int $propertyId, UploadedFile $file, bool $is360): array
     {
@@ -57,7 +59,7 @@ class PropertyPhotoService
             return [$file->storeAs($dir, $base . '.' . $file->getClientOriginalExtension(), [
                 'disk' => Uploads::name(),
                 ...$options,
-            ]), null];
+            ]), null, null];
         }
 
         // A pano keeps its original bytes, so keep its original extension too.
@@ -68,7 +70,13 @@ class PropertyPhotoService
         Uploads::disk()->put($mainPath, $sizes['main'], $options);
         Uploads::disk()->put($thumbPath, $sizes['thumb'], $options);
 
-        return [$mainPath, $thumbPath];
+        $previewPath = null;
+        if ($sizes['preview'] !== null) {
+            $previewPath = "{$dir}/{$base}-preview.jpg";
+            Uploads::disk()->put($previewPath, $sizes['preview'], $options);
+        }
+
+        return [$mainPath, $thumbPath, $previewPath];
     }
 
     public function reorder(Property $property, array $orderedIds): void
@@ -82,7 +90,7 @@ class PropertyPhotoService
 
     public function delete(PropertyPhoto $photo): void
     {
-        Uploads::disk()->delete(array_filter([$photo->url, $photo->thumb_url]));
+        Uploads::disk()->delete(array_filter([$photo->url, $photo->thumb_url, $photo->preview_url]));
         $photo->delete();
     }
 }

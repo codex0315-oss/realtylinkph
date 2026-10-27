@@ -135,6 +135,18 @@ async function addFiles(e: Event, target: 'photo' | 'pano') {
   const input  = e.target as HTMLInputElement
   const files  = Array.from(input.files ?? [])
   input.value  = ''
+  await addFileList(files, target)
+}
+
+/* Drag and drop onto the upload area. */
+const dragOver = ref<'photo' | 'pano' | null>(null)
+function onDrop(e: DragEvent, target: 'photo' | 'pano') {
+  dragOver.value = null
+  const files = Array.from(e.dataTransfer?.files ?? []).filter(f => f.type.startsWith('image/'))
+  if (files.length) addFileList(files, target)
+}
+
+async function addFileList(files: File[], target: 'photo' | 'pano') {
   const tooBig = files.filter(f => f.size > MAX_PHOTO_BYTES)
   const ok     = files.filter(f => f.size <= MAX_PHOTO_BYTES)
   photoError.value = tooBig.length ? `Skipped ${tooBig.map(f => f.name).join(', ')} — over ${MAX_PHOTO_LABEL}.` : ''
@@ -248,7 +260,11 @@ async function doGenerateDescription() {
     lot_area:    form.lot_area,
     address:     form.address,
     property_id: draftId.value ?? undefined,
-  }, shots.map(s => s.file).filter((f): f is File => !!f))
+  },
+  // Photos already uploaded to the draft are read on the server, so nothing is
+  // re-sent (and a big photo can't trip the 5 MB limit for AI uploads). Only
+  // without a draft do the files go along: up to 6, each under 5 MB.
+  draftId.value ? [] : shots.map(s => s.file).filter((f): f is File => !!f && f.size <= 5 * 1024 * 1024).slice(0, 6))
   aiLoading.value = false
   if (desc) form.description = desc
   else aiError.value = 'Could not generate a description. The AI may be busy — try again.'
@@ -268,15 +284,47 @@ const canSubmit = computed(() =>
   !!form.title.trim() && !!form.address.trim() && form.price > 0,
 )
 
+/* ── Fit the step column to the window (desktop): the step scrolls inside,
+   Back / Continue stay on screen. ── */
+const stepCol = ref<HTMLElement | null>(null)
+const stepColHeight = ref<string | undefined>()
+function fitStepCol() {
+  if (!stepCol.value || window.innerWidth < 1024) { stepColHeight.value = undefined; return }
+  const top = stepCol.value.getBoundingClientRect().top + window.scrollY
+  stepColHeight.value = `${Math.max(360, Math.floor(window.innerHeight - top - 24))}px`
+}
+onMounted(() => { nextTick(fitStepCol); window.addEventListener('resize', fitStepCol) })
+onUnmounted(() => window.removeEventListener('resize', fitStepCol))
+watch(resumed, () => nextTick(fitStepCol))
+
+/* ── Live preview ── */
+const priceText = computed(() => listingPriceText(form.price, form.offer_type))
+const coverUrl = computed(() => gallery.value[0]?.url ?? null)
+/* An empty box (not "0") until a price is typed, so the placeholder shows. */
+const priceInput = computed({
+  get: () => (form.price > 0 ? form.price : ''),
+  set: (v: string | number) => { form.price = Number(v) || 0 },
+})
+const TYPE_ICONS = PROPERTY_TYPE_ICONS
+const fieldCls = LISTING_FIELD_CLS
+const labelCls = LISTING_LABEL_CLS
+
 /* ── Leaving mid-listing ── */
 const leaveModal  = ref(false)
 const leaveBusy   = ref(false)
+/* "Discard" needs a second tap: it deletes the photos as well. */
+const discardArmed = ref(false)
+function closeLeave() { leaveModal.value = false; discardArmed.value = false }
+function onLeaveKey(e: KeyboardEvent) { if (e.key === 'Escape' && leaveModal.value && !leaveBusy.value) closeLeave() }
+onMounted(() => window.addEventListener('keydown', onLeaveKey))
+onUnmounted(() => window.removeEventListener('keydown', onLeaveKey))
 let leaveTarget   = '/dashboard/listings'
 
 onBeforeRouteLeave((to) => {
   if (leavingOnPurpose) return true
   if (!draftId.value && !dirty) return true
   leaveTarget = to.fullPath
+  discardArmed.value = false
   leaveModal.value = true
   return false
 })
@@ -315,254 +363,426 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="max-w-5xl mx-auto">
-    <div class="flex items-center gap-3 mb-2 flex-wrap">
-      <NuxtLink to="/dashboard/listings" class="text-brand-text-secondary hover:text-brand-navy text-sm">← Back</NuxtLink>
-      <h1 class="font-playfair text-2xl font-bold text-brand-navy">{{ resumed ? 'Continue Listing' : 'New Listing' }}</h1>
-
-      <!-- Autosave status — the answer to "did that save?" without asking. -->
+  <div class="max-w-6xl mx-auto pb-24 lg:pb-0">
+    <!-- ── Heading ── -->
+    <header class="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+      <div class="min-w-0">
+        <NuxtLink to="/dashboard/listings" class="inline-flex items-center gap-1 text-[0.6875rem] font-bold uppercase tracking-[0.18em] text-brand-navy/45 hover:text-brand-gold-deep dark:text-white/40 dark:hover:text-brand-gold transition">
+          <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
+          My listings
+        </NuxtLink>
+        <div class="mt-1.5 flex flex-wrap items-center gap-3">
+        <h1 class="font-display text-2xl sm:text-[1.875rem] font-bold tracking-[-0.01em] leading-tight text-brand-navy dark:text-white">{{ resumed ? 'Continue listing' : 'New listing' }}</h1>
+      <!-- Autosave status: the answer to "did that save?" without asking -->
       <Transition name="fade">
         <span
           v-if="saveLabel"
-          class="ml-auto inline-flex items-center gap-1.5 text-xs font-medium"
-          :class="saveState === 'error' ? 'text-red-600' : saveState === 'saved' ? 'text-emerald-600' : 'text-gray-400'"
+          class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold ring-1"
+          :class="saveState === 'error' ? 'bg-red-500/10 text-red-700 ring-red-500/20 dark:text-red-300' : saveState === 'saved' ? 'bg-emerald-500/10 text-emerald-700 ring-emerald-500/20 dark:text-emerald-400' : 'bg-brand-navy/[0.04] text-brand-navy/60 ring-brand-navy/10 dark:bg-white/[0.06] dark:text-white/60 dark:ring-white/10'"
         >
-          <svg v-if="saveState === 'saving'" class="animate-spin h-3 w-3" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-          <svg v-else-if="saveState === 'saved'" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+          <svg v-if="saveState === 'saving'" class="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+          <svg v-else-if="saveState === 'saved'" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
           {{ saveLabel }}
         </span>
       </Transition>
+        </div>
+      </div>
+
+      <!-- ── Stepper (beside the title on desktop, to keep Continue in view) ── -->
+      <div class="w-full lg:w-auto">
+        <!-- Phones: the step's name, since the stepper only has room for numbers -->
+        <p class="sm:hidden mb-2 text-xs font-semibold text-brand-navy/60 dark:text-white/55">
+          Step {{ step }} of 3 · <span class="text-brand-navy dark:text-white">{{ steps[step - 1]!.label }}</span>
+        </p>
+        <ol class="grid grid-cols-3 gap-1.5 rounded-3xl p-1.5 bg-white dark:bg-[#0B1A35] ring-1 ring-brand-navy/[0.07] dark:ring-white/[0.08] lg:w-[34rem]">
+          <li v-for="s in steps" :key="s.n">
+            <button
+              type="button"
+              class="w-full flex items-center gap-2.5 rounded-2xl px-2.5 py-2 text-left transition"
+              :class="step === s.n ? 'bg-brand-navy text-white dark:bg-brand-gold dark:text-[#0B2A5C]' : 'hover:bg-brand-navy/[0.04] dark:hover:bg-white/[0.05]'"
+              :aria-current="step === s.n ? 'step' : undefined"
+              :title="s.desc"
+              @click="step = s.n"
+            >
+              <span
+                class="h-7 w-7 flex-none rounded-full flex items-center justify-center text-xs font-bold transition"
+                :class="step === s.n ? 'bg-white/15 text-white dark:bg-[#0B2A5C]/15 dark:text-[#0B2A5C]' : step > s.n ? 'bg-emerald-500 text-white' : 'bg-brand-navy/[0.06] text-brand-navy/55 dark:bg-white/10 dark:text-white/55'"
+              >
+                <svg v-if="step > s.n" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+                <span v-else>{{ s.n }}</span>
+              </span>
+              <span class="hidden sm:block min-w-0 truncate text-sm font-semibold" :class="step === s.n ? '' : 'text-brand-navy dark:text-white'">{{ s.label }}</span>
+            </button>
+          </li>
+        </ol>
+      </div>
+    </header>
+
+    <!-- Resumed draft -->
+    <div v-if="resumed" class="mb-5 flex flex-wrap items-center gap-x-3 gap-y-1 rounded-2xl bg-brand-gold/[0.08] ring-1 ring-brand-gold/25 px-4 py-3 text-sm text-brand-navy/80 dark:text-white/75">
+      <span class="font-semibold text-brand-navy dark:text-white">Picking up your unfinished listing.</span>
+      <span>This one stays saved in My Listings.</span>
+      <button type="button" class="font-bold text-brand-gold-deep dark:text-brand-gold hover:underline" @click="startFresh">Start a new listing instead</button>
     </div>
 
-    <p v-if="resumed" class="text-xs text-gray-500 mb-5">
-      Picking up your unfinished listing.
-      <button type="button" class="font-semibold text-brand-gold hover:underline" @click="startFresh">Start a new listing instead</button>
-      — this one stays saved in My Listings.
-    </p>
-    <div v-else class="mb-5" />
+    <div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] items-start">
+      <!-- ░░ Step content: fills the window on desktop, so Continue is always in view ░░ -->
+      <div ref="stepCol" class="min-w-0 lg:flex lg:flex-col" :style="stepColHeight ? { height: stepColHeight } : undefined">
+        <p v-if="error" class="mb-4 rounded-2xl bg-red-500/[0.07] ring-1 ring-red-500/20 px-4 py-3 text-sm text-red-700 dark:text-red-300">{{ error }}</p>
+        <p v-if="photoError" class="mb-4 rounded-2xl bg-amber-500/[0.08] ring-1 ring-amber-500/20 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">{{ photoError }}</p>
 
-    <div class="grid lg:grid-cols-3 gap-6 items-start">
+        <!-- ── Step 1: Photos ── -->
+        <section v-show="step === 1" class="rounded-3xl bg-white dark:bg-[#0B1A35] ring-1 ring-brand-navy/[0.07] dark:ring-white/[0.08] p-5 sm:p-7 lg:flex-1 lg:min-h-0 lg:flex lg:flex-col">
+          <h2 class="font-heading text-xl font-semibold text-brand-navy dark:text-white">Property photos</h2>
+          <p class="mt-1 text-sm text-brand-text-secondary dark:text-white/55">Clear, well-lit photos of the actual property. The first one is the cover buyers see first.</p>
 
-      <!-- ░░ Left rail: stepper ░░ -->
-      <aside class="lg:sticky lg:top-6">
-        <div class="rounded-2xl p-5 text-white relative overflow-hidden" style="background: linear-gradient(160deg, #10264D 0%, #08152F 70%, #060E1F 100%)">
-          <div class="absolute -right-8 -top-8 h-28 w-28 rounded-full border border-brand-gold/10" />
-          <p class="text-brand-gold text-[0.625rem] font-bold uppercase tracking-[0.2em] mb-4 relative">Create a listing</p>
-          <ol class="space-y-1 relative">
-            <li v-for="s in steps" :key="s.n">
-              <button
-                type="button"
-                class="w-full flex items-start gap-3 rounded-xl p-3 text-left transition-colors"
-                :class="step === s.n ? 'bg-white/10' : 'hover:bg-white/5'"
-                @click="step = s.n"
-              >
-                <span
-                  class="h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold flex-shrink-0 transition-colors"
-                  :class="step > s.n ? 'bg-brand-gold text-brand-navy' : step === s.n ? 'bg-white text-brand-navy' : 'bg-white/10 text-white/50'"
-                >
-                  <svg v-if="step > s.n" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" /></svg>
-                  <span v-else>{{ s.n }}</span>
-                </span>
-                <span class="min-w-0">
-                  <span class="block text-sm font-semibold" :class="step === s.n ? 'text-white' : 'text-white/70'">{{ s.label }}</span>
-                  <span class="block text-[0.6875rem] text-white/40 mt-0.5">{{ s.desc }}</span>
-                </span>
-              </button>
-            </li>
-          </ol>
-          <p class="text-[0.6875rem] text-white/40 mt-4 relative leading-relaxed">
-            💡 Upload photos first — the AI can <span class="text-brand-gold/90">look at them</span> to write your description in step 3.
-          </p>
-        </div>
-      </aside>
-
-      <!-- ░░ Right: step content ░░ -->
-      <div class="lg:col-span-2">
-        <p v-if="error" class="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-4">{{ error }}</p>
-        <p v-if="photoError" class="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-4">{{ photoError }}</p>
-
-        <!-- ── Step 1: Property photos ── -->
-        <div v-show="step === 1" class="card p-6">
-          <h2 class="font-bold text-brand-navy">Property Photos</h2>
-          <p class="text-xs text-gray-500 mt-1 mb-5">Clear, well-lit photos of the actual property. The first photo is the cover. JPG, PNG, or WebP.</p>
-
-          <div class="grid grid-cols-2 sm:grid-cols-3 gap-3">
-            <div v-for="(shot, i) in gallery" :key="shot.id" class="relative aspect-[4/3] rounded-xl overflow-hidden group">
-              <img :src="shot.url" class="h-full w-full object-cover transition-opacity" :class="shot.uploading ? 'opacity-50' : ''" />
-              <!-- Upload in flight: the photo is visible from the local file, the server copy is on its way. -->
-              <span v-if="shot.uploading" class="absolute inset-0 flex items-center justify-center">
-                <svg class="animate-spin h-6 w-6 text-white drop-shadow" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+          <!-- One box: the drop area, and the photos inside it. It scrolls on its own,
+               so adding photos never pushes the page (or Continue) down. -->
+          <div
+            class="mt-5 rounded-3xl border-2 border-dashed p-3 transition lg:flex-1 lg:min-h-0 overflow-y-auto overscroll-contain dark:[color-scheme:dark]"
+            :class="dragOver === 'photo' ? 'border-brand-gold bg-brand-gold/[0.08]' : 'border-brand-navy/15 dark:border-white/15'"
+            @dragover.prevent="dragOver = 'photo'"
+            @dragleave.prevent="dragOver = null"
+            @drop.prevent="onDrop($event, 'photo')"
+          >
+            <label v-if="!gallery.length" class="flex h-full min-h-[14rem] cursor-pointer flex-col items-center justify-center rounded-2xl px-6 py-8 text-center hover:bg-brand-gold/[0.04] transition">
+              <span class="mb-3 h-14 w-14 rounded-2xl flex items-center justify-center bg-brand-gold/15 text-brand-gold-deep dark:text-brand-gold">
+                <svg class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909m-18 3.75h16.5a1.5 1.5 0 001.5-1.5V6a1.5 1.5 0 00-1.5-1.5H3.75A1.5 1.5 0 002.25 6v12a1.5 1.5 0 001.5 1.5zm10.5-11.25h.008v.008h-.008V8.25zm.375 0a.375.375 0 11-.75 0 .375.375 0 01.75 0z" /></svg>
               </span>
-              <span v-if="i === 0" class="absolute top-1.5 left-1.5 text-[0.5625rem] font-bold bg-brand-gold text-brand-navy px-1.5 py-0.5 rounded">COVER</span>
-              <button v-if="!shot.uploading" type="button" class="absolute top-1.5 right-1.5 bg-black/60 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity" @click="removePhoto(i)">
-                <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-            <label class="aspect-[4/3] rounded-xl border-2 border-dashed border-gray-300 hover:border-brand-gold cursor-pointer flex flex-col items-center justify-center text-gray-400 hover:text-brand-gold transition-colors">
-              <svg class="h-7 w-7 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 4v16m8-8H4" /></svg>
-              <span class="text-xs font-medium">Add photos</span>
+              <span class="font-semibold text-brand-navy dark:text-white">Drag photos here, or <span class="text-brand-gold-deep dark:text-brand-gold underline underline-offset-4">browse</span></span>
+              <span class="mt-1 text-xs text-brand-navy/50 dark:text-white/45">JPG, PNG or WebP · up to {{ MAX_PHOTO_LABEL }} each · add several at once</span>
               <input type="file" class="sr-only" accept="image/*" multiple @change="addFiles($event, 'photo')" />
             </label>
+
+            <div v-else class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+              <div v-for="(shot, i) in gallery" :key="shot.id" class="group relative aspect-[4/3] overflow-hidden rounded-2xl ring-1 ring-brand-navy/[0.07] dark:ring-white/10">
+                <img :src="shot.url" alt="" class="h-full w-full object-cover transition-opacity" :class="shot.uploading ? 'opacity-50' : ''" />
+                <span v-if="shot.uploading" class="absolute inset-0 flex items-center justify-center">
+                  <svg class="animate-spin h-6 w-6 text-white drop-shadow" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                </span>
+                <span v-if="i === 0" class="absolute top-2 left-2 rounded-full bg-brand-gold px-2 py-0.5 text-[0.625rem] font-bold uppercase tracking-wide text-[#0B2A5C] shadow">Cover</span>
+                <button
+                  v-if="!shot.uploading"
+                  type="button"
+                  class="absolute top-2 right-2 h-7 w-7 rounded-full bg-black/60 text-white flex items-center justify-center opacity-100 [@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition"
+                  :aria-label="`Remove photo ${i + 1}`"
+                  @click="removePhoto(i)"
+                >
+                  <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+              <!-- Add more, as the last tile -->
+              <label class="aspect-[4/3] flex cursor-pointer flex-col items-center justify-center rounded-2xl bg-brand-gold/[0.06] ring-1 ring-brand-gold/30 text-brand-gold-deep hover:bg-brand-gold/[0.12] dark:text-brand-gold transition">
+                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                <span class="mt-1 text-xs font-bold">Add more</span>
+                <input type="file" class="sr-only" accept="image/*" multiple @change="addFiles($event, 'photo')" />
+              </label>
+            </div>
           </div>
-          <p class="text-[0.6875rem] text-gray-400 mt-3">{{ gallery.length }} photo{{ gallery.length === 1 ? '' : 's' }} added · saved as you go</p>
-        </div>
+          <p class="mt-3 text-xs text-brand-navy/50 dark:text-white/45">{{ gallery.length }} {{ gallery.length === 1 ? 'photo' : 'photos' }} added · drop more onto the box any time · saved as you go</p>
+        </section>
 
         <!-- ── Step 2: Virtual tour ── -->
-        <div v-show="step === 2" class="card p-6">
+        <section v-show="step === 2" class="rounded-3xl bg-white dark:bg-[#0B1A35] ring-1 ring-brand-navy/[0.07] dark:ring-white/[0.08] p-5 sm:p-7 lg:flex-1 lg:min-h-0 lg:flex lg:flex-col">
           <div class="flex items-center gap-2">
-            <h2 class="font-bold text-brand-navy">Virtual Tour</h2>
-            <span class="text-[0.625rem] font-bold uppercase tracking-wide bg-gray-100 text-gray-500 px-1.5 py-0.5 rounded">Optional</span>
+            <h2 class="font-heading text-xl font-semibold text-brand-navy dark:text-white">Virtual tour</h2>
+            <span class="rounded-full bg-brand-navy/[0.06] dark:bg-white/10 px-2 py-0.5 text-[0.625rem] font-bold uppercase tracking-wide text-brand-navy/55 dark:text-white/55">Optional</span>
           </div>
-          <p class="text-xs text-gray-500 mt-1 mb-3">Upload <span class="font-semibold">360° / panoramic</span> shots for an immersive, draggable virtual tour on your listing page.</p>
+          <p class="mt-1 text-sm text-brand-text-secondary dark:text-white/55">Add 360° panoramas and buyers can look around each room on your listing page.</p>
 
-          <div class="flex items-start gap-2.5 rounded-xl border border-brand-gold/25 bg-brand-gold/5 p-3 mb-5">
-            <svg class="h-4 w-4 text-brand-gold mt-0.5 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M13 16h-1v-4h-1m1-4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-            <p class="text-[0.6875rem] text-brand-navy/70 leading-relaxed">
-              <span class="font-semibold text-brand-navy">Works best with equirectangular 360° photos</span> — a single wide 2:1 wrap-around shot from a 360° camera or app (Insta360, Google Street View, etc.). Regular photos will still upload, but they'll look stretched in the tour viewer.
-            </p>
-          </div>
+          <p class="mt-4 flex items-start gap-2.5 rounded-2xl bg-brand-gold/[0.07] ring-1 ring-brand-gold/25 p-3.5 text-xs leading-relaxed text-brand-navy/75 dark:text-white/70">
+            <svg class="mt-0.5 h-4 w-4 flex-none text-brand-gold-deep dark:text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M11.25 11.25l.041-.02a.75.75 0 011.063.852l-.708 2.836a.75.75 0 001.063.853l.041-.021M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-9-3.75h.008v.008H12V8.25z" /></svg>
+            <span><span class="font-semibold text-brand-navy dark:text-white">Use 2:1 wrap-around 360° shots</span> from a 360° camera or app (Insta360, Google Street View…). Regular photos upload too, but look stretched in the viewer.</span>
+          </p>
 
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-3">
-            <div v-for="(shot, i) in panos" :key="shot.id" class="relative aspect-[16/7] rounded-xl overflow-hidden group">
-              <img :src="shot.url" class="h-full w-full object-cover transition-opacity" :class="shot.uploading ? 'opacity-50' : ''" />
-              <span v-if="shot.uploading" class="absolute inset-0 flex items-center justify-center">
-                <svg class="animate-spin h-6 w-6 text-white drop-shadow" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+          <div
+            class="mt-5 rounded-3xl border-2 border-dashed p-3 transition lg:flex-1 lg:min-h-0 overflow-y-auto overscroll-contain dark:[color-scheme:dark]"
+            :class="dragOver === 'pano' ? 'border-brand-gold bg-brand-gold/[0.08]' : 'border-brand-navy/15 dark:border-white/15'"
+            @dragover.prevent="dragOver = 'pano'"
+            @dragleave.prevent="dragOver = null"
+            @drop.prevent="onDrop($event, 'pano')"
+          >
+            <label v-if="!panos.length" class="flex h-full min-h-[12rem] cursor-pointer flex-col items-center justify-center rounded-2xl px-6 py-8 text-center hover:bg-brand-gold/[0.04] transition">
+              <span class="mb-3 h-12 w-12 rounded-2xl flex items-center justify-center bg-brand-navy/[0.06] dark:bg-white/10 text-brand-navy/70 dark:text-white/70">
+                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6"><path stroke-linecap="round" stroke-linejoin="round" d="M12 21a9.004 9.004 0 008.716-6.747M12 21a9.004 9.004 0 01-8.716-6.747M12 21c2.485 0 4.5-4.03 4.5-9S14.485 3 12 3m0 18c-2.485 0-4.5-4.03-4.5-9S9.515 3 12 3m0 0a8.997 8.997 0 017.843 4.582M12 3a8.997 8.997 0 00-7.843 4.582m15.686 0A11.953 11.953 0 0112 10.5c-2.998 0-5.74-1.1-7.843-2.918m15.686 0A8.959 8.959 0 0121 12c0 .778-.099 1.533-.284 2.253m0 0A17.919 17.919 0 0112 16.5c-3.162 0-6.133-.815-8.716-2.247m0 0A9.015 9.015 0 013 12c0-1.605.42-3.113 1.157-4.418" /></svg>
               </span>
-              <span class="absolute top-1.5 left-1.5 text-[0.5625rem] font-bold bg-brand-navy text-white px-1.5 py-0.5 rounded inline-flex items-center gap-1">
-                <svg class="h-2.5 w-2.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0z M3 12h18" /></svg>360°
-              </span>
-              <button v-if="!shot.uploading" type="button" class="absolute top-1.5 right-1.5 bg-black/60 text-white rounded-full p-1 opacity-0 group-hover:opacity-100 transition-opacity" @click="removePano(i)">
-                <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-              </button>
-            </div>
-            <label class="aspect-[16/7] rounded-xl border-2 border-dashed border-gray-300 hover:border-brand-gold cursor-pointer flex flex-col items-center justify-center text-gray-400 hover:text-brand-gold transition-colors">
-              <svg class="h-7 w-7 mb-1" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M21 12a9 9 0 11-18 0 9 9 0 0118 0zM3 12h18M12 3a15 15 0 010 18M12 3a15 15 0 000 18" /></svg>
-              <span class="text-xs font-medium">Add 360° / panorama</span>
+              <span class="font-semibold text-brand-navy dark:text-white">Drag 360° shots here, or <span class="text-brand-gold-deep dark:text-brand-gold underline underline-offset-4">browse</span></span>
+              <span class="mt-1 text-xs text-brand-navy/50 dark:text-white/45">You can skip this step.</span>
               <input type="file" class="sr-only" accept="image/*" multiple @change="addFiles($event, 'pano')" />
             </label>
+
+            <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+              <div v-for="(shot, i) in panos" :key="shot.id" class="group relative aspect-[2/1] overflow-hidden rounded-2xl ring-1 ring-brand-navy/[0.07] dark:ring-white/10">
+                <img :src="shot.url" alt="" class="h-full w-full object-cover transition-opacity" :class="shot.uploading ? 'opacity-50' : ''" />
+                <span v-if="shot.uploading" class="absolute inset-0 flex items-center justify-center">
+                  <svg class="animate-spin h-6 w-6 text-white drop-shadow" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                </span>
+                <span class="absolute top-2 left-2 rounded-full bg-brand-navy px-2 py-0.5 text-[0.625rem] font-bold text-brand-gold">360°</span>
+                <button
+                  v-if="!shot.uploading"
+                  type="button"
+                  class="absolute top-2 right-2 h-7 w-7 rounded-full bg-black/60 text-white flex items-center justify-center opacity-100 [@media(hover:hover)]:opacity-0 group-hover:opacity-100 focus-visible:opacity-100 transition"
+                  :aria-label="`Remove panorama ${i + 1}`"
+                  @click="removePano(i)"
+                >
+                  <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+              <label class="aspect-[2/1] flex cursor-pointer flex-col items-center justify-center rounded-2xl bg-brand-gold/[0.06] ring-1 ring-brand-gold/30 text-brand-gold-deep hover:bg-brand-gold/[0.12] dark:text-brand-gold transition">
+                <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
+                <span class="mt-1 text-xs font-bold">Add more</span>
+                <input type="file" class="sr-only" accept="image/*" multiple @change="addFiles($event, 'pano')" />
+              </label>
+            </div>
           </div>
-          <p class="text-[0.6875rem] text-gray-400 mt-3">{{ panos.length }} panorama{{ panos.length === 1 ? '' : 's' }} · you can skip this step.</p>
-        </div>
+          <p class="mt-3 text-xs text-brand-navy/50 dark:text-white/45">{{ panos.length }} {{ panos.length === 1 ? 'panorama' : 'panoramas' }} added</p>
+        </section>
 
         <!-- ── Step 3: Details ── -->
-        <div v-show="step === 3" class="card p-6 space-y-5">
-          <h2 class="font-bold text-brand-navy">Listing Details</h2>
-
-          <!-- Offer toggle -->
+        <section v-show="step === 3" class="rounded-3xl bg-white dark:bg-[#0B1A35] ring-1 ring-brand-navy/[0.07] dark:ring-white/[0.08] p-5 sm:p-7 space-y-7 lg:flex-1 lg:min-h-0 lg:overflow-y-auto overscroll-contain dark:[color-scheme:dark]">
           <div>
-            <label class="text-sm font-medium text-brand-text-primary">This listing is <span class="text-red-500">*</span></label>
-            <div class="mt-1.5 inline-flex rounded-xl border border-gray-200 p-1 bg-gray-50">
-              <button type="button" class="px-6 py-2 text-sm font-semibold rounded-lg transition-colors" :class="form.offer_type === 'sale' ? 'bg-brand-navy text-white shadow-sm' : 'text-gray-500 hover:text-brand-navy'" @click="form.offer_type = 'sale'">For Sale</button>
-              <button type="button" class="px-6 py-2 text-sm font-semibold rounded-lg transition-colors" :class="form.offer_type === 'rent' ? 'bg-brand-navy text-white shadow-sm' : 'text-gray-500 hover:text-brand-navy'" @click="form.offer_type = 'rent'">For Rent</button>
-            </div>
+            <h2 class="font-heading text-xl font-semibold text-brand-navy dark:text-white">Listing details</h2>
+            <p class="mt-1 text-sm text-brand-text-secondary dark:text-white/55">Fields marked <span class="text-red-500">*</span> are needed before it can go live.</p>
           </div>
 
-          <AppInput v-model="form.title"   label="Title"   placeholder="Beautiful 3BR house in Quezon City" required />
-          <AppInput v-model="form.address" label="Address" placeholder="123 Main St, Quezon City, Metro Manila" required />
-
-          <div class="grid grid-cols-2 gap-4">
+          <!-- Offer + type -->
+          <div class="space-y-4">
             <div>
-              <label class="text-sm font-medium text-brand-text-primary">Type <span class="text-red-500">*</span></label>
-              <select v-model="form.type" class="input-field mt-1" required>
-                <option v-for="(label, key) in PROPERTY_TYPES" :key="key" :value="key">{{ label }}</option>
-              </select>
+              <p :class="labelCls">This listing is <span class="text-red-500">*</span></p>
+              <div class="inline-flex rounded-full p-1 bg-brand-navy/[0.04] dark:bg-white/[0.05] ring-1 ring-brand-navy/10 dark:ring-white/10">
+                <button v-for="o in (['sale', 'rent'] as const)" :key="o" type="button" class="rounded-full px-5 py-2 text-sm font-semibold transition" :class="form.offer_type === o ? 'bg-brand-navy text-white dark:bg-brand-gold dark:text-[#0B2A5C]' : 'text-brand-navy/65 hover:text-brand-navy dark:text-white/60 dark:hover:text-white'" @click="form.offer_type = o">
+                  {{ o === 'sale' ? 'For sale' : 'For rent' }}
+                </button>
+              </div>
             </div>
-            <AppInput v-model.number="form.price" label="Price (₱)" type="number" placeholder="5000000" required />
+            <div>
+              <p :class="labelCls">Property type <span class="text-red-500">*</span></p>
+              <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
+                <button
+                  v-for="(label, key) in PROPERTY_TYPES"
+                  :key="key"
+                  type="button"
+                  class="flex items-center gap-2 rounded-2xl px-3 py-2.5 text-sm font-semibold ring-1 transition"
+                  :class="form.type === key ? 'bg-brand-gold/15 ring-2 ring-brand-gold text-brand-navy dark:text-white' : 'ring-brand-navy/10 text-brand-navy/70 hover:ring-brand-gold dark:ring-white/10 dark:text-white/70'"
+                  @click="form.type = key"
+                >
+                  <svg class="h-4 w-4 flex-none" :class="form.type === key ? 'text-brand-gold-deep dark:text-brand-gold' : 'text-brand-navy/40 dark:text-white/40'" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" :d="TYPE_ICONS[key] ?? TYPE_ICONS.house" /></svg>
+                  {{ label }}
+                </button>
+              </div>
+            </div>
           </div>
 
-          <div class="grid grid-cols-2 sm:grid-cols-4 gap-4">
-            <AppInput v-model.number="form.bedrooms"   label="Bedrooms"   type="number" placeholder="3" />
-            <AppInput v-model.number="form.bathrooms"  label="Bathrooms"  type="number" placeholder="2" />
-            <AppInput v-model.number="form.floor_area" label="Floor (sqm)" type="number" placeholder="120" />
-            <AppInput v-model.number="form.lot_area"   label="Lot (sqm)"   type="number" placeholder="200" />
+          <!-- Basics -->
+          <div class="grid grid-cols-1 gap-4">
+            <div>
+              <label for="nl-title" :class="labelCls">Title <span class="text-red-500">*</span></label>
+              <input id="nl-title" v-model="form.title" type="text" maxlength="150" placeholder="Bright 3-bedroom house near schools in Quezon City" :class="fieldCls" />
+            </div>
+            <div>
+              <label for="nl-address" :class="labelCls">Address <span class="text-red-500">*</span></label>
+              <input id="nl-address" v-model="form.address" type="text" placeholder="123 Main St, Barangay, City" :class="fieldCls" />
+            </div>
+            <div>
+              <label for="nl-price" :class="labelCls">{{ form.offer_type === 'rent' ? 'Monthly rent' : 'Price' }} <span class="text-red-500">*</span></label>
+              <div class="relative">
+                <span class="pointer-events-none absolute left-4 top-1/2 -translate-y-1/2 font-semibold text-brand-navy/50 dark:text-white/50">₱</span>
+                <input id="nl-price" v-model="priceInput" type="number" min="0" inputmode="numeric" placeholder="5000000" :class="[fieldCls, 'pl-9']" />
+              </div>
+              <p class="mt-1 text-xs" :class="form.price > 0 ? 'font-semibold text-brand-gold-deep dark:text-brand-gold' : 'text-brand-navy/45 dark:text-white/40'">{{ priceText }}</p>
+            </div>
+          </div>
+
+          <!-- Size -->
+          <div>
+            <p :class="labelCls">Size and rooms</p>
+            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+              <div v-for="f in [
+                { key: 'bedrooms', label: 'Bedrooms', ph: '3' },
+                { key: 'bathrooms', label: 'Bathrooms', ph: '2' },
+                { key: 'floor_area', label: 'Floor area (sqm)', ph: '120' },
+                { key: 'lot_area', label: 'Lot area (sqm)', ph: '200' },
+              ] as const" :key="f.key">
+                <label :for="`nl-${f.key}`" class="mb-1 block text-xs font-semibold text-brand-navy/60 dark:text-white/55">{{ f.label }}</label>
+                <input :id="`nl-${f.key}`" v-model.number="form[f.key]" type="number" min="0" :placeholder="f.ph" :class="fieldCls" />
+              </div>
+            </div>
           </div>
 
           <!-- Description + AI -->
           <div>
-            <div class="flex items-center justify-between mb-1">
-              <label class="text-sm font-medium text-brand-text-primary">Description</label>
+            <div class="mb-1.5 flex flex-wrap items-center justify-between gap-2">
+              <label for="nl-desc" class="text-sm font-semibold text-brand-navy dark:text-white/90">Description</label>
               <button
                 type="button"
                 :disabled="aiLoading"
-                class="inline-flex items-center gap-1.5 text-xs font-semibold text-brand-gold hover:text-brand-navy disabled:opacity-40 disabled:cursor-not-allowed transition-colors"
+                class="inline-flex items-center gap-1.5 rounded-full bg-brand-gold/15 py-1 pl-1 pr-3 text-xs font-bold text-brand-gold-deep ring-1 ring-brand-gold/40 hover:bg-brand-gold/25 dark:text-brand-gold disabled:opacity-50 transition"
                 @click="doGenerateDescription"
               >
-                <svg v-if="aiLoading" class="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-                <svg v-else class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" /></svg>
-                {{ aiLoading ? 'Reading your photos…' : 'Generate with AI' }}
+                <img src="/ai/avatar-96.webp" alt="" class="h-5 w-5 rounded-full bg-white" />
+                {{ aiLoading ? 'Reading your photos…' : 'Write it with AI' }}
               </button>
             </div>
-            <textarea v-model="form.description" rows="6" class="input-field resize-y" placeholder="Describe your property, or tap Generate with AI to write it from your photos…" />
-            <p v-if="aiError" class="text-[0.6875rem] text-red-500 mt-1">{{ aiError }}</p>
-            <p v-else class="text-[0.6875rem] text-brand-text-secondary mt-1">The AI looks at your uploaded photos ({{ gallery.length + panos.length }}) plus these details to draft a description.</p>
+            <textarea id="nl-desc" v-model="form.description" rows="7" :class="[fieldCls, 'resize-y leading-relaxed']" placeholder="What makes this place special? Or let RealtyLink AI write it from your photos." />
+            <p v-if="aiError" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ aiError }}</p>
+            <p v-else class="mt-1 text-xs text-brand-navy/45 dark:text-white/40">RealtyLink AI reads your {{ gallery.length + panos.length }} {{ gallery.length + panos.length === 1 ? 'photo' : 'photos' }} and these details to draft it. You can edit it after.</p>
+          </div>
+        </section>
+
+        <!-- ── Nav: a bar fixed to the bottom on phones ── -->
+        <div class="fixed inset-x-0 bottom-0 z-30 border-t border-brand-navy/[0.08] bg-white/95 backdrop-blur px-4 py-3 dark:border-white/10 dark:bg-[#0B1A35]/95 lg:static lg:mt-5 lg:border-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none dark:lg:bg-transparent">
+          <div class="flex items-center justify-between gap-3">
+            <button v-if="step > 1" type="button" class="inline-flex items-center gap-1 rounded-full px-4 py-2.5 text-sm font-semibold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20 transition" @click="step--">
+              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>
+              Back
+            </button>
+            <span v-else class="text-xs text-brand-navy/45 dark:text-white/40">Step {{ step }} of 3</span>
+
+            <button
+              v-if="step < 3"
+              type="button"
+              class="inline-flex items-center gap-2 rounded-full bg-brand-navy px-6 py-2.5 text-sm font-bold text-white hover:-translate-y-0.5 dark:bg-brand-gold dark:text-[#0B2A5C] transition"
+              @click="step++"
+            >
+              {{ step === 2 && !panos.length ? 'Skip for now' : 'Continue' }}
+              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>
+            </button>
+            <button
+              v-else
+              type="button"
+              :disabled="!canSubmit || loading"
+              class="inline-flex items-center gap-2 rounded-full bg-brand-gold px-6 py-2.5 text-sm font-bold text-[#0B2A5C] shadow-[0_6px_20px_rgba(212,165,74,0.4)] hover:-translate-y-0.5 transition disabled:opacity-50 disabled:shadow-none disabled:translate-y-0"
+              @click="submit"
+            >
+              <svg v-if="loading" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+              {{ loading ? 'Saving…' : 'Save listing' }}
+            </button>
           </div>
         </div>
-
-        <!-- ── Nav ── -->
-        <div class="flex items-center justify-between mt-5">
-          <button v-if="step > 1" type="button" class="text-sm font-semibold text-gray-500 hover:text-brand-navy inline-flex items-center gap-1" @click="step--">
-            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
-            Back
-          </button>
-          <span v-else />
-
-          <button
-            v-if="step < 3"
-            type="button"
-            class="inline-flex items-center gap-2 bg-brand-navy text-white font-bold text-sm px-6 py-2.5 rounded-xl hover:-translate-y-0.5 transition-all"
-            @click="step++"
-          >
-            {{ step === 2 && !panos.length ? 'Skip & continue' : 'Continue' }}
-            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
-          </button>
-          <button
-            v-else
-            type="button"
-            :disabled="!canSubmit || loading"
-            class="inline-flex items-center gap-2 bg-brand-gold text-brand-navy font-bold text-sm px-6 py-2.5 rounded-xl shadow-[0_4px_18px_rgba(212,175,55,0.35)] hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-            @click="submit"
-          >
-            <svg v-if="loading" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-            {{ loading ? 'Saving…' : 'Save listing' }}
-          </button>
-        </div>
       </div>
+
+      <!-- ░░ Live preview ░░ -->
+      <aside class="space-y-4 lg:sticky lg:top-24">
+        <section class="overflow-hidden rounded-3xl bg-white dark:bg-[#0B1A35] border-2 border-brand-navy/80 dark:border-brand-gold/70">
+          <div class="relative aspect-[16/10] bg-brand-navy/5 dark:bg-white/[0.06]">
+            <img v-if="coverUrl" :src="coverUrl" alt="" class="h-full w-full object-cover" />
+            <div v-else class="h-full w-full flex flex-col items-center justify-center gap-1 text-brand-navy/35 dark:text-white/35">
+              <svg class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.4"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" /></svg>
+              <span class="text-xs font-semibold">Your cover photo</span>
+            </div>
+            <span class="absolute top-3 left-3 rounded-full bg-[#ffffff]/95 px-2.5 py-1 text-[0.625rem] font-bold uppercase tracking-wide text-[#0B2A5C] shadow-sm">{{ form.offer_type === 'rent' ? 'For rent' : 'For sale' }}</span>
+            <span v-if="panos.length" class="absolute bottom-3 left-3 rounded-full bg-brand-navy px-2 py-0.5 text-[0.625rem] font-bold text-brand-gold">360° tour</span>
+          </div>
+          <div class="p-4">
+            <p class="text-[0.625rem] font-bold uppercase tracking-[0.16em] text-brand-navy/45 dark:text-white/40">Preview</p>
+            <p class="mt-1 font-display text-lg font-bold tabular-nums" :class="form.price > 0 ? 'text-brand-gold-deep dark:text-brand-gold' : 'text-brand-navy/30 dark:text-white/30'">{{ priceText }}</p>
+            <p class="line-clamp-2 font-semibold" :class="form.title ? 'text-brand-navy dark:text-white' : 'italic text-brand-navy/35 dark:text-white/35'">{{ form.title || 'Your listing title' }}</p>
+            <p class="mt-0.5 truncate text-xs text-brand-navy/50 dark:text-white/45">{{ form.address || 'Address' }}</p>
+            <div class="mt-3 flex flex-wrap gap-1.5 text-[0.6875rem] font-semibold text-brand-navy/70 dark:text-white/65">
+              <span class="rounded-full bg-brand-navy/[0.05] dark:bg-white/[0.07] px-2.5 py-1">{{ PROPERTY_TYPES[form.type] }}</span>
+              <span v-if="form.bedrooms" class="rounded-full bg-brand-navy/[0.05] dark:bg-white/[0.07] px-2.5 py-1">{{ form.bedrooms }} bed</span>
+              <span v-if="form.bathrooms" class="rounded-full bg-brand-navy/[0.05] dark:bg-white/[0.07] px-2.5 py-1">{{ form.bathrooms }} bath</span>
+              <span v-if="form.floor_area" class="rounded-full bg-brand-navy/[0.05] dark:bg-white/[0.07] px-2.5 py-1">{{ form.floor_area }} sqm</span>
+            </div>
+          </div>
+        </section>
+        <p class="px-1 text-xs text-brand-navy/50 dark:text-white/45">Saved listings start as drafts. Publish them from My Listings when you're ready.</p>
+      </aside>
     </div>
 
     <!-- Leaving mid-listing. Everything is already saved, so this is a choice,
          not a warning: keep the draft for later, or throw it away. -->
-    <AppModal :open="leaveModal" size="sm" @close="leaveBusy ? undefined : (leaveModal = false)">
-      <div class="p-6">
-        <div class="flex items-start gap-3 mb-4">
-          <div class="h-10 w-10 rounded-full bg-brand-gold/15 flex items-center justify-center flex-shrink-0">
-            <svg class="h-5 w-5 text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-          </div>
-          <div>
-            <h3 class="font-bold text-brand-navy text-base leading-snug">Continue this listing later?</h3>
-            <p class="text-sm text-gray-500 mt-1">
-              Your photos and details are saved as a draft. You can pick it up anytime from <span class="font-semibold text-brand-navy">My Listings</span> — it won't be visible to buyers until you publish it.
-            </p>
-          </div>
-        </div>
+    <Teleport to="body">
+      <Transition name="leave">
+        <div v-if="leaveModal" class="fixed inset-0 z-[95] flex items-end sm:items-center justify-center p-0 sm:p-4" role="dialog" aria-modal="true" aria-labelledby="leave-title">
+          <div class="absolute inset-0 bg-[#06183A]/55 backdrop-blur-sm" @click="leaveBusy ? undefined : closeLeave()" />
 
-        <div class="space-y-2">
-          <AppButton variant="primary" full-width :disabled="leaveBusy" @click="leaveSaving">
-            {{ leaveBusy ? 'Saving…' : 'Save as draft' }}
-          </AppButton>
-          <AppButton variant="ghost" full-width :disabled="leaveBusy" @click="leaveModal = false">Keep editing</AppButton>
-          <button
-            type="button"
-            class="w-full text-xs font-semibold text-red-500 hover:text-red-600 py-2 transition-colors disabled:opacity-40"
-            :disabled="leaveBusy"
-            @click="leaveDiscarding"
-          >Discard this draft</button>
+          <div class="leave-card relative w-full sm:max-w-md overflow-hidden rounded-t-3xl sm:rounded-3xl bg-white dark:bg-[#0B1A35] ring-1 ring-brand-navy/10 dark:ring-white/10 shadow-[0_30px_80px_-20px_rgba(6,24,58,0.6)]">
+            <!-- What's being kept: the draft at a glance -->
+            <div class="relative overflow-hidden bg-brand-navy px-6 pt-6 pb-5 text-white">
+              <div class="absolute inset-0 bg-grid-gold opacity-[0.07] pointer-events-none" />
+              <div class="absolute -right-12 -top-12 h-40 w-40 rounded-full bg-brand-gold/20 blur-3xl pointer-events-none" />
+              <div class="relative flex items-center gap-4">
+                <span class="h-16 w-20 flex-none overflow-hidden rounded-2xl bg-white/10 ring-2 ring-brand-gold/50">
+                  <img v-if="coverUrl" :src="coverUrl" alt="" class="h-full w-full object-cover" />
+                  <span v-else class="h-full w-full flex items-center justify-center text-brand-gold">
+                    <svg class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.6"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 12l8.954-8.955c.44-.439 1.152-.439 1.591 0L21.75 12M4.5 9.75v10.125c0 .621.504 1.125 1.125 1.125H9.75v-4.875c0-.621.504-1.125 1.125-1.125h2.25c.621 0 1.125.504 1.125 1.125V21h4.125c.621 0 1.125-.504 1.125-1.125V9.75" /></svg>
+                  </span>
+                </span>
+                <div class="min-w-0">
+                  <p class="text-[0.6875rem] font-bold uppercase tracking-[0.16em] text-brand-gold">Your draft</p>
+                  <p class="mt-0.5 truncate font-semibold">{{ form.title || 'Untitled listing' }}</p>
+                  <p class="mt-1 flex flex-wrap gap-1.5 text-[0.6875rem] font-semibold">
+                    <span class="rounded-full bg-white/10 px-2 py-0.5">{{ gallery.length }} {{ gallery.length === 1 ? 'photo' : 'photos' }}</span>
+                    <span v-if="panos.length" class="rounded-full bg-white/10 px-2 py-0.5">{{ panos.length }} 360°</span>
+                    <span v-if="form.price > 0" class="rounded-full bg-brand-gold/20 px-2 py-0.5 text-brand-gold">{{ priceText }}</span>
+                  </p>
+                </div>
+              </div>
+            </div>
+
+            <div class="px-6 pt-5 pb-10 sm:pb-6">
+              <h3 id="leave-title" class="font-heading text-xl font-semibold text-brand-navy dark:text-white">Finish this listing later?</h3>
+              <p class="mt-1.5 text-sm leading-relaxed text-brand-text-secondary dark:text-white/55">
+                Everything you've added is kept as a draft in <span class="font-semibold text-brand-navy dark:text-white">My Listings</span>. Buyers won't see it until you publish it.
+              </p>
+
+              <div class="mt-5 space-y-2">
+                <button
+                  type="button"
+                  class="w-full inline-flex items-center justify-center gap-2 rounded-full bg-brand-gold px-5 py-3 text-sm font-bold text-[#0B2A5C] shadow-[0_6px_20px_rgba(212,165,74,0.45)] hover:bg-brand-gold-light transition disabled:opacity-60"
+                  :disabled="leaveBusy"
+                  @click="leaveSaving"
+                >
+                  <svg v-if="leaveBusy && !discardArmed" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
+                  <svg v-else class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4"><path stroke-linecap="round" stroke-linejoin="round" d="M17.593 3.322c1.1.128 1.907 1.077 1.907 2.185V21L12 17.25 4.5 21V5.507c0-1.108.806-2.057 1.907-2.185a48.507 48.507 0 0111.186 0z" /></svg>
+                  {{ leaveBusy && !discardArmed ? 'Saving…' : 'Save draft and leave' }}
+                </button>
+                <button
+                  type="button"
+                  class="w-full rounded-full px-5 py-3 text-sm font-bold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20 transition disabled:opacity-60"
+                  :disabled="leaveBusy"
+                  @click="closeLeave"
+                >Keep editing</button>
+              </div>
+
+              <!-- Discard asks twice: it deletes the photos too -->
+              <div class="mt-4 border-t border-brand-navy/[0.06] dark:border-white/10 pt-4">
+                <button
+                  v-if="!discardArmed"
+                  type="button"
+                  class="w-full inline-flex items-center justify-center gap-1.5 text-xs font-semibold text-red-600 hover:text-red-700 dark:text-red-400 transition disabled:opacity-50"
+                  :disabled="leaveBusy"
+                  @click="discardArmed = true"
+                >
+                  <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M14.74 9l-.346 9m-4.788 0L9.26 9m9.968-3.21c.342.052.682.107 1.022.166m-1.022-.165L18.16 19.673a2.25 2.25 0 01-2.244 2.077H8.084a2.25 2.25 0 01-2.244-2.077L4.772 5.79m14.456 0a48.108 48.108 0 00-3.478-.397m-12 .562c.34-.059.68-.114 1.022-.165m0 0a48.11 48.11 0 013.478-.397m7.5 0v-.916c0-1.18-.91-2.164-2.09-2.201a51.964 51.964 0 00-3.32 0c-1.18.037-2.09 1.022-2.09 2.201v.916m7.5 0a48.667 48.667 0 00-7.5 0" /></svg>
+                  Discard this draft
+                </button>
+                <div v-else class="rounded-2xl bg-red-500/[0.07] ring-1 ring-red-500/20 p-3">
+                  <p class="text-xs text-red-700 dark:text-red-300">This deletes the draft and its {{ gallery.length + panos.length }} {{ gallery.length + panos.length === 1 ? 'photo' : 'photos' }} for good.</p>
+                  <div class="mt-2 flex gap-2">
+                    <button type="button" class="flex-1 rounded-full bg-red-600 px-4 py-2 text-xs font-bold text-white hover:bg-red-700 transition disabled:opacity-60" :disabled="leaveBusy" @click="leaveDiscarding">{{ leaveBusy ? 'Deleting…' : 'Yes, delete it' }}</button>
+                    <button type="button" class="flex-1 rounded-full px-4 py-2 text-xs font-bold text-brand-navy ring-1 ring-brand-navy/15 dark:text-white dark:ring-white/20" :disabled="leaveBusy" @click="discardArmed = false">Cancel</button>
+                  </div>
+                </div>
+              </div>
+            </div>
+          </div>
         </div>
-      </div>
-    </AppModal>
+      </Transition>
+    </Teleport>
   </div>
 </template>
 
 <style scoped>
 .fade-enter-active, .fade-leave-active { transition: opacity .2s ease; }
 .fade-enter-from, .fade-leave-to { opacity: 0; }
+/* Leave dialog: fades in, the card rises (a sheet from the bottom on phones). */
+.leave-enter-active, .leave-leave-active { transition: opacity .2s ease; }
+.leave-enter-active .leave-card, .leave-leave-active .leave-card { transition: transform .28s cubic-bezier(0.22, 1, 0.36, 1); }
+.leave-enter-from, .leave-leave-to { opacity: 0; }
+.leave-enter-from .leave-card, .leave-leave-to .leave-card { transform: translateY(24px); }
+@media (prefers-reduced-motion: reduce) {
+  .leave-enter-active, .leave-leave-active, .leave-enter-active .leave-card, .leave-leave-active .leave-card { transition: none; }
+}
 </style>

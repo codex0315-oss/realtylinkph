@@ -13,6 +13,7 @@ class PropertyPhoto extends Model
         'property_id',
         'url',
         'thumb_url',
+        'preview_url',
         'is_360',
         'sort_order',
     ];

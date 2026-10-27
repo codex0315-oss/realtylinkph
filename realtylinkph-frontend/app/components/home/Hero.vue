@@ -83,7 +83,7 @@ const stagger = (i: number) => ({ transitionDelay: `${80 + i * 90}ms` })
               to="/properties"
               class="group relative overflow-hidden inline-flex items-center gap-2 bg-brand-navy dark:bg-brand-gold
                      text-white dark:text-brand-navy font-bold text-sm px-6 py-3.5 rounded-xl
-                     shadow-[0_6px_22px_rgba(8,21,47,0.22)] hover:shadow-[0_10px_32px_rgba(8,21,47,0.32)]
+                     shadow-[0_6px_22px_rgba(11,42,92,0.22)] hover:shadow-[0_10px_32px_rgba(11,42,92,0.32)]
                      hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200"
             >
               <span class="relative z-10">Explore Properties</span>

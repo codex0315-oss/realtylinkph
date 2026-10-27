@@ -33,6 +33,8 @@ class InquiryService
                 'inquiry_id'     => $inquiry->id,
                 'property_title' => $property->title,
                 'sender_name'    => $data['name'],
+                // `message` is what the notifications panel shows.
+                'message'        => "{$data['name']} sent an inquiry about \"{$property->title}\"",
             ]);
 
             return $inquiry;

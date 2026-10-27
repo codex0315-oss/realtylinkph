@@ -31,6 +31,18 @@ class PropertyController extends Controller
         return ApiResponse::success(PropertyResource::collection($items), 'Featured properties retrieved.', 200);
     }
 
+    /** Homepage stat tiles: published listings, approved agents, cities covered. */
+    public function stats(): JsonResponse
+    {
+        return ApiResponse::success($this->service->homeStats(), 'Stats retrieved.', 200);
+    }
+
+    /** Cities with published listings, for the search bar's suggestions. */
+    public function cities(): JsonResponse
+    {
+        return ApiResponse::success($this->service->cityCounts(), 'Cities retrieved.', 200);
+    }
+
     /** Browse-first homepage: rows of listings grouped by city or theme. */
     public function homeRows(): JsonResponse
     {
@@ -46,7 +58,9 @@ class PropertyController extends Controller
 
     public function myListings(Request $request): JsonResponse
     {
-        $properties = $this->service->listForAgent($request->user(), 15);
+        // One page holds an agent's whole active portfolio: My Listings filters,
+        // searches and sorts it in the browser.
+        $properties = $this->service->listForAgent($request->user(), 100);
 
         return ApiResponse::paginated(PropertyResource::collection($properties), 'My listings retrieved.');
     }
@@ -62,8 +76,9 @@ class PropertyController extends Controller
             return ApiResponse::error('Listing not found.', [], 404);
         }
 
-        // Count a view — but not when the owner opens their own listing.
-        if (! $viewer || $viewer->id !== $property->agent_id) {
+        // Count a view — but not the owner opening their own listing, nor an
+        // admin moderating it (that would inflate the agent's numbers).
+        if (! $viewer || ($viewer->id !== $property->agent_id && ! $viewer->isAdmin())) {
             $property->increment('views');
         }
 

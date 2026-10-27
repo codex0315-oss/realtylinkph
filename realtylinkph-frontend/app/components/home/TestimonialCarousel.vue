@@ -1,179 +1,141 @@
 <script setup lang="ts">
-interface Testimonial {
-  quote:    string
-  name:     string
-  role:     string
-  initials: string
+import type { FeaturedReview } from '~/types'
+
+/**
+ * Real reviews, not placeholder people. Fed by GET /reviews/featured: visible,
+ * 4★+, with written text, one per buyer. The payload carries a short display
+ * name ("Maria S.") and never the reviewer's contact details.
+ *
+ * The page hides this section entirely when there are no reviews to show.
+ * Cards sit in a snap strip — three across on desktop, swipeable on a phone.
+ * Fewer cards than fit are centred (only when they fit: a centred strip that
+ * overflows would cut its first card off on the left).
+ */
+const props = defineProps<{ reviews: FeaturedReview[] }>()
+
+function initials(name: string): string {
+  return name.split(/\s+/).map(s => s[0] ?? '').join('').slice(0, 2).toUpperCase()
 }
 
-const testimonials: Testimonial[] = [
-  {
-    quote:    'I found my dream condo in just a week! The agent was very professional and helpful throughout the entire process.',
-    name:     'Maria Santos',
-    role:     'Condo Buyer',
-    initials: 'MS',
-  },
-  {
-    quote:    'The verified agent system gave me confidence in every step. Highly recommend RealtyLink PH to anyone looking for property!',
-    name:     'John Reyes',
-    role:     'Homeowner',
-    initials: 'JR',
-  },
-  {
-    quote:    'Found a great commercial space for my business. The search filters made it very easy to narrow down the right options.',
-    name:     'Ana Villanueva',
-    role:     'Business Owner',
-    initials: 'AV',
-  },
-  {
-    quote:    'Excellent platform! The agents are very responsive and the listings are accurate and up to date.',
-    name:     'Carlo Mendoza',
-    role:     'Property Investor',
-    initials: 'CM',
-  },
-]
+const strip = ref<HTMLElement | null>(null)
+const atStart = ref(true)
+const atEnd = ref(false)
+const overflowing = ref(false)
 
-const pageSize   = 2
-const current    = ref(0)
-const direction  = ref<'next' | 'prev'>('next')
-const totalPages = computed(() => Math.ceil(testimonials.length / pageSize))
-const visible    = computed(() => testimonials.slice(current.value * pageSize, current.value * pageSize + pageSize))
-
-let timer: ReturnType<typeof setInterval> | null = null
-const paused = ref(false)
-
-function go(page: number) {
-  direction.value = page > current.value ? 'next' : 'prev'
-  current.value = (page + totalPages.value) % totalPages.value
+function measure() {
+  const el = strip.value
+  if (!el) return
+  overflowing.value = el.scrollWidth > el.clientWidth + 4
+  atStart.value = el.scrollLeft <= 4
+  atEnd.value = el.scrollLeft + el.clientWidth >= el.scrollWidth - 4
 }
-function next() { go(current.value + 1) }
-function prev() { go(current.value - 1) }
-
-function start() {
-  timer = setInterval(() => { if (!paused.value) next() }, 5500)
-}
-function stop() {
-  if (timer) { clearInterval(timer); timer = null }
+function page(direction: 1 | -1) {
+  strip.value?.scrollBy({ left: direction * strip.value.clientWidth * 0.9, behavior: 'smooth' })
 }
 
-onMounted(start)
-onUnmounted(stop)
+let ro: ResizeObserver | null = null
+onMounted(() => {
+  measure()
+  ro = new ResizeObserver(measure)
+  if (strip.value) ro.observe(strip.value)
+})
+onUnmounted(() => ro?.disconnect())
+watch(() => props.reviews.length, () => nextTick(measure))
 </script>
 
 <template>
   <section
     id="testimonials"
-    class="relative bg-brand-cream dark:bg-brand-navy-deep py-20 transition-colors duration-500 scroll-mt-20 overflow-hidden"
+    class="relative bg-white dark:bg-brand-navy-deep py-20 lg:py-24 transition-colors duration-500 scroll-mt-20"
   >
-    <div class="absolute inset-0 bg-grid-lines mask-radial-fade pointer-events-none" />
-    <div class="absolute inset-0 bg-grid-lines-lg mask-radial-fade pointer-events-none" />
+    <div class="max-w-content mx-auto px-4 sm:px-6">
+      <HomeSectionHeading
+        v-reveal
+        align="center"
+        eyebrow="Reviews"
+        title="What buyers say."
+        accent="buyers"
+        lead="Written by people who actually dealt with the agent — only they can leave a review."
+      />
 
-    <div class="relative max-w-content mx-auto px-6">
-      <!-- Header -->
-      <div v-reveal class="flex items-center justify-center gap-4 mb-12">
-        <div class="flex-1 max-w-[80px] h-px bg-brand-gold/40" />
-        <h2 class="font-display text-2xl md:text-3xl font-bold text-brand-navy dark:text-white text-center whitespace-nowrap">
-          What Our Clients Say
-        </h2>
-        <div class="flex-1 max-w-[80px] h-px bg-brand-gold/40" />
-      </div>
-
-      <!-- Cards -->
       <div
+        ref="strip"
         v-reveal="{ delay: 120 }"
-        class="relative max-w-4xl mx-auto"
-        @mouseenter="paused = true"
-        @mouseleave="paused = false"
+        class="mt-12 flex gap-5 overflow-x-auto snap-x snap-mandatory scroll-smooth pt-1 pb-6 -mx-4 px-4 sm:mx-0 sm:px-0 no-scrollbar"
+        :class="reviews.length === 1 ? 'justify-center' : reviews.length === 2 ? 'sm:justify-center' : ''"
+        @scroll.passive="measure"
       >
-        <!-- Arrows -->
-        <button
-          class="hidden lg:flex absolute -left-14 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full items-center justify-center
-                 border border-gray-300 dark:border-white/15 text-brand-navy dark:text-white/70
-                 hover:border-brand-gold hover:text-brand-gold hover:-translate-x-0.5 transition-all duration-200"
-          aria-label="Previous testimonials"
-          @click="prev"
+        <figure
+          v-for="r in reviews"
+          :key="r.id"
+          class="snap-start flex-none w-[85%] sm:w-[calc((100%-1.25rem)/2)] lg:w-[calc((100%-2*1.25rem)/3)]
+                 relative flex flex-col rounded-[1.75rem] p-7 bg-brand-cream dark:bg-white/[0.04]
+                 ring-1 ring-brand-navy/[0.06] dark:ring-white/10"
         >
-          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M15 19l-7-7 7-7" /></svg>
-        </button>
-        <button
-          class="hidden lg:flex absolute -right-14 top-1/2 -translate-y-1/2 h-10 w-10 rounded-full items-center justify-center
-                 border border-gray-300 dark:border-white/15 text-brand-navy dark:text-white/70
-                 hover:border-brand-gold hover:text-brand-gold hover:translate-x-0.5 transition-all duration-200"
-          aria-label="Next testimonials"
-          @click="next"
-        >
-          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M9 5l7 7-7 7" /></svg>
-        </button>
+          <span class="absolute top-5 right-7 font-heading text-7xl leading-none text-brand-gold/25 select-none" aria-hidden="true">“</span>
 
-        <Transition :name="direction === 'next' ? 'slide-next' : 'slide-prev'" mode="out-in">
-          <div :key="current" class="grid grid-cols-1 md:grid-cols-2 gap-6">
-            <figure
-              v-for="t in visible"
-              :key="t.name"
-              class="relative bg-white dark:bg-brand-navy-mid rounded-2xl p-7 shadow-sm
-                     border border-gray-100 dark:border-white/10
-                     hover:shadow-[0_18px_44px_rgba(8,21,47,0.12)] dark:hover:shadow-[0_18px_44px_rgba(0,0,0,0.5)]
-                     hover:-translate-y-1 transition-all duration-300"
+          <AppRating :value="r.rating" size="sm" :readonly="true" />
+
+          <blockquote class="mt-5 flex-1 text-[0.9375rem] leading-relaxed text-brand-navy/85 dark:text-white/80 line-clamp-6">
+            “{{ r.review_text }}”
+          </blockquote>
+
+          <figcaption class="mt-6 pt-5 border-t border-brand-navy/[0.08] dark:border-white/10 flex items-center gap-3">
+            <img
+              v-if="r.buyer_avatar"
+              :src="r.buyer_avatar"
+              alt=""
+              loading="lazy"
+              class="h-10 w-10 flex-none rounded-full object-cover"
+            />
+            <span
+              v-else
+              class="h-10 w-10 flex-none rounded-full bg-brand-navy dark:bg-brand-gold text-brand-gold dark:text-brand-navy flex items-center justify-center text-sm font-bold"
             >
-              <!-- decorative quote mark -->
-              <span class="absolute top-4 right-6 font-display text-6xl leading-none text-brand-gold/15 select-none" aria-hidden="true">"</span>
-
-              <AppRating :value="5" size="sm" :readonly="true" class="mb-4" />
-
-              <blockquote class="relative text-sm text-brand-text-secondary dark:text-white/65 leading-relaxed italic">
-                "{{ t.quote }}"
-              </blockquote>
-
-              <figcaption class="flex items-center gap-3 mt-6 pt-5 border-t border-gray-100 dark:border-white/10">
-                <div class="h-10 w-10 rounded-full bg-brand-navy dark:bg-brand-gold flex items-center justify-center
-                            text-brand-gold dark:text-brand-navy font-bold text-sm flex-shrink-0">
-                  {{ t.initials }}
-                </div>
-                <div>
-                  <p class="text-sm font-semibold text-brand-navy dark:text-white">{{ t.name }}</p>
-                  <p class="text-xs text-brand-text-light dark:text-white/40">{{ t.role }}</p>
-                </div>
-              </figcaption>
-            </figure>
-          </div>
-        </Transition>
+              {{ initials(r.buyer_name) }}
+            </span>
+            <div class="min-w-0">
+              <p class="flex items-center gap-1.5 text-sm font-semibold text-brand-navy dark:text-white">
+                {{ r.buyer_name }}
+                <span
+                  v-if="r.is_verified"
+                  class="inline-flex items-center gap-0.5 rounded-full bg-emerald-500/10 px-1.5 py-0.5 text-[0.625rem] font-bold text-emerald-700 dark:text-emerald-300"
+                  title="This review rests on a viewing that took place"
+                >
+                  <svg class="h-2.5 w-2.5" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true"><path fill-rule="evenodd" d="M16.7 5.3a1 1 0 010 1.4l-8 8a1 1 0 01-1.4 0l-4-4a1 1 0 111.4-1.4L8 12.58l7.3-7.3a1 1 0 011.4 0z" clip-rule="evenodd" /></svg>
+                  Viewed
+                </span>
+              </p>
+              <p v-if="r.agent_name" class="truncate text-xs text-brand-text-secondary dark:text-white/50">
+                Reviewed
+                <NuxtLink :to="`/agents/${r.agent_id}`" class="font-medium text-brand-gold-deep dark:text-brand-gold hover:underline">{{ r.agent_name }}</NuxtLink>
+              </p>
+            </div>
+          </figcaption>
+        </figure>
       </div>
 
-      <!-- Dot pagination -->
-      <div class="flex justify-center gap-2 mt-9">
+      <div v-if="overflowing" class="mt-4 flex justify-center gap-2">
         <button
-          v-for="i in totalPages"
-          :key="i"
-          class="h-2 rounded-full transition-all duration-300"
-          :class="i - 1 === current
-            ? 'w-7 bg-brand-gold'
-            : 'w-2 bg-gray-300 dark:bg-white/20 hover:bg-gray-400 dark:hover:bg-white/40'"
-          :aria-label="`Go to testimonial page ${i}`"
-          @click="go(i - 1)"
-        />
+          v-for="d in ([-1, 1] as const)"
+          :key="d"
+          type="button"
+          class="h-10 w-10 rounded-full border border-gray-200 dark:border-white/15 text-brand-navy dark:text-white flex items-center justify-center
+                 hover:border-brand-gold transition disabled:opacity-30 disabled:cursor-not-allowed"
+          :disabled="d === -1 ? atStart : atEnd"
+          :aria-label="d === -1 ? 'Previous reviews' : 'Next reviews'"
+          @click="page(d)"
+        >
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.5" aria-hidden="true">
+            <path stroke-linecap="round" stroke-linejoin="round" :d="d === -1 ? 'M15 19l-7-7 7-7' : 'M9 5l7 7-7 7'" />
+          </svg>
+        </button>
       </div>
     </div>
   </section>
 </template>
 
 <style scoped>
-.slide-next-enter-active,
-.slide-next-leave-active,
-.slide-prev-enter-active,
-.slide-prev-leave-active {
-  transition: opacity 0.4s ease, transform 0.4s cubic-bezier(0.22, 1, 0.36, 1);
-}
-.slide-next-enter-from { opacity: 0; transform: translateX(36px); }
-.slide-next-leave-to   { opacity: 0; transform: translateX(-36px); }
-.slide-prev-enter-from { opacity: 0; transform: translateX(-36px); }
-.slide-prev-leave-to   { opacity: 0; transform: translateX(36px); }
-
-@media (prefers-reduced-motion: reduce) {
-  .slide-next-enter-active,
-  .slide-next-leave-active,
-  .slide-prev-enter-active,
-  .slide-prev-leave-active { transition: none; }
-  .slide-next-enter-from, .slide-next-leave-to,
-  .slide-prev-enter-from, .slide-prev-leave-to { transform: none; }
-}
+.no-scrollbar { scrollbar-width: none; }
+.no-scrollbar::-webkit-scrollbar { display: none; }
 </style>

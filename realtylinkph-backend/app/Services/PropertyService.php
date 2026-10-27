@@ -79,6 +79,43 @@ class PropertyService
     }
 
     /**
+     * Live figures for the homepage stat tiles. Each is a real count — no
+     * typed-in marketing numbers.
+     *
+     * @return array{listings: int, agents: int, cities: int}
+     */
+    public function homeStats(): array
+    {
+        $addresses = Property::published()->pluck('address');
+
+        return [
+            'listings' => $addresses->count(),
+            'agents'   => User::where('role_type', 'agent')
+                ->whereHas('agentProfile', fn ($q) => $q->where('status', 'approved'))
+                ->count(),
+            'cities'   => $addresses->map(fn ($a) => self::cityOf($a))->filter()->unique()->count(),
+        ];
+    }
+
+    /**
+     * Cities that have published listings, busiest first — the "Cities on
+     * RealtyLink" suggestions under the search bar's Where field.
+     *
+     * @return list<array{name: string, count: int}>
+     */
+    public function cityCounts(): array
+    {
+        return Property::published()->pluck('address')
+            ->map(fn ($a) => self::cityOf($a))
+            ->filter()
+            ->countBy()
+            ->sortDesc()
+            ->map(fn (int $count, string $name) => ['name' => $name, 'count' => $count])
+            ->values()
+            ->all();
+    }
+
+    /**
      * Best-effort city from a free-text address: the comma segment that says
      * "City" ("Solinea Tower 3, Cebu Business Park, Cebu City" → "Cebu City"),
      * otherwise the last segment.
@@ -123,12 +160,33 @@ class PropertyService
             $query->where('price', '<=', $filters['max_price']);
         }
 
+        // "2+" in the UI: at least this many. An exact match hid every
+        // three-bedroom home from someone who asked for two or more.
         if (! empty($filters['bedrooms'])) {
-            $query->where('bedrooms', $filters['bedrooms']);
+            $query->where('bedrooms', '>=', (int) $filters['bedrooms']);
         }
 
         if (! empty($filters['bathrooms'])) {
             $query->where('bathrooms', $filters['bathrooms']);
+        }
+
+        // RealtyLink AI: "2 bathrooms" from a buyer means at least two.
+        if (! empty($filters['min_bathrooms'])) {
+            $query->where('bathrooms', '>=', (int) $filters['min_bathrooms']);
+        }
+
+        // RealtyLink AI: "show me more" skips what the chat already showed, and
+        // "my saved homes" searches only the buyer's favorites.
+        if (! empty($filters['exclude_ids']) && is_array($filters['exclude_ids'])) {
+            $query->whereNotIn('id', array_map('intval', $filters['exclude_ids']));
+        }
+        if (isset($filters['only_ids']) && is_array($filters['only_ids'])) {
+            $query->whereIn('id', array_map('intval', $filters['only_ids']));
+        }
+
+        // Browse's "Has 360° tour" quick filter.
+        if (filter_var($filters['has_360'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
+            $query->whereHas('photos', fn ($q) => $q->where('is_360', true));
         }
 
         if (! empty($filters['search'])) {
@@ -138,7 +196,15 @@ class PropertyService
             });
         }
 
-        return $query->latest()->paginate($perPage);
+        // Browse's sort menu. Anything unrecognised falls back to newest. The
+        // id tiebreak keeps pages stable when several listings share a price.
+        match ($filters['sort'] ?? 'newest') {
+            'price_asc'  => $query->orderBy('price')->orderByDesc('id'),
+            'price_desc' => $query->orderByDesc('price')->orderByDesc('id'),
+            default      => $query->latest()->orderByDesc('id'),
+        };
+
+        return $query->paginate($perPage);
     }
 
     public function listForAgent(User $agent, int $perPage = 15): LengthAwarePaginator

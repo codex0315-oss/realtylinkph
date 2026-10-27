@@ -18,8 +18,8 @@ const { data: agents } = await useAsyncData(
 <template>
   <div class="min-h-screen bg-white">
     <!-- Hero -->
-    <section class="relative overflow-hidden pt-40 pb-14" style="background: linear-gradient(135deg, #0d1f3c 0%, #08152F 60%, #060E1F 100%)">
-      <div class="absolute inset-0 opacity-[0.05] pointer-events-none" style="background-image: radial-gradient(circle, #D4AF37 1px, transparent 1px); background-size: 26px 26px;" />
+    <section class="relative overflow-hidden pt-32 pb-14" style="background: linear-gradient(135deg, #0d1f3c 0%, #0B2A5C 60%, #06183A 100%)">
+      <div class="absolute inset-0 opacity-[0.05] pointer-events-none" style="background-image: radial-gradient(circle, #D4A54A 1px, transparent 1px); background-size: 26px 26px;" />
       <div class="max-w-content mx-auto px-6 relative text-center">
         <div class="flex items-center justify-center gap-3 mb-3">
           <div class="h-px w-8 bg-brand-gold/50" />

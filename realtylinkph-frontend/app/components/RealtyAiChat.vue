@@ -1,24 +1,20 @@
 <script setup lang="ts">
-import type { AiChatMessage } from '~/composables/useRealtyAi'
-import type { Property } from '~/types'
-
 // `closable` shows an X in the header (used by the full-screen bubble overlay).
 defineProps<{ closable?: boolean }>()
 const emit = defineEmits<{ close: [] }>()
 
-const { chat, loading } = useRealtyAi()
-const propertyHref = usePropertyHref()
+// Same thread as the dashboard's AI panel (see useAiThread).
+const { messages, loading, send: sendToAi, updateAction } = useAiThread()
 
-const messages  = ref<AiChatMessage[]>([])
 const input     = ref('')
 const threadEl  = ref<HTMLElement | null>(null)
 const mascotOk  = ref(true)
 
 const suggestions = [
   'Find me a condo under ₱3M',
-  '2-bedroom house in Cebu',
+  '2-bedroom house near a school',
+  'Compare my saved homes',
   'What can I afford on ₱25k/month?',
-  'Best areas for first-time buyers?',
 ]
 
 function scrollToBottom() {
@@ -28,30 +24,16 @@ function scrollToBottom() {
 async function send(text?: string) {
   const content = (text ?? input.value).trim()
   if (!content || loading.value) return
-
-  messages.value.push({ role: 'user', content })
   input.value = ''
+  const done = sendToAi(content)
   scrollToBottom()
-
-  const res = await chat(messages.value)
-  messages.value.push({
-    role: 'assistant',
-    content: res?.reply ?? "Sorry, I'm having trouble right now. Please try again.",
-    properties: res?.properties ?? [],
-  })
+  await done
   scrollToBottom()
-}
-
-function priceLabel(p: Property): string {
-  const n = Number(p.price)
-  if (n >= 1_000_000) return `₱${(n / 1_000_000).toFixed(n % 1_000_000 === 0 ? 0 : 1)}M`
-  if (n >= 1_000)     return `₱${(n / 1_000).toFixed(0)}K`
-  return `₱${n.toLocaleString('en-PH')}`
 }
 </script>
 
 <template>
-  <div class="flex flex-col h-full w-full bg-white dark:bg-[#10264D] overflow-hidden">
+  <div class="flex flex-col h-full w-full bg-white dark:bg-[#17417F] overflow-hidden">
     <!-- Header -->
     <div class="flex items-center gap-3 px-5 py-3.5 border-b border-gray-100 dark:border-white/10">
       <div class="h-10 w-10 rounded-full bg-brand-navy/5 dark:bg-white/5 flex items-center justify-center overflow-hidden flex-shrink-0">
@@ -110,7 +92,7 @@ function priceLabel(p: Property): string {
       <template v-for="(m, i) in messages" :key="i">
         <!-- User -->
         <div v-if="m.role === 'user'" class="flex justify-end">
-          <div class="max-w-[80%] px-4 py-2.5 text-sm leading-relaxed rounded-2xl rounded-br-md text-white shadow-sm" style="background: linear-gradient(135deg, #10264D 0%, #08152F 100%)">
+          <div class="max-w-[80%] px-4 py-2.5 text-sm leading-relaxed rounded-2xl rounded-br-md text-white shadow-sm" style="background: linear-gradient(135deg, #17417F 0%, #0B2A5C 100%)">
             {{ m.content }}
           </div>
         </div>
@@ -124,28 +106,11 @@ function priceLabel(p: Property): string {
           <div class="max-w-[82%] min-w-0">
             <div class="px-4 py-2.5 text-sm leading-relaxed rounded-2xl rounded-bl-md bg-gray-100 dark:bg-white/10 text-brand-navy dark:text-white whitespace-pre-wrap">{{ m.content }}</div>
 
+            <!-- Something it did: theme, calendar, password, page -->
+            <AiActionCard v-if="m.action" :action="m.action" @navigate="emit('close')" @update="p => updateAction(i, p)" />
+
             <!-- Recommended listings -->
-            <div v-if="m.properties?.length" class="mt-2 space-y-2">
-              <NuxtLink
-                v-for="p in m.properties"
-                :key="p.id"
-                :to="propertyHref(p.id)"
-                class="flex items-center gap-3 p-2 rounded-xl bg-white dark:bg-white/5 border border-gray-200 dark:border-white/10 hover:border-brand-gold hover:shadow-sm transition-all group"
-                @click="emit('close')"
-              >
-                <div class="h-12 w-16 rounded-lg bg-gray-100 dark:bg-white/10 overflow-hidden flex-shrink-0">
-                  <img v-if="p.photos?.length" :src="p.photos[0]?.thumb_url ?? p.photos[0]?.url" :alt="p.title" class="w-full h-full object-cover" />
-                </div>
-                <div class="flex-1 min-w-0">
-                  <p class="text-sm font-semibold text-brand-navy dark:text-white truncate group-hover:text-brand-gold transition-colors">{{ p.title }}</p>
-                  <p class="text-xs text-gray-400 truncate">{{ p.address }}</p>
-                  <p class="text-xs text-gray-500 dark:text-white/50 mt-0.5">
-                    <span v-if="p.bedrooms">{{ p.bedrooms }} bd · </span><span v-if="p.bathrooms">{{ p.bathrooms }} ba</span>
-                  </p>
-                </div>
-                <span class="text-sm font-bold text-brand-gold flex-shrink-0">{{ priceLabel(p) }}</span>
-              </NuxtLink>
-            </div>
+            <AiListingCards :message="m" :latest="i === messages.length - 1" :busy="loading" @navigate="emit('close')" @more="send('Show me more options')" />
           </div>
         </div>
       </template>
@@ -180,7 +145,7 @@ function priceLabel(p: Property): string {
         />
         <button
           class="h-9 w-9 rounded-full flex items-center justify-center transition-all disabled:opacity-40 flex-shrink-0"
-          style="background: linear-gradient(135deg, #D4AF37 0%, #c9a227 100%)"
+          style="background: linear-gradient(135deg, #D4A54A 0%, #D4A54A 100%)"
           :disabled="loading || !input.trim()"
           @click="send()"
         >

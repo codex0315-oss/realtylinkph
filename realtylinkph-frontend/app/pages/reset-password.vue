@@ -72,7 +72,7 @@ const fieldStyle = 'background: rgba(255,255,255,0.05); border: 1px solid rgba(2
 <template>
   <div
     class="min-h-screen flex items-center justify-center px-4 py-10"
-    style="background: linear-gradient(160deg, #10264D 0%, #08152F 55%, #060E1F 100%)"
+    style="background: linear-gradient(160deg, #17417F 0%, #0B2A5C 55%, #06183A 100%)"
   >
     <!-- ambient texture -->
     <div class="fixed inset-0 bg-grid-gold opacity-[0.04] pointer-events-none" />
@@ -81,7 +81,7 @@ const fieldStyle = 'background: rgba(255,255,255,0.05); border: 1px solid rgba(2
     <div
       class="relative w-full max-w-[430px] rounded-3xl px-7 py-8 sm:px-9"
       style="
-        background: linear-gradient(150deg, rgba(16,38,77,.96) 0%, rgba(8,21,47,.97) 60%, rgba(6,14,31,.98) 100%);
+        background: linear-gradient(150deg, rgba(16,38,77,.96) 0%, rgba(11,42,92,.97) 60%, rgba(6,14,31,.98) 100%);
         border: 1px solid rgba(255,255,255,0.08);
         box-shadow: 0 30px 90px rgba(0,0,0,.55), inset 0 1px 0 rgba(255,255,255,.06);
       "
@@ -129,7 +129,7 @@ const fieldStyle = 'background: rgba(255,255,255,0.05); border: 1px solid rgba(2
         <button
           type="button"
           class="w-full mt-6 bg-brand-gold text-brand-navy font-bold text-sm py-3 rounded-xl
-                 shadow-[0_4px_16px_rgba(201,162,39,0.35)] hover:shadow-[0_6px_24px_rgba(201,162,39,0.5)]
+                 shadow-[0_4px_16px_rgba(212,165,74,0.35)] hover:shadow-[0_6px_24px_rgba(212,165,74,0.5)]
                  hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200"
           @click="goSignIn"
         >
@@ -207,7 +207,7 @@ const fieldStyle = 'background: rgba(255,255,255,0.05); border: 1px solid rgba(2
           type="submit"
           :disabled="loading"
           class="w-full mt-6 bg-brand-gold text-brand-navy font-bold text-sm py-3 rounded-xl
-                 shadow-[0_4px_16px_rgba(201,162,39,0.35)] hover:shadow-[0_6px_24px_rgba(201,162,39,0.5)]
+                 shadow-[0_4px_16px_rgba(212,165,74,0.35)] hover:shadow-[0_6px_24px_rgba(212,165,74,0.5)]
                  hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200
                  disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
         >

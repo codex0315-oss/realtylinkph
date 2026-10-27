@@ -1,104 +1,78 @@
 <script setup lang="ts">
-import type { ApiResponse, Property } from '~/types'
+import type { ApiResponse, FeaturedReview, PaginatedResponse, Property } from '~/types'
 
 definePageMeta({ layout: 'default' })
 
 const api = useApi()
 
 /*
- * Browse-first homepage. The old story-first page (hero card deck, feature
- * strip, "why choose") made an inquirer scroll past four sections before
- * seeing a listing. Now the search bar is the first thing on the page and
- * the listings are the second, Airbnb-style: horizontally scrolling rows
- * grouped by city where there are enough, and by theme otherwise. The server
- * decides the grouping (PropertyService::homeRows) so the page stays dumb.
+ * Landing page, top to bottom:
+ *   centred hero (search + a fan of real listing photos) → pick your path
+ *   → tabbed listings → browse by type → why RealtyLink (feature tiles)
+ *   → live stat tiles → how it works → real reviews → CTA.
  *
- * Single useAsyncData so the result is serialised into the payload and the
- * client hydrates without a mismatch.
+ * The listing tabs are server-grouped (PropertyService::homeRows): city rows
+ * when a city has enough listings, then theme rows.
+ *
+ * One useAsyncData so everything is serialised into the payload and the
+ * client hydrates without a mismatch. Every request is best-effort: a failed
+ * count is left out of the tiles, and with no reviews the section is hidden.
+ * If /properties/stats isn't there (an older backend), the two counts it
+ * replaced are fetched the old way and only "cities" goes missing.
  */
 interface HomeRow { key: string; title: string; href: string; properties: Property[] }
+interface Stats { listings: number | null; agents: number | null; cities: number | null }
 
-const { data: rows, pending } = await useAsyncData(
-  'home-rows',
-  async () => (await api.get<ApiResponse<HomeRow[]>>('/properties/home-rows')).data,
-  { default: () => [] as HomeRow[] },
+const { data: home, pending } = await useAsyncData(
+  'home',
+  async () => {
+    const [rows, stats, reviews] = await Promise.all([
+      api.get<ApiResponse<HomeRow[]>>('/properties/home-rows').then(r => r.data).catch(() => [] as HomeRow[]),
+      api.get<ApiResponse<Stats>>('/properties/stats').then(r => r.data).catch(async (): Promise<Stats> => {
+        const [listings, agents] = await Promise.all([
+          api.get<PaginatedResponse<Property>>('/properties').then(r => r.meta.total).catch(() => null),
+          api.get<PaginatedResponse<unknown>>('/agents', { per_page: 1 }).then(r => r.meta.total).catch(() => null),
+        ])
+        return { listings, agents, cities: null }
+      }),
+      api.get<ApiResponse<FeaturedReview[]>>('/reviews/featured').then(r => r.data).catch(() => [] as FeaturedReview[]),
+    ])
+    return { rows, stats, reviews }
+  },
+  {
+    default: () => ({
+      rows: [] as HomeRow[],
+      stats: { listings: null, agents: null, cities: null } as Stats,
+      reviews: [] as FeaturedReview[],
+    }),
+  },
 )
+
+/* Distinct listings across all rows, newest-first, for the hero photo fan. */
+const heroListings = computed(() => {
+  const seen = new Set<number>()
+  return home.value.rows.flatMap(r => r.properties).filter(p => !seen.has(p.id) && seen.add(p.id))
+})
 </script>
 
 <template>
   <div class="bg-white dark:bg-brand-navy-deep transition-colors duration-500">
+    <HomeHeroBanner :properties="heroListings" />
 
-    <!-- ── 1. Search + listings, on the ruled grid ── -->
-    <section class="relative bg-brand-cream dark:bg-brand-navy-deep transition-colors duration-500 overflow-hidden">
-      <div class="absolute inset-0 bg-grid-lines mask-radial-fade pointer-events-none" />
-      <div class="absolute inset-0 bg-grid-lines-lg mask-radial-fade pointer-events-none" />
-      <div class="absolute -top-32 -left-24 h-[420px] w-[420px] rounded-full bg-brand-gold/10 dark:bg-brand-gold/[0.06] blur-[120px] pointer-events-none" />
-      <div class="absolute top-40 right-0 h-[360px] w-[360px] rounded-full bg-brand-navy-light/10 dark:bg-brand-navy-light/[0.07] blur-[110px] pointer-events-none" />
+    <HomePathCards />
 
-      <!-- Top padding clears the fixed navbar (36px trust bar + 80px nav) and
-           then some, so the headline isn't crowded against it. -->
-      <div class="relative max-w-content mx-auto px-6 pt-40 lg:pt-48 pb-16">
+    <HomeListingTabs :rows="home.rows" :pending="pending" />
 
-        <div v-reveal class="text-center max-w-2xl mx-auto mb-8">
-          <!--
-            The gap between the two lines is a margin, not line-height. Leading
-            splits its extra space half above and half below each line, so
-            raising it barely widens the actual gap — the descender of "your"
-            kept touching the cap of "Philippines". A margin is guaranteed
-            clearance between the two line boxes.
-          -->
-          <h1 class="font-display text-3xl sm:text-4xl lg:text-[2.75rem] font-bold text-brand-navy dark:text-white leading-[1.15] tracking-tight">
-            <span class="block">Find your place in the</span>
-            <span class="block mt-3 sm:mt-4 text-brand-gold-deep dark:text-brand-gold">Philippines</span>
-          </h1>
-          <p class="mt-3 text-[0.9375rem] text-brand-text-secondary dark:text-white/55">
-            Every agent PRC-verified. Every listing reviewed before it goes live.
-          </p>
-        </div>
-
-        <div v-reveal="{ delay: 80 }">
-          <HomeSearchBar />
-        </div>
-
-        <!-- Listing rows -->
-        <div class="mt-16 space-y-12">
-          <!-- Skeleton shelf while the rows load -->
-          <template v-if="pending">
-            <div v-for="i in 2" :key="i">
-              <div class="h-6 w-56 rounded bg-brand-navy/10 dark:bg-white/10 mb-4 animate-pulse" />
-              <div class="flex gap-4 overflow-hidden">
-                <AppSkeleton v-for="j in 6" :key="j" width="260px" height="300px" rounded="xl" />
-              </div>
-            </div>
-          </template>
-
-          <template v-else-if="rows.length">
-            <div v-for="(row, i) in rows" :key="row.key" v-reveal="{ delay: Math.min(i, 3) * 80 }">
-              <HomeListingRow :title="row.title" :href="row.href" :properties="row.properties" />
-            </div>
-          </template>
-
-          <!-- Nothing published yet -->
-          <div v-else class="text-center py-16">
-            <p class="text-lg font-bold text-brand-navy dark:text-white">No listings yet</p>
-            <p class="mt-2 text-sm text-brand-text-secondary dark:text-white/50">
-              Verified agents are adding properties — check back soon.
-            </p>
-          </div>
-        </div>
-      </div>
-    </section>
-
-    <!-- ── 2. Browse by property type ── -->
     <HomePropertyTypeGrid />
 
-    <!-- ── 3. How it works ── -->
+    <HomeFeatureTiles />
+
+    <HomeStatTiles v-bind="home.stats" />
+
     <HomeHowItWorksSection />
 
-    <!-- ── 4. Testimonials ── -->
-    <HomeTestimonialCarousel />
+    <HomeTestimonialCarousel v-if="home.reviews.length" :reviews="home.reviews" />
 
-    <!-- ── 5. CTA ── -->
     <HomeCtaBanner />
   </div>
 </template>

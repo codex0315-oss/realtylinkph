@@ -71,7 +71,7 @@ function onLeave(i: number) {
           v-reveal="{ delay: i * 110 }"
           class="group relative text-center bg-white dark:bg-brand-navy-mid rounded-2xl
                  border border-gray-100 dark:border-white/10 p-7
-                 hover:border-brand-gold/40 hover:shadow-[0_18px_44px_rgba(8,21,47,0.13)]
+                 hover:border-brand-gold/40 hover:shadow-[0_18px_44px_rgba(11,42,92,0.13)]
                  dark:hover:shadow-[0_18px_44px_rgba(0,0,0,0.5)]
                  transition-[box-shadow,border-color,transform] duration-300 will-change-transform"
           :style="{ transform: tilt[i] }"

@@ -17,6 +17,8 @@ class AgentResource extends JsonResource
             'name'           => $this->name,
             'email'          => $this->email,
             'avatar'         => Uploads::url($this->avatar),
+            'cover_url'      => Uploads::url($this->cover_photo),
+            'cover_position' => (int) ($this->cover_position ?? 50),
             'role_type'      => $this->role_type,
             'agent_profile'  => AgentProfileResource::make($this->whenLoaded('agentProfile')),
             'average_rating' => $this->average_rating !== null ? round((float) $this->average_rating, 1) : null,

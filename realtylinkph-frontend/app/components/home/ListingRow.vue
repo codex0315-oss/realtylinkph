@@ -45,10 +45,10 @@ watch(() => props.properties.length, () => nextTick(measure))
 <template>
   <section class="relative">
     <!-- Title row -->
-    <div class="flex items-center justify-between gap-4 mb-3">
+    <div class="flex items-center justify-between gap-4 mb-5">
       <NuxtLink
         :to="href"
-        class="group inline-flex items-center gap-2 font-display text-xl sm:text-[1.375rem] font-bold text-brand-navy dark:text-white leading-tight"
+        class="group inline-flex items-center gap-2 font-sans text-lg sm:text-xl font-semibold tracking-tight text-brand-navy dark:text-white leading-tight"
       >
         {{ title }}
         <span class="h-6 w-6 rounded-full flex items-center justify-center text-brand-navy/60 dark:text-white/60 group-hover:bg-brand-navy/5 dark:group-hover:bg-white/10 group-hover:translate-x-0.5 transition-all">
@@ -82,13 +82,15 @@ watch(() => props.properties.length, () => nextTick(measure))
          on small screens while cards stay aligned with the title. -->
     <div
       ref="strip"
-      class="flex gap-5 overflow-x-auto snap-x snap-mandatory scroll-smooth pb-2 -mx-6 px-6 sm:mx-0 sm:px-0 no-scrollbar"
+      class="flex gap-5 overflow-x-auto snap-x snap-mandatory scroll-smooth pt-1 pb-6 -mx-6 px-6 sm:mx-0 sm:px-0 no-scrollbar"
       @scroll.passive="measure"
     >
+      <!-- pt/pb leave room for the card's hover lift and shadow, which the
+           overflow-x clip would otherwise cut off. Four per row on desktop. -->
       <div
         v-for="p in properties"
         :key="p.id"
-        class="snap-start flex-none w-[14.375rem] sm:w-[15.625rem] lg:w-[calc((100%-4*1.25rem)/5)] lg:min-w-[14.375rem]"
+        class="snap-start flex-none w-[16.5rem] sm:w-[17.5rem] lg:w-[calc((100%-3*1.25rem)/4)] lg:min-w-[16rem]"
       >
         <PropertyCard :property="p" />
       </div>

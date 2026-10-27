@@ -12,9 +12,10 @@ use Illuminate\Console\Command;
 
 /**
  * Backfills the resize-on-upload pipeline for photos stored before it existed:
- * writes a card thumbnail for every photo that lacks one, and replaces
- * oversized main images (non-360) with the 1600 px version. Safe to re-run —
- * a photo that already has a thumbnail and a small main image is skipped.
+ * writes a card thumbnail for every photo that lacks one, replaces
+ * oversized main images (non-360) with the 1600 px version, and gives heavy
+ * 360° panoramas a 4096 px preview for the tour to open on. Safe to re-run —
+ * a photo that already has everything it needs is skipped.
  */
 class OptimizeListingPhotos extends Command
 {
@@ -55,8 +56,10 @@ class OptimizeListingPhotos extends Command
             $size         = (int) $disk->size($photo->url);
             $needsThumb   = $photo->thumb_url === null;
             $needsShrink  = ! $photo->is_360 && ListingImage::isOversized($size);
+            // A heavy panorama without a light copy for the tour to open on.
+            $needsPreview = $photo->is_360 && $photo->preview_url === null && $size > ListingImage::PANO_PREVIEW_BYTES;
 
-            if (! $needsThumb && ! $needsShrink) {
+            if (! $needsThumb && ! $needsShrink && ! $needsPreview) {
                 $skipped++;
                 continue;
             }
@@ -77,11 +80,12 @@ class OptimizeListingPhotos extends Command
             $base = pathinfo($photo->url, PATHINFO_FILENAME);
             $newMain  = $needsShrink ? "{$dir}/{$base}-w" . ListingImage::MAIN_EDGE . '.jpg' : $photo->url;
             $newThumb = $needsThumb ? "{$dir}/{$base}-thumb.jpg" : $photo->thumb_url;
+            $newPreview = $needsPreview && $sizes['preview'] !== null ? "{$dir}/{$base}-preview.jpg" : $photo->preview_url;
 
             $mainKb  = (int) round(strlen($sizes['main']) / 1024);
             $thumbKb = (int) round(strlen($sizes['thumb']) / 1024);
             $this->line(sprintf(
-                '#%d %s %dx%d %d KB → main %s, thumb %d KB',
+                '#%d %s %dx%d %d KB → main %s, thumb %d KB%s',
                 $photo->id,
                 $photo->is_360 ? '(360)' : '',
                 $sizes['width'],
@@ -89,6 +93,7 @@ class OptimizeListingPhotos extends Command
                 (int) round($size / 1024),
                 $needsShrink ? "{$mainKb} KB" : 'kept (already small)',
                 $thumbKb,
+                $newPreview !== $photo->preview_url ? sprintf(', preview %d KB', (int) round(strlen((string) $sizes['preview']) / 1024)) : '',
             ));
 
             if ($dry) {
@@ -102,9 +107,12 @@ class OptimizeListingPhotos extends Command
             if ($needsShrink) {
                 $disk->put($newMain, $sizes['main'], $options);
             }
+            if ($newPreview !== $photo->preview_url) {
+                $disk->put($newPreview, (string) $sizes['preview'], $options);
+            }
 
             $oldMain = $photo->url;
-            $photo->forceFill(['url' => $newMain, 'thumb_url' => $newThumb])->save();
+            $photo->forceFill(['url' => $newMain, 'thumb_url' => $newThumb, 'preview_url' => $newPreview])->save();
 
             // Only drop the original once the row points at the replacement.
             if ($needsShrink && $newMain !== $oldMain) {

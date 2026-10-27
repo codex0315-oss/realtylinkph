@@ -167,11 +167,44 @@ class ReviewService
         }
     }
 
-    public function toggleVisibility(AgentReview $review): AgentReview
+    /**
+     * Hide (with the reason and who did it) or show again. Saved without
+     * touching updated_at, which is what marks a review "edited" by its author.
+     */
+    public function toggleVisibility(AgentReview $review, ?string $reason = null, ?User $admin = null): AgentReview
     {
-        $review->update(['is_visible' => ! $review->is_visible]);
+        $hiding = $review->is_visible;
+
+        $review->timestamps = false;
+        $review->forceFill([
+            'is_visible'    => ! $hiding,
+            'hidden_reason' => $hiding ? $reason : null,
+            'hidden_by'     => $hiding ? $admin?->name : null,
+            'hidden_at'     => $hiding ? now() : null,
+        ])->save();
 
         return $review->fresh();
+    }
+
+    /**
+     * Real reviews for the homepage: visible, 4★ or better, with something
+     * actually written, newest first — at most one per buyer so a single
+     * enthusiastic reviewer can't fill the section.
+     */
+    public function featured(int $limit = 6): \Illuminate\Support\Collection
+    {
+        return AgentReview::with(['buyer', 'agent', 'appointment.property'])
+            ->visible()
+            ->where('rating', '>=', 4)
+            ->whereNotNull('review_text')
+            ->whereRaw("length(trim(review_text)) >= 20")
+            ->whereHas('agent', fn ($q) => $q->where('role_type', 'agent'))
+            ->latest()
+            ->limit(40)
+            ->get()
+            ->unique('buyer_id')
+            ->take($limit)
+            ->values();
     }
 
     public function listForAgent(User $agent, int $perPage = 15): LengthAwarePaginator

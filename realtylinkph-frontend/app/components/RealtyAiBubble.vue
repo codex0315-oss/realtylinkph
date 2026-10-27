@@ -8,9 +8,12 @@ const route     = useRoute()
 const open      = ref(false)
 const hasOpened = ref(false) // lazy-mount the chat; keep it alive once opened
 
-// Buyers only, and not on the dedicated /dashboard/ai page (already there).
+// Buyers only, and only outside the dashboard: in there the AI lives in the
+// top bar as a docked panel, so a floating bubble would be a second way in.
 const show = computed(() =>
-  authStore.isAuthenticated && authStore.isBuyer && route.path !== '/dashboard/ai',
+  authStore.isAuthenticated && authStore.isBuyer && !route.path.startsWith('/dashboard')
+  // nor over the Google sign-in / Calendar loading screens
+  && !route.path.startsWith('/google') && !route.path.startsWith('/auth'),
 )
 
 function lockScroll(v: boolean) {
@@ -39,11 +42,13 @@ const pos      = ref<{ x: number; y: number } | null>(null) // null → default 
 const dragging = ref(false)
 let startX = 0, startY = 0, baseX = 0, baseY = 0, moved = false
 
+// Steps left while a dashboard side panel is docked (default corner only).
+const dockRight = useDockRightOffset()
 const bubbleStyle = computed(() => {
-  const skin = 'background: linear-gradient(135deg, #D4AF37 0%, #c9a227 100%); box-shadow: 0 10px 30px rgba(212,175,55,0.45);'
+  const skin = 'background: linear-gradient(135deg, #D4A54A 0%, #D4A54A 100%); box-shadow: 0 10px 30px rgba(212,165,74,0.45);'
   return pos.value
     ? `${skin} left:${pos.value.x}px; top:${pos.value.y}px; right:auto; bottom:auto;`
-    : `${skin} right:1.5rem; bottom:1.5rem;`
+    : `${skin} right:${dockRight.value}; bottom:1.5rem; transition: right 0.3s cubic-bezier(0.22, 1, 0.36, 1);`
 })
 
 function clampPos(x: number, y: number) {
@@ -122,7 +127,7 @@ onUnmounted(() => {
       <div
         v-if="hasOpened"
         v-show="open"
-        class="fixed inset-0 z-[90] bg-white dark:bg-[#08152F]"
+        class="fixed inset-0 z-[90] bg-white dark:bg-[#0B2A5C]"
       >
         <RealtyAiChat closable @close="closeChat" />
       </div>

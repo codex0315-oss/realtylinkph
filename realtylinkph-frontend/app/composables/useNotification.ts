@@ -22,6 +22,38 @@ export const useNotification = () => {
     }
   }
 
+  async function markUnread(id: string): Promise<void> {
+    notifStore.markUnread(id) // optimistic
+    try {
+      await api.post(`/notifications/${id}/unread`)
+    } catch {
+      notifStore.markRead(id)
+    }
+  }
+
+  /** Optimistic delete; put it back if the server refuses. */
+  async function remove(id: string): Promise<boolean> {
+    const removed = notifStore.remove(id)
+    try {
+      await api.del(`/notifications/${id}`)
+      return true
+    } catch {
+      if (removed) notifStore.setNotifications([removed, ...notifStore.notifications].sort((a, b) => b.created_at.localeCompare(a.created_at)))
+      return false
+    }
+  }
+
+  async function clearRead(): Promise<number> {
+    const removed = notifStore.removeRead()
+    try {
+      await api.del('/notifications/clear-read')
+      return removed.length
+    } catch {
+      notifStore.setNotifications([...removed, ...notifStore.notifications].sort((a, b) => b.created_at.localeCompare(a.created_at)))
+      return 0
+    }
+  }
+
   async function markAllRead(): Promise<void> {
     notifStore.markAllRead() // optimistic
     try {
@@ -36,6 +68,9 @@ export const useNotification = () => {
     unreadCount:   notifStore.unreadCount,
     fetchNotifications,
     markRead,
+    markUnread,
+    remove,
+    clearRead,
     markAllRead,
     clear:         notifStore.clear,
   }

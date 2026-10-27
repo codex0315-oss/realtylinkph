@@ -3,7 +3,8 @@ import type { Inquiry, PaginatedResponse } from '~/types'
 export const useInquiry = () => {
   const api = useApi()
 
-  const inquiries = ref<Inquiry[]>([])
+  /* Shared: the Messages panel, the top-bar badge and the dashboard read the same list. */
+  const inquiries = useState<Inquiry[]>('agent-inquiries', () => [])
   const loading   = ref(false)
   const error     = ref<string | null>(null)
 

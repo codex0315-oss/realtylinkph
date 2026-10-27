@@ -8,10 +8,10 @@ export const useAuth = () => {
   const loading = ref(false)
   const error   = ref<string | null>(null)
 
-  // Role-aware landing after auth: admins → admin area, agents → listings, buyers → appointments.
+  // Role-aware landing after auth: admins → admin area, agents → their dashboard, buyers → appointments.
   function landingFor(): string {
-    if (authStore.isAdmin) return '/admin/users'
-    if (authStore.isAgent) return '/dashboard/listings'
+    if (authStore.isAdmin) return '/admin'
+    if (authStore.isAgent) return '/dashboard'
     return '/dashboard/appointments'
   }
 

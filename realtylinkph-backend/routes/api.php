@@ -18,6 +18,7 @@ use App\Http\Controllers\GoogleCalendarController;
 use App\Http\Controllers\InquiryController;
 use App\Http\Controllers\NotificationController;
 use App\Http\Controllers\PresenceController;
+use App\Http\Controllers\ProfileCoverController;
 use App\Http\Controllers\PropertyController;
 use App\Http\Controllers\PropertyPhotoController;
 use App\Http\Controllers\ReviewController;
@@ -61,7 +62,12 @@ Route::get('/email/verify/{id}/{hash}', function (Request $request, string $id, 
 Route::get('/properties', [PropertyController::class, 'index']);
 Route::get('/properties/featured', [PropertyController::class, 'featured']); // before {property}
 Route::get('/properties/home-rows', [PropertyController::class, 'homeRows']); // before {property}
+Route::get('/properties/stats', [PropertyController::class, 'stats']); // before {property}
+Route::get('/properties/cities', [PropertyController::class, 'cities']); // before {property}
 Route::get('/properties/{property}', [PropertyController::class, 'show']);
+// What's nearby (cached 30 days) and road time from the visitor's location.
+Route::get('/properties/{property}/nearby', [\App\Http\Controllers\NearbyController::class, 'show'])->middleware('throttle:60,1');
+Route::get('/properties/{property}/travel-time', [\App\Http\Controllers\NearbyController::class, 'travelTime'])->middleware('throttle:20,1');
 Route::post('/properties/{property}/inquiries', [InquiryController::class, 'submit'])->middleware('throttle:5,1');
 
 // Public agent directory (homepage top agents + agent profile page)
@@ -70,6 +76,7 @@ Route::get('/agents/{agent}', [AgentController::class, 'show']);
 
 // Public agent reviews
 Route::get('/agents/{agent}/reviews', [ReviewController::class, 'forAgent']);
+Route::get('/reviews/featured', [ReviewController::class, 'featured']); // homepage testimonials
 
 // Public availability (needed for booking form)
 Route::get('/agents/{agent}/availability', [AvailabilityController::class, 'slots']);
@@ -86,6 +93,11 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('/logout', [AuthController::class, 'logout']);
     Route::get('/me', [AuthController::class, 'me']);
     Route::put('/me', [AuthController::class, 'updateProfile']);
+
+    // Agent profile cover photo
+    Route::post('/me/cover', [ProfileCoverController::class, 'store']);
+    Route::put('/me/cover/position', [ProfileCoverController::class, 'position']);
+    Route::delete('/me/cover', [ProfileCoverController::class, 'destroy']);
     Route::post('/me/password', [AuthController::class, 'changePassword']);
     Route::post('/email/verify', [AuthController::class, 'verifyEmail'])->middleware('throttle:6,1');
     Route::post('/email/resend', [AuthController::class, 'resendVerification'])->middleware('throttle:6,1');
@@ -105,10 +117,25 @@ Route::middleware('auth:sanctum')->group(function (): void {
     // Notifications
     Route::get('/notifications', [NotificationController::class, 'index']);
     Route::post('/notifications/read-all', [NotificationController::class, 'markAllRead']);
+    Route::delete('/notifications/clear-read', [NotificationController::class, 'clearRead']); // before {id}
     Route::post('/notifications/{id}/read', [NotificationController::class, 'markRead']);
+    Route::post('/notifications/{id}/unread', [NotificationController::class, 'markUnread']);
+    Route::delete('/notifications/{id}', [NotificationController::class, 'destroy']);
 
     // RealtyLink AI — buyer assistant (rate-limited to protect the Gemini quota)
     Route::post('/ai/chat', [AiController::class, 'chat'])->middleware('throttle:20,1');
+
+    // Help & support (buyers and agents): RealtyLink AI first, then the team.
+    Route::get('/support', [\App\Http\Controllers\SupportController::class, 'index']);
+    Route::get('/support/unread', [\App\Http\Controllers\SupportController::class, 'unread']);
+    Route::get('/support/tickets/{ticket}', [\App\Http\Controllers\SupportController::class, 'show']);
+    Route::post('/support/messages', [\App\Http\Controllers\SupportController::class, 'send'])->middleware('throttle:20,1');
+    Route::post('/support/escalate', [\App\Http\Controllers\SupportController::class, 'escalate'])->middleware('throttle:10,1');
+    Route::post('/support/tickets/{ticket}/rate', [\App\Http\Controllers\SupportController::class, 'rate']);
+
+    // Rate RealtyLink PH itself (buyers and agents).
+    Route::get('/platform-rating', [\App\Http\Controllers\PlatformRatingController::class, 'mine']);
+    Route::put('/platform-rating', [\App\Http\Controllers\PlatformRatingController::class, 'save'])->middleware('throttle:10,1');
 
     // RealtyLink AI — agent companion (verified agents only)
     Route::post('/ai/agent-chat', [AiController::class, 'agentChat'])->middleware(['agent.verified', 'throttle:20,1']);
@@ -172,6 +199,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
     // Reviews
     Route::post('/reviews', [ReviewController::class, 'submit']);
     Route::put('/reviews/{review}', [ReviewController::class, 'update']);
+    Route::put('/reviews/{review}/reply', [ReviewController::class, 'reply']);
+    Route::delete('/reviews/{review}/reply', [ReviewController::class, 'deleteReply']);
+    Route::get('/me/reviews', [ReviewController::class, 'mine']);
     Route::get('/agents/{agent}/reviewable', [ReviewController::class, 'reviewable']);
 
     // AI description generator (authenticated agents only)
@@ -181,19 +211,40 @@ Route::middleware('auth:sanctum')->group(function (): void {
     // ─── Admin routes ────────────────────────────────────────────────────────
 
     Route::middleware('admin')->prefix('admin')->group(function (): void {
+        Route::get('/overview', [AdminController::class, 'overview']);
+        Route::get('/platform-ratings', [\App\Http\Controllers\PlatformRatingController::class, 'summary']);
+
+        Route::get('/support', [\App\Http\Controllers\AdminSupportController::class, 'index']);
+        Route::get('/support/stats', [\App\Http\Controllers\AdminSupportController::class, 'stats']);
+        Route::get('/support/quick-replies', [\App\Http\Controllers\AdminSupportController::class, 'quickReplies']);
+        Route::post('/support/quick-replies', [\App\Http\Controllers\AdminSupportController::class, 'storeQuickReply']);
+        Route::delete('/support/quick-replies/{quickReply}', [\App\Http\Controllers\AdminSupportController::class, 'destroyQuickReply']);
+        Route::get('/support/{ticket}', [\App\Http\Controllers\AdminSupportController::class, 'show']);
+        Route::post('/support/{ticket}/reply', [\App\Http\Controllers\AdminSupportController::class, 'reply']);
+        Route::post('/support/{ticket}/resolve', [\App\Http\Controllers\AdminSupportController::class, 'resolve']);
+        Route::post('/support/{ticket}/reopen', [\App\Http\Controllers\AdminSupportController::class, 'reopen']);
+        Route::post('/support/{ticket}/suggest', [\App\Http\Controllers\AdminSupportController::class, 'suggest']);
         Route::get('/stats', [AdminController::class, 'stats']);
         Route::get('/actions', [AdminController::class, 'actions']);
+        Route::get('/actions/stats', [AdminController::class, 'actionStats']);
         Route::get('/users', [AdminController::class, 'users']);
+        Route::get('/users/{user}', [AdminController::class, 'showUser']);
         Route::post('/admins', [AdminController::class, 'createAdmin']);
         Route::delete('/users/{user}', [AdminController::class, 'deleteUser']);
+        Route::delete('/agents/{user}/cover', [AdminController::class, 'removeAgentCover']);
         Route::get('/properties', [AdminController::class, 'properties']);
+        Route::get('/properties/stats', [AdminController::class, 'propertyStats']);
         Route::get('/properties/{property}/featured-explain', [AdminController::class, 'featuredExplain']);
         Route::post('/properties/{property}/unpublish', [AdminController::class, 'unpublishProperty']);
         Route::delete('/properties/{property}', [AdminController::class, 'deleteProperty']);
         Route::get('/pending-agents', [AdminController::class, 'pendingAgents']);
+        Route::get('/applications', [AdminController::class, 'applications']);
         Route::get('/reviews', [AdminController::class, 'reviews']);
+        Route::get('/reviews/stats', [AdminController::class, 'reviewStats']);
         Route::post('/reviews/{review}/toggle-visibility', [ReviewController::class, 'toggleVisibility']);
         Route::get('/agent-applications', [AgentVerificationController::class, 'pending']);
         Route::post('/agent-applications/{profile}/review', [AgentVerificationController::class, 'review']);
+        Route::post('/agent-applications/{profile}/hold', [AdminController::class, 'holdApplication']);
+        Route::delete('/agent-applications/{profile}/hold', [AdminController::class, 'releaseApplication']);
     });
 });

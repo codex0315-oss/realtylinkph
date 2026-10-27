@@ -33,6 +33,12 @@ class AgentProfileResource extends JsonResource
             // Official places to verify the credential — fixed and checked, never model-generated.
             'verification_links' => $this->when($isAdmin, fn () => \App\Support\AgentCredentialReference::links($this->applicant_type)),
             'reviewed_at'        => $this->reviewed_at?->toISOString(),
+            // "Check later" (PRC's lookup was down): admin-only, unlike admin_note.
+            'hold_note'          => $this->when($isAdmin, $this->hold_note),
+            'held_by'            => $this->when($isAdmin, $this->held_by),
+            'held_at'            => $this->when($isAdmin, fn () => $this->held_at?->toISOString()),
+            // Set by the admin Agents page's history tabs (from the audit trail).
+            'reviewed_by'        => $this->when($isAdmin && array_key_exists('reviewed_by', $this->resource->getAttributes()), fn () => $this->resource->getAttributes()['reviewed_by']),
             // When a rejected applicant may re-apply (12h after rejection); null otherwise.
             'reapply_at'         => $this->reapplyAt()?->toISOString(),
             // Document images — admin only, and as 15-minute signed URLs (Documents::url).

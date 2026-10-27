@@ -161,7 +161,7 @@ onUnmounted(() => {
   position: absolute;
   width: 16px;
   height: 16px;
-  border-color: #D4AF37;
+  border-color: #D4A54A;
 }
 .corner.tl { top: 0; left: 0; border-top: 3px solid; border-left: 3px solid; }
 .corner.tr { top: 0; right: 0; border-top: 3px solid; border-right: 3px solid; }

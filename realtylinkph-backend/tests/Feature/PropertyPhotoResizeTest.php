@@ -96,6 +96,44 @@ class PropertyPhotoResizeTest extends TestCase
         $this->assertSame(640, $tw);
     }
 
+    public function test_big_panorama_gets_a_4096_preview_for_the_tour(): void
+    {
+        // Production runs with 256M (Dockerfile); a local CLI default of 128M
+        // can't decode a 6000 px panorama, and ListingImage would skip it.
+        $limit = ini_get('memory_limit');
+        ini_set('memory_limit', '512M');
+        $this->beforeApplicationDestroyed(fn () => ini_set('memory_limit', (string) $limit));
+
+        Storage::fake('public');
+        config(['filesystems.uploads' => 'public']);
+
+        $file  = $this->bigPhoto(6000, 3000);
+        $bytes = file_get_contents($file->getRealPath());
+        $service = app(PropertyPhotoService::class);
+        $photo = $service->upload($this->property(), $file, is360: true);
+
+        // Original kept for the sharp view; a 4096 × 2048 copy to open on.
+        $this->assertSame($bytes, Storage::disk('public')->get($photo->url));
+        $this->assertStringEndsWith('-preview.jpg', $photo->preview_url);
+        [$pw, $ph] = getimagesizefromstring(Storage::disk('public')->get($photo->preview_url));
+        $this->assertSame([4096, 2048], [$pw, $ph]);
+        $this->assertNotNull(PropertyPhotoResource::make($photo)->resolve()['preview_url']);
+
+        $service->delete($photo);
+        Storage::disk('public')->assertMissing($photo->preview_url);
+    }
+
+    public function test_small_panorama_needs_no_preview(): void
+    {
+        Storage::fake('public');
+        config(['filesystems.uploads' => 'public']);
+
+        $photo = app(PropertyPhotoService::class)->upload($this->property(), $this->bigPhoto(2000, 1000), is360: true);
+
+        $this->assertNull($photo->preview_url);
+        $this->assertNull(PropertyPhotoResource::make($photo)->resolve()['preview_url']);
+    }
+
     public function test_small_photo_is_not_upscaled(): void
     {
         Storage::fake('public');

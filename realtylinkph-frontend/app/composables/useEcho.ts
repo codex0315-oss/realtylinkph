@@ -5,7 +5,7 @@ export const useEcho = () => {
   const authStore   = useAuthStore()
   const notifStore  = useNotificationStore()
 
-  type NotificationEvent = { type: string; payload: Record<string, unknown> }
+  type NotificationEvent = { id?: string | null; type: string; payload: Record<string, unknown>; created_at?: string | null }
 
   function listenForNotifications(onReceive?: () => void): void {
     if (!authStore.user || !$echo) return

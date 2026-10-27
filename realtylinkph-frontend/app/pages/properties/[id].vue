@@ -26,7 +26,7 @@ definePageMeta({ layout: 'default' })
     <div class="absolute top-40 right-0 h-[360px] w-[360px] rounded-full bg-brand-navy-light/10 dark:bg-brand-navy-light/[0.07] blur-[110px] pointer-events-none" />
 
     <!-- px + top padding clears the fixed navbar -->
-    <div class="relative px-4 pt-36 pb-16">
+    <div class="relative px-4 pt-28 pb-16">
       <PropertyDetailView />
     </div>
   </div>

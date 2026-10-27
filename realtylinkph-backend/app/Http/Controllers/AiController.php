@@ -6,56 +6,45 @@ namespace App\Http\Controllers;
 
 use App\Helpers\ApiResponse;
 use App\Http\Resources\PropertyResource;
-use App\Services\GeminiService;
-use App\Services\PropertyService;
+use App\Services\AgentAssistantService;
+use App\Services\BuyerAssistantService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class AiController extends Controller
 {
-    public function __construct(
-        private readonly GeminiService $gemini,
-        private readonly PropertyService $properties,
-    ) {}
-
     /**
      * RealtyLink AI — buyer assistant chat. Extracts search criteria from the
      * conversation, finds REAL matching listings, and returns a grounded reply.
+     * `shown_ids` are the listings this chat already showed, for "show me more".
      */
-    public function chat(Request $request): JsonResponse
+    public function chat(Request $request, BuyerAssistantService $assistant): JsonResponse
     {
         $data = $request->validate([
             'messages'           => ['required', 'array', 'min:1', 'max:30'],
             'messages.*.role'    => ['required', 'in:user,assistant'],
             'messages.*.content' => ['required', 'string', 'max:2000'],
+            'shown_ids'          => ['sometimes', 'array', 'max:100'],
+            'shown_ids.*'        => ['integer'],
         ]);
 
-        $history = $data['messages'];
-
-        // 1) Understand what the buyer is looking for.
-        $criteria = $this->gemini->extractSearchCriteria($history);
-
-        // 2) Pull real, published listings that match.
-        $filters = array_filter($criteria, static fn ($v) => $v !== null);
-        $results = $this->properties->list($filters, 4);
-        $items   = $results->items();
-
-        // 3) Write a friendly, grounded recommendation.
-        $reply = $this->gemini->generateAssistantReply($history, $items);
+        $result = $assistant->reply($request->user(), $data['messages'], $data['shown_ids'] ?? []);
 
         return ApiResponse::success([
-            'reply'      => $reply,
-            'criteria'   => $criteria,
-            'properties' => PropertyResource::collection(collect($items)),
+            ...$result,
+            'properties' => PropertyResource::collection(collect($result['properties'])),
+            // Keyed by listing id; an object even when empty.
+            'nearby'     => (object) $result['nearby'],
         ], 'AI replied.', 200);
     }
 
     /**
-     * RealtyLink AI — agent companion. Writes descriptions (optionally from an
-     * attached photo), proposes listings to create, and answers questions about
-     * the agent's own listings. Sent as multipart so a photo can ride along.
+     * RealtyLink AI — agent companion. Shows the agent's own data as cards,
+     * prepares tasks for them to approve, checks prices and listings, drafts
+     * replies, and still writes descriptions (optionally from an attached
+     * photo) and proposes listings. Multipart so a photo can ride along.
      */
-    public function agentChat(Request $request): JsonResponse
+    public function agentChat(Request $request, AgentAssistantService $assistant): JsonResponse
     {
         // `messages` arrives as a JSON string (multipart form-data).
         $decoded = json_decode((string) $request->input('messages'), true);
@@ -77,7 +66,7 @@ class AiController extends Controller
             ];
         }
 
-        $result = $this->gemini->agentChat($request->user(), $request->input('messages'), $image);
+        $result = $assistant->reply($request->user(), $request->input('messages'), $image);
 
         return ApiResponse::success($result, 'AI replied.', 200);
     }

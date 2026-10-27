@@ -18,6 +18,12 @@ export interface AgentProfile {
   /** Admin-only: official places to verify the credential. Fixed list from the backend. */
   verification_links?: { label: string; url: string; note: string }[]
   reviewed_at?: string | null
+  /** Admin-only, on the Agents page's Approved/Rejected tabs: who decided. */
+  reviewed_by?: string | null
+  /** Admin-only "Check later" note (e.g. PRC's lookup was down), cleared by any decision. */
+  hold_note?: string | null
+  held_by?: string | null
+  held_at?: string | null
   reapply_at?: string | null
   license_doc?: string | null
   accreditation_doc?: string | null

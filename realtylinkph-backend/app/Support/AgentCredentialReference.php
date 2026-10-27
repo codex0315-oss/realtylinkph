@@ -58,21 +58,29 @@ final class AgentCredentialReference
      */
     public static function links(string $applicantType): array
     {
+        // The first link is the "Verify on PRC" button. PRC runs two lookup
+        // sites; online1 went under maintenance in Oct 2026, so the newer
+        // verification site leads and online1 stays as the backup.
         $links = [
             [
                 'label' => 'PRC license verification',
+                'url'   => 'https://verification.prc.gov.ph',
+                'note'  => 'Official PRC lookup by name or license number, and the QR code on the new PRC ID. This is the real check.',
+            ],
+            [
+                'label' => 'PRC verification (backup)',
                 'url'   => 'https://online1.prc.gov.ph/Verification',
-                'note'  => 'Official lookup by name and profession. This is the real check.',
+                'note'  => 'PRC\'s older lookup. Use it if the main site is down.',
+            ],
+            [
+                'label' => 'DHSUD brokers & salespersons',
+                'url'   => 'https://dhsud.gov.ph/broker-agent/',
+                'note'  => 'DHSUD\'s registry for brokers and salespersons selling registered projects (renewed yearly).',
             ],
             [
                 'label' => 'RA 9646 — Real Estate Service Act',
                 'url'   => 'https://lawphil.net/statutes/repacts/ra2009/ra_9646_2009.html',
                 'note'  => 'The law that defines brokers, salespersons and their requirements.',
-            ],
-            [
-                'label' => 'DHSUD',
-                'url'   => 'https://dhsud.gov.ph',
-                'note'  => 'Registration for marketing developer projects (subdivisions, condominiums).',
             ],
         ];
 

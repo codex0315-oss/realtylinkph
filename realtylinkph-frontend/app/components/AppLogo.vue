@@ -13,7 +13,7 @@
  */
 interface Props {
   onDark?: boolean | null
-  size?: 'sm' | 'md' | 'lg'
+  size?: 'sm' | 'md' | 'lg' | 'xl'
 }
 
 const props = withDefaults(defineProps<Props>(), {
@@ -23,14 +23,22 @@ const props = withDefaults(defineProps<Props>(), {
 
 const imgFailed = ref(false)
 
+/*
+ * The artwork is the original logo with its transparent border trimmed off
+ * (the 500×500 source was ~37% empty margin, which is why the wordmark was
+ * unreadable at nav size). sm/md/lg are scaled to show the mark at the same
+ * size as before; xl is the larger lockup for the public navbar and footer,
+ * where "RealtyLinkPH" needs to be legible.
+ */
 const heightClass = computed(() => ({
-  sm: 'h-11',
-  md: 'h-[68px]',
-  lg: 'h-24',
+  sm: 'h-7',
+  md: 'h-[43px]',
+  lg: 'h-[61px]',
+  xl: 'h-[3.75rem]',
 }[props.size]))
 
-const NAVY  = '/realtylinkphlogo.png'
-const LIGHT = '/realtylinkphlogo-light.png'
+const NAVY  = '/realtylinkphlogo-trim.png'
+const LIGHT = '/realtylinkphlogo-light-trim.png'
 
 /** Forced variants render a single image; auto renders both and lets CSS pick. */
 const forced = computed(() => (props.onDark === null ? null : props.onDark ? LIGHT : NAVY))

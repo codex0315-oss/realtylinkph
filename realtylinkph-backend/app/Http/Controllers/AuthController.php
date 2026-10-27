@@ -158,7 +158,8 @@ class AuthController extends Controller
         $status = Password::reset(
             $request->only('email', 'password', 'password_confirmation', 'token'),
             function (User $user, string $password): void {
-                $user->update(['password' => Hash::make($password)]);
+                // Also how a Google sign-up gets a password of their own.
+                $user->update(['password' => Hash::make($password), 'password_set' => true]);
                 $user->tokens()->delete();
             }
         );

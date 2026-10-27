@@ -19,6 +19,8 @@ class NotificationSent implements ShouldBroadcastNow
         public readonly int $userId,
         public readonly string $type,
         public readonly array $payload = [],
+        public readonly ?string $id = null,
+        public readonly ?string $createdAt = null,
     ) {}
 
     public function broadcastOn(): array
@@ -36,8 +38,10 @@ class NotificationSent implements ShouldBroadcastNow
     public function broadcastWith(): array
     {
         return [
-            'type'    => $this->type,
-            'payload' => $this->payload,
+            'id'         => $this->id,
+            'type'       => $this->type,
+            'payload'    => $this->payload,
+            'created_at' => $this->createdAt,
         ];
     }
 }

@@ -14,7 +14,7 @@ class NotificationService
     public function send(User $recipient, string $type, array $payload = []): void
     {
         // Persist first so the notification survives a refresh even if broadcasting fails.
-        $recipient->notifications()->create([
+        $row = $recipient->notifications()->create([
             'id'      => (string) Str::uuid(),
             'type'    => $type,
             'data'    => $payload,
@@ -22,7 +22,9 @@ class NotificationService
         ]);
 
         try {
-            broadcast(new NotificationSent($recipient->id, $type, $payload));
+            // The real id travels with the push, so the live copy can be marked
+            // read / deleted straight away instead of after the next refetch.
+            broadcast(new NotificationSent($recipient->id, $type, $payload, $row->id, $row->created_at?->toISOString()));
         } catch (\Throwable $e) {
             Log::warning('NotificationService broadcast failed', [
                 'recipient' => $recipient->id,

@@ -44,7 +44,7 @@ onUnmounted(() => observer?.disconnect())
   <section
     id="how-it-works"
     ref="sectionEl"
-    class="bg-brand-navy dark:bg-[#050B18] py-20 relative overflow-hidden transition-colors duration-500 scroll-mt-24"
+    class="bg-brand-navy dark:bg-[#040E24] py-20 lg:py-24 relative overflow-hidden transition-colors duration-500 scroll-mt-24"
   >
     <!-- Subtle dot grid texture -->
     <div class="absolute inset-0 bg-grid-gold opacity-[0.04] pointer-events-none" />
@@ -54,13 +54,15 @@ onUnmounted(() => observer?.disconnect())
 
     <div class="relative max-w-content mx-auto px-6">
       <!-- Header -->
-      <div v-reveal class="flex items-center justify-center gap-4 mb-16">
-        <div class="flex-1 max-w-[80px] h-px bg-brand-gold/30" />
-        <h2 class="font-display text-2xl md:text-3xl font-bold text-white text-center whitespace-nowrap">
-          How RealtyLinkPH Works
-        </h2>
-        <div class="flex-1 max-w-[80px] h-px bg-brand-gold/30" />
-      </div>
+      <HomeSectionHeading
+        v-reveal
+        class="mb-16"
+        align="center"
+        inverse
+        eyebrow="How it works"
+        title="From search to keys in three steps."
+        accent="three steps"
+      />
 
       <!-- Steps -->
       <div class="grid grid-cols-1 md:grid-cols-3 gap-10 md:gap-4 items-start relative">
@@ -94,8 +96,8 @@ onUnmounted(() => observer?.disconnect())
             <!-- pulsing halo -->
             <span class="absolute inset-0 rounded-full bg-brand-gold/20 animate-pulse-ring pointer-events-none" aria-hidden="true" />
 
-            <div class="relative w-20 h-20 rounded-full border-2 border-brand-gold/50 bg-brand-navy dark:bg-[#050B18] flex items-center justify-center shadow-lg
-                        group-hover:border-brand-gold group-hover:scale-110 group-hover:shadow-[0_0_40px_rgba(212,175,55,0.35)]
+            <div class="relative w-20 h-20 rounded-full border-2 border-brand-gold/50 bg-brand-navy dark:bg-[#040E24] flex items-center justify-center shadow-lg
+                        group-hover:border-brand-gold group-hover:scale-110 group-hover:shadow-[0_0_40px_rgba(212,165,74,0.35)]
                         transition-all duration-400">
               <svg class="h-8 w-8 text-brand-gold transition-transform duration-400 group-hover:scale-110" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5">
                 <path stroke-linecap="round" stroke-linejoin="round" :d="step.iconPath" />
@@ -107,8 +109,8 @@ onUnmounted(() => observer?.disconnect())
             </span>
           </div>
 
-          <h3 class="font-bold text-brand-gold text-base">{{ step.title }}</h3>
-          <p class="mt-2 text-sm text-white/55 leading-relaxed max-w-xs mx-auto">{{ step.desc }}</p>
+          <h3 class="font-sans font-semibold text-white text-lg">{{ step.title }}</h3>
+          <p class="mt-2 text-sm text-white/60 leading-relaxed max-w-xs mx-auto">{{ step.desc }}</p>
         </div>
       </div>
     </div>
@@ -130,8 +132,8 @@ onUnmounted(() => observer?.disconnect())
   height: 3px;
   margin-top: -1.5px;
   border-radius: 9999px;
-  background: linear-gradient(90deg, transparent 0%, rgba(212, 175, 55, 0.85) 60%, #E8C547 100%);
-  box-shadow: 0 0 14px 2px rgba(212, 175, 55, 0.45);
+  background: linear-gradient(90deg, transparent 0%, rgba(212,165,74, 0.85) 60%, #E8C77A 100%);
+  box-shadow: 0 0 14px 2px rgba(212,165,74, 0.45);
   transform: translateX(-100%);
   opacity: 0;
   animation: how-comet-travel 4.8s cubic-bezier(0.45, 0, 0.25, 1) 1.4s infinite;

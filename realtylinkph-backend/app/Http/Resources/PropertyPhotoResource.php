@@ -19,6 +19,8 @@ class PropertyPhotoResource extends JsonResource
             // Card-sized copy. Falls back to the main image for photos that
             // predate thumbnails, so the frontend can always use it for cards.
             'thumb_url'   => Uploads::url($this->thumb_url ?? $this->url),
+            // 360° only: a lighter copy the tour opens with before the full image.
+            'preview_url' => $this->preview_url ? Uploads::url($this->preview_url) : null,
             'is_360'      => $this->is_360,
             'sort_order'  => $this->sort_order,
         ];

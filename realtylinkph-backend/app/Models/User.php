@@ -22,8 +22,11 @@ class User extends Authenticatable implements MustVerifyEmail
         'name',
         'email',
         'password',
+        'password_set',
         'phone',
         'avatar',
+        'cover_photo',
+        'cover_position',
         'role_type',
         'favorites',
         'theme',
@@ -75,6 +78,7 @@ class User extends Authenticatable implements MustVerifyEmail
             'google_token_expires_at' => 'datetime',
             'last_seen_at'            => 'datetime',
             'is_system'               => 'boolean',
+            'password_set'            => 'boolean',
         ];
     }
 

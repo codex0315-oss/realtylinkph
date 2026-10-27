@@ -6,10 +6,16 @@ export interface User {
   email: string
   phone: string | null
   avatar: string | null
+  /** Agent profile cover photo (null → the default navy banner). */
+  cover_url?: string | null
+  /** Vertical focal point of the cover, 0 (top) – 100 (bottom). */
+  cover_position?: number
   role_type: UserRole
   theme?: 'light' | 'dark' | 'system'
   property_alerts?: boolean
   has_gcal?: boolean
+  /** Own account only. False for "Continue with Google" sign-ups who never set one. */
+  password_set?: boolean
   email_verified_at: string | null
   last_seen_at?: string | null
   is_online?: boolean

@@ -15,12 +15,22 @@ class AdminAction extends Model
     public const LABELS = [
         'agent.approved'      => 'Approved agent application',
         'agent.rejected'      => 'Rejected agent application',
+        'agent.held'          => 'Put agent application on hold',
         'listing.unpublished' => 'Unpublished listing',
         'listing.deleted'     => 'Deleted listing',
         'review.hidden'       => 'Hid review',
         'review.shown'        => 'Restored review',
         'user.deleted'        => 'Deleted user',
+        'user.cover_removed'  => 'Removed cover photo',
         'admin.created'       => 'Created admin account',
+    ];
+
+    /** Areas for the Activity page's tabs: area => action prefixes. */
+    public const AREAS = [
+        'agents'   => ['agent.'],
+        'listings' => ['listing.'],
+        'reviews'  => ['review.'],
+        'users'    => ['user.', 'admin.'],
     ];
 
     protected $fillable = [

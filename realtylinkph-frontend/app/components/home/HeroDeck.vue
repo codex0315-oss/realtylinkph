@@ -164,7 +164,7 @@ function priceLabel(price: number, offer: string): string {
                bg-white/80 dark:bg-white/[0.07] backdrop-blur-md
                border border-white/70 dark:border-white/10
                ring-1 ring-brand-navy/5
-               shadow-[0_14px_40px_-14px_rgba(8,21,47,0.22),0_34px_80px_-34px_rgba(8,21,47,0.18)]"
+               shadow-[0_14px_40px_-14px_rgba(11,42,92,0.22),0_34px_80px_-34px_rgba(11,42,92,0.18)]"
         :class="c.href ? '' : 'cursor-default'"
       >
         <!-- Photo -->

@@ -25,6 +25,8 @@ class AgentReview extends Model
         return [
             'rating'     => 'integer',
             'is_visible' => 'boolean',
+            'hidden_at'  => 'datetime',
+            'agent_replied_at' => 'datetime',
         ];
     }
 

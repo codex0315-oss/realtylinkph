@@ -32,7 +32,9 @@ const csp = [
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' data: https://fonts.gstatic.com",
   `img-src 'self' data: blob: ${apiOrigins} ${storageOrigin} https://*.tile.openstreetmap.org https://*.googleusercontent.com`,
-  `connect-src 'self' ${apiOrigins} ${storageOrigin} https://api.geoapify.com https://*.pusher.com wss://*.pusher.com https://*.tile.openstreetmap.org${devSockets}`,
+  // blob: — the 360° tour hands the viewer a panorama the page already
+  // downloaded in the background (utils/panorama.ts); the viewer reads it back.
+  `connect-src 'self' blob: ${apiOrigins} ${storageOrigin} https://api.geoapify.com https://*.pusher.com wss://*.pusher.com https://*.tile.openstreetmap.org${devSockets}`,
   "media-src 'self' blob:",
   "worker-src 'self' blob:",
   "frame-src 'self'",
@@ -48,8 +50,10 @@ const securityHeaders = {
   'X-Frame-Options': 'DENY',
   'X-Content-Type-Options': 'nosniff',
   'Referrer-Policy': 'strict-origin-when-cross-origin',
-  // The agent-verification wizard uses the camera; nothing needs mic or GPS.
-  'Permissions-Policy': 'camera=(self), microphone=(), geolocation=(), payment=()',
+  // Camera: the agent-verification wizard. Geolocation: "How far is this from
+  // you?" on a listing (asked only when tapped). Both for our own pages only,
+  // never for embedded frames. Nothing needs the mic or payments.
+  'Permissions-Policy': 'camera=(self), microphone=(), geolocation=(self), payment=()',
 }
 
 export default defineNuxtConfig({
@@ -120,7 +124,7 @@ export default defineNuxtConfig({
         { rel: 'preconnect', href: 'https://fonts.gstatic.com', crossorigin: '' },
         {
           rel: 'stylesheet',
-          href: 'https://fonts.googleapis.com/css2?family=Inter:wght@300;400;500;600;700&family=Sora:wght@400;500;600;700;800&display=swap',
+          href: 'https://fonts.googleapis.com/css2?family=Fraunces:ital,opsz,wght@0,9..144,500;0,9..144,600;1,9..144,500;1,9..144,600&family=Inter:wght@300;400;500;600;700&family=Sora:wght@400;500;600;700;800&display=swap',
         },
         // Brand icons — the R monogram cropped out of the full logo, since the
         // wordmark is unreadable at 16px. `sizes: 'any'` stops Chrome from

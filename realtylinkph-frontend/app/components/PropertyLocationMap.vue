@@ -38,9 +38,9 @@ async function init() {
   const icon = L.divIcon({
     className: '',
     html: `<div class="prop-loc-pin">
-      <svg width="38" height="38" viewBox="0 0 24 24" fill="#D4AF37" stroke="#08152F" stroke-width="1.4">
+      <svg width="38" height="38" viewBox="0 0 24 24" fill="#D4A54A" stroke="#0B2A5C" stroke-width="1.4">
         <path d="M12 21s-7-7.5-7-12a7 7 0 1114 0c0 4.5-7 12-7 12z"/>
-        <circle cx="12" cy="9" r="2.6" fill="#08152F"/>
+        <circle cx="12" cy="9" r="2.6" fill="#0B2A5C"/>
       </svg>
     </div>`,
     iconSize: [38, 38],

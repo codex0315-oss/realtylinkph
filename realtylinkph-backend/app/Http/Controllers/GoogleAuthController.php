@@ -152,6 +152,7 @@ class GoogleAuthController extends Controller
                 'name'      => $profile['name'] ?? Str::before($email, '@'),
                 'email'     => $email,
                 'password'  => Hash::make(Str::random(40)), // random — Google users sign in via Google
+                'password_set' => false,                    // …so there's none for them to change
                 'role_type' => 'buyer',                     // registration is buyer-only
                 'avatar'    => $profile['picture'] ?? null, // external Google photo URL
             ]);

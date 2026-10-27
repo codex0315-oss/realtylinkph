@@ -31,6 +31,19 @@ onMounted(() => {
   stopNewMessage = onNotificationType('new_message', () => { fetchConversations() })
 })
 
+// Arriving from the top-bar Messages menu (?c=<id>) — open that thread. Also
+// watched, because picking a chat there while already on this page only
+// changes the query.
+async function openFromQuery() {
+  const convId = Number(route.query.c)
+  if (!convId) return
+  if (!convStore.conversations.some(c => c.id === convId)) await fetchConversations()
+  if (convStore.conversations.some(c => c.id === convId)) await openConv(convId)
+  router.replace({ query: {} })
+}
+onMounted(openFromQuery)
+watch(() => route.query.c, (c) => { if (c) openFromQuery() })
+
 // Arriving from "Message Agent" (?agent=&property=) — open/create that conversation.
 onMounted(async () => {
   const agentId    = Number(route.query.agent)
@@ -327,7 +340,7 @@ if (convStore.conversations.length) {
 
 <template>
   <div
-    class="flex rounded-2xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#10264D] overflow-hidden shadow-sm"
+    class="flex rounded-2xl border border-gray-200 dark:border-white/10 bg-white dark:bg-[#17417F] overflow-hidden shadow-sm"
     style="height: calc(100vh - 9rem)"
   >
     <!-- ════════ Conversation list ════════ -->
@@ -391,11 +404,11 @@ if (convStore.conversations.length) {
           <!-- Avatar → profile (agents only); stops the row's open-chat click -->
           <NuxtLink v-if="profileHref(other(conv))" :to="profileHref(other(conv))!" class="relative flex-shrink-0" title="View profile" @click.stop>
             <AppAvatar :name="other(conv)?.name" :src="other(conv)?.avatar" size="md" />
-            <span v-if="other(conv)?.is_online" class="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 border-2 border-white dark:border-[#10264D]" />
+            <span v-if="other(conv)?.is_online" class="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 border-2 border-white dark:border-[#17417F]" />
           </NuxtLink>
           <div v-else class="relative flex-shrink-0">
             <AppAvatar :name="other(conv)?.name" :src="other(conv)?.avatar" size="md" />
-            <span v-if="other(conv)?.is_online" class="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 border-2 border-white dark:border-[#10264D]" />
+            <span v-if="other(conv)?.is_online" class="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 border-2 border-white dark:border-[#17417F]" />
           </div>
 
           <div class="flex-1 min-w-0">
@@ -472,7 +485,7 @@ if (convStore.conversations.length) {
           >
             <div class="relative flex-shrink-0">
               <AppAvatar :name="activeOther?.name" :src="activeOther?.avatar" size="md" />
-              <span class="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white dark:border-[#10264D]" :class="otherPresence?.is_online ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-500'" />
+              <span class="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full border-2 border-white dark:border-[#17417F]" :class="otherPresence?.is_online ? 'bg-emerald-500' : 'bg-gray-300 dark:bg-gray-500'" />
             </div>
             <div class="min-w-0">
               <p class="text-sm font-bold text-brand-navy dark:text-white truncate" :class="headerProfileHref ? 'hover:text-brand-gold transition-colors' : ''">{{ activeOther?.name ?? 'Unknown' }}</p>
@@ -498,7 +511,7 @@ if (convStore.conversations.length) {
         <div
           ref="threadEl"
           class="flex-1 overflow-y-auto px-5 py-4 space-y-1"
-          style="background-image: radial-gradient(rgba(212,175,55,0.04) 1px, transparent 1px); background-size: 22px 22px;"
+          style="background-image: radial-gradient(rgba(212,165,74,0.04) 1px, transparent 1px); background-size: 22px 22px;"
         >
           <template v-for="item in feed" :key="item.id">
             <!-- Date separator -->
@@ -544,7 +557,7 @@ if (convStore.conversations.length) {
                       : isAi(item.message)
                         ? 'bg-brand-gold/10 dark:bg-brand-gold/15 border border-brand-gold/30 text-brand-navy dark:text-white rounded-2xl rounded-bl-md whitespace-pre-line'
                         : 'bg-gray-100 dark:bg-white/10 text-brand-navy dark:text-white rounded-2xl rounded-bl-md'"
-                    :style="isMine(item.message) ? 'background: linear-gradient(135deg, #10264D 0%, #08152F 100%)' : ''"
+                    :style="isMine(item.message) ? 'background: linear-gradient(135deg, #17417F 0%, #0B2A5C 100%)' : ''"
                   >
                     {{ item.message.body }}
                   </div>
@@ -667,7 +680,7 @@ if (convStore.conversations.length) {
             />
             <button
               class="h-9 w-9 rounded-full flex items-center justify-center text-white transition-all disabled:opacity-40 flex-shrink-0"
-              style="background: linear-gradient(135deg, #D4AF37 0%, #c9a227 100%)"
+              style="background: linear-gradient(135deg, #D4A54A 0%, #D4A54A 100%)"
               :disabled="!newMessage.trim()"
               @click="send"
             >

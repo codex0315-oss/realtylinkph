@@ -23,10 +23,15 @@
      */
     font-size: clamp(16px, 7.2px + 0.625vw, 24px);
     --content-w: 80rem;
+    --grid-line: 1px;   /* see .bg-grid-lines */
   }
   @media (min-width: 1536px) {
     html { --content-w: 88rem; }
   }
+  /* Zoomed out / low-DPI: keep grid hairlines ≥ ~1 device pixel. */
+  @media (max-resolution: 0.9dppx)  { html { --grid-line: 1.5px; } }
+  @media (max-resolution: 0.6dppx)  { html { --grid-line: 2px; } }
+  @media (max-resolution: 0.4dppx)  { html { --grid-line: 3px; } }
 
   body {
     @apply bg-white antialiased;
@@ -57,7 +62,7 @@
 
   /* Visible keyboard focus everywhere, without stealing mouse-click styling. */
   :focus-visible {
-    outline: 2px solid #D4AF37;
+    outline: 2px solid #D4A54A;
     outline-offset: 3px;
     border-radius: 4px;
   }
@@ -90,7 +95,18 @@
   .reveal-init.reveal-right { transform: translateX(36px); }
   .reveal-init.reveal-zoom  { transform: scale(0.94); }
   .reveal-init.reveal-blur  { filter: blur(10px); }
-  .reveal-in.reveal-blur    { filter: blur(0); }
+  /* Two classes, and after the variants: the variant rules above are two
+     classes too, so a lone `.reveal-in` lost to them and left/right/zoom
+     cards stayed shifted for good (off the edge on phones). */
+  .reveal-init.reveal-in    { opacity: 1; transform: none; filter: none; }
+
+  /* Phones: a shorter sideways slide, so a full-width card never pokes past
+     the screen edge while it comes in. */
+  @media (max-width: 639px) {
+    .reveal-init.reveal-left  { transform: translateX(-14px); }
+    .reveal-init.reveal-right { transform: translateX(14px); }
+    .reveal-init.reveal-in    { transform: none; }
+  }
 
   /* ── Ambient motion ────────────────────────────────────────────────────── */
   .animate-float {
@@ -112,35 +128,82 @@
 
   /* Gold gradient text used on hero + section accents. */
   .text-gold-gradient {
-    background-image: linear-gradient(100deg, #D4AF37 0%, #F0DFA0 45%, #D4AF37 100%);
+    background-image: linear-gradient(100deg, #D4A54A 0%, #F4E4BE 45%, #D4A54A 100%);
     -webkit-background-clip: text;
     background-clip: text;
     color: transparent;
   }
 
+  /*
+   * The logo's metallic sweep: champagne → gold → bronze. As a FILL it takes
+   * white or navy marks. As TEXT on a light ground the stops stay dark enough
+   * for large type (≥3:1 on cream); dark mode gets the bright champagne sweep.
+   */
+  .bg-gold-metal {
+    background-image: linear-gradient(135deg, #F1D78F 0%, #D4A54A 42%, #A8772A 100%);
+  }
+  .text-gold-metal {
+    background-image: linear-gradient(100deg, #8E621A 0%, #B98630 50%, #8E621A 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+  .dark .text-gold-metal,
+  .text-gold-metal-bright {
+    background-image: linear-gradient(100deg, #D4A54A 0%, #F4E0A6 50%, #D4A54A 100%);
+    -webkit-background-clip: text;
+    background-clip: text;
+    color: transparent;
+  }
+
+  /*
+   * Soft light that follows the pointer over a card (see plugins/spotlight.ts,
+   * which sets --mx / --my). The element needs `relative overflow-hidden`.
+   * Pure decoration: pointer-events none, and nothing on touch screens.
+   */
+  .spotlight::after {
+    content: '';
+    position: absolute;
+    inset: 0;
+    border-radius: inherit;
+    pointer-events: none;
+    opacity: 0;
+    transition: opacity 0.3s ease;
+    background: radial-gradient(22rem circle at var(--mx, 50%) var(--my, 50%), rgba(212,165,74, 0.16), transparent 60%);
+  }
+  .spotlight:hover::after { opacity: 1; }
+
   .bg-grid-gold {
-    background-image: radial-gradient(circle, rgba(212, 175, 55, 0.9) 1px, transparent 1px);
+    background-image: radial-gradient(circle, rgba(212,165,74, 0.9) 1px, transparent 1px);
     background-size: 28px 28px;
   }
 
-  /* Ruled grid for light sections — navy hairlines, inverted for dark mode. */
+  /*
+   * Ruled grid for light sections — navy hairlines, inverted for dark mode.
+   *
+   * Line width is --grid-line, not a fixed 1px. Zoomed out (or on a low-DPI
+   * screen) 1 CSS px is less than one device pixel, and Chrome snaps each
+   * gradient hard stop to the pixel grid — so some lines render and some
+   * vanish, and the grid looks patchy or gone. The steps in the
+   * `resolution` queries below keep every line at roughly one device pixel.
+   */
   .bg-grid-lines {
     background-image:
-      linear-gradient(to right,  rgba(8, 21, 47, 0.07) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(8, 21, 47, 0.07) 1px, transparent 1px);
+      linear-gradient(to right,  rgba(11,42,92, 0.07) var(--grid-line), transparent var(--grid-line)),
+      linear-gradient(to bottom, rgba(11,42,92, 0.07) var(--grid-line), transparent var(--grid-line));
     background-size: 64px 64px;
   }
   .dark .bg-grid-lines {
     background-image:
-      linear-gradient(to right,  rgba(255, 255, 255, 0.055) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(255, 255, 255, 0.055) 1px, transparent 1px);
+      linear-gradient(to right,  rgba(255, 255, 255, 0.055) var(--grid-line), transparent var(--grid-line)),
+      linear-gradient(to bottom, rgba(255, 255, 255, 0.055) var(--grid-line), transparent var(--grid-line));
   }
 
   /* Larger accent squares layered over the fine grid. */
   .bg-grid-lines-lg {
     background-image:
-      linear-gradient(to right,  rgba(212, 175, 55, 0.14) 1px, transparent 1px),
-      linear-gradient(to bottom, rgba(212, 175, 55, 0.14) 1px, transparent 1px);
+      linear-gradient(to right,  rgba(212,165,74, 0.14) var(--grid-line), transparent var(--grid-line)),
+      linear-gradient(to bottom, rgba(212,165,74, 0.14) var(--grid-line), transparent var(--grid-line));
     background-size: 256px 256px;
   }
 
@@ -177,8 +240,8 @@
     @apply inline-flex items-center justify-center gap-2
            bg-brand-gold text-brand-navy font-bold
            px-6 py-3 rounded-xl
-           shadow-[0_4px_16px_rgba(201,162,39,0.35)]
-           hover:shadow-[0_6px_24px_rgba(201,162,39,0.5)]
+           shadow-[0_4px_16px_rgba(212,165,74,0.35)]
+           hover:shadow-[0_6px_24px_rgba(212,165,74,0.5)]
            hover:-translate-y-0.5 active:translate-y-0
            transition-all duration-200 ease-out
            disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none;
@@ -217,7 +280,7 @@
 
   /* Section eyebrow — gold rule + tracked caps. Used across the landing page. */
   .eyebrow {
-    @apply text-brand-gold text-[0.6875rem] font-bold tracking-[0.25em] uppercase;
+    @apply text-brand-gold-deep dark:text-brand-gold text-[0.6875rem] font-semibold tracking-[0.22em] uppercase;
   }
 
   /* Animated underline for nav links. */
@@ -231,7 +294,7 @@
     bottom: -4px;
     height: 2px;
     width: 100%;
-    background: #D4AF37;
+    background: #D4A54A;
     transform: scaleX(0);
     transform-origin: right;
     transition: transform 0.32s cubic-bezier(0.22, 1, 0.36, 1);
@@ -263,7 +326,7 @@
 /* Surfaces. Only the exact classes — `bg-white/10` and friends compile to
    `.bg-white\/10` and are deliberately untouched, since those already sit on
    dark surfaces by design. */
-.dark .bg-white      { background-color: #10264D; }
+.dark .bg-white      { background-color: #17417F; }
 .dark .bg-gray-50    { background-color: rgba(255, 255, 255, 0.04); }
 .dark .bg-gray-100   { background-color: rgba(255, 255, 255, 0.07); }
 

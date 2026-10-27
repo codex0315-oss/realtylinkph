@@ -13,7 +13,7 @@ const router = useRouter()
 await fetchMe()
 
 if (authStore.isVerifiedAgent) {
-  await router.push('/dashboard/listings')
+  await router.push('/dashboard')
 }
 
 const existing = computed(() => authStore.user?.agent_profile ?? null)
@@ -201,6 +201,91 @@ async function submit() {
   }
 }
 
+/* ── Redesign helpers ── */
+
+/* Drag a file onto an upload box: same checks as picking one. */
+const dragKey = ref<string | null>(null)
+function dropDoc(key: 'accreditationDoc' | 'validId' | 'licenseDoc', e: DragEvent) {
+  dragKey.value = null
+  const file = e.dataTransfer?.files?.[0]
+  if (!file) return
+  setDoc(key, { target: { files: [file], value: '' } } as unknown as Event)
+}
+function clearDoc(key: 'accreditationDoc' | 'validId' | 'licenseDoc') {
+  files[key] = null
+  previews[key] = ''
+}
+
+/* Review → "Edit" jumps straight to that step. */
+function goStep(label: string) {
+  const i = stepLabels.value.indexOf(label)
+  if (i >= 0) step.value = i + 1
+}
+
+/* What each path involves (start screen). */
+const PATHS = [
+  {
+    type: 'broker' as ApplicantType,
+    title: 'Real Estate Broker',
+    blurb: 'Licensed by the PRC to transact on your own.',
+    needs: ['PRC broker license number', 'Photo of your PRC license card', 'A live face scan'],
+    time: 'About 3 minutes',
+    icon: 'M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z',
+  },
+  {
+    type: 'salesperson' as ApplicantType,
+    title: 'Real Estate Salesperson',
+    blurb: 'Accredited and working under a licensed broker.',
+    needs: ['Accreditation number', 'Accreditation document + a valid ID', 'A live face scan'],
+    time: 'About 4 minutes',
+    icon: 'M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z',
+  },
+]
+
+/* Submitted / pending: where the application is. */
+const pending = computed(() => submittedProfile.value ?? existing.value)
+const submittedOn = computed(() =>
+  pending.value?.created_at ? new Date(pending.value.created_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : '',
+)
+const TRACK = computed(() => [
+  { label: 'Submitted',      sub: submittedOn.value || 'Received', state: 'done' },
+  { label: 'AI pre-check',   sub: pending.value?.ai_comment ? 'Done' : 'Running in the background', state: pending.value?.ai_comment ? 'done' : 'active' },
+  { label: 'Admin review',   sub: 'Usually within 24 hours', state: pending.value?.ai_comment ? 'active' : 'todo' },
+  { label: 'Approved',       sub: 'You can start listing', state: 'todo' },
+])
+
+const fieldCls =
+  'w-full rounded-2xl border-0 px-4 py-3 text-[0.9375rem] text-brand-navy dark:text-white bg-brand-navy/[0.04] dark:bg-white/[0.06] ' +
+  'ring-1 ring-inset ring-brand-navy/10 dark:ring-white/10 placeholder-brand-navy/40 dark:placeholder-white/35 ' +
+  'focus:bg-white dark:focus:bg-white/[0.09] focus:ring-2 focus:ring-brand-gold dark:focus:ring-brand-gold transition'
+const labelCls = 'mb-1.5 block text-sm font-semibold text-brand-navy dark:text-white/90'
+
+/* Which file the current upload step is for. */
+const docKey = computed<'licenseDoc' | 'accreditationDoc' | 'validId' | null>(() =>
+  stepKey.value === 'License Card' ? 'licenseDoc'
+  : stepKey.value === 'Accreditation' ? 'accreditationDoc'
+  : stepKey.value === 'Valid ID' ? 'validId' : null,
+)
+const reviewDocs = computed(() => type.value === 'broker'
+  ? [{ k: 'licenseDoc', label: 'License card', step: 'License Card' }]
+  : [{ k: 'accreditationDoc', label: 'Accreditation', step: 'Accreditation' }, { k: 'validId', label: 'Valid ID', step: 'Valid ID' }])
+/* Submitted screen: what was sent, and useful things to do meanwhile. */
+const sentDocs = computed(() => [
+  ...(pending.value?.applicant_type === 'broker' ? ['PRC license card'] : ['Accreditation document', 'Valid ID']),
+  'Live face scan',
+])
+const WHILE_WAITING = [
+  { to: '/dashboard/browse', label: 'Keep browsing', hint: 'See what agents are listing', icon: 'M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607z' },
+  { to: '/dashboard/profile', label: 'Finish your profile', hint: 'Photo, cover and phone', icon: 'M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z' },
+  { to: '/dashboard/profile?section=apps', label: 'Connect Google Calendar', hint: 'Viewings sync once you list', icon: 'M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5' },
+]
+const TIPS = [
+  'Clear, well-lit photos with no glare or blur',
+  'Your name matches your PRC record',
+  'The whole document, front side, in frame',
+  'Good lighting on your face for the scan',
+]
+
 function startReapply() {
   if (inCooldown.value) return // still inside the 12h cool-down
   reapply.value = true
@@ -213,380 +298,493 @@ function startReapply() {
 <template>
   <div class="max-w-6xl mx-auto">
 
-    <!-- ░░ Submit overlay — real upload progress ░░ -->
+    <!-- ░░ Submit overlay: real upload progress ░░ -->
     <Teleport to="body">
       <Transition name="verify-fade">
-        <div
-          v-if="loading"
-          class="fixed inset-0 z-[95] flex flex-col items-center justify-center gap-6 px-6 text-center"
-          style="background: linear-gradient(160deg, #0d1f3c 0%, #08152F 100%)"
-        >
-          <div class="relative h-24 w-24 flex items-center justify-center">
-            <span class="absolute inset-0 rounded-full border-2 border-brand-gold/20" />
-            <span v-if="uploadPercent >= 100" class="absolute inset-0 rounded-full border-t-2 border-brand-gold animate-spin" />
-            <svg class="h-10 w-10 text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z" />
-            </svg>
-          </div>
-
-          <div class="max-w-md">
-            <h2 class="font-playfair text-2xl font-bold text-white">Submitting your application</h2>
-            <p class="text-white/60 text-sm mt-2">{{ submitPhase }}</p>
-          </div>
-
-          <div class="w-full max-w-sm">
-            <div class="flex items-center justify-between text-xs font-semibold text-white/60 mb-2">
-              <span>{{ uploadPercent < 100 ? 'Upload' : 'Upload complete' }}</span>
-              <span class="text-brand-gold tabular-nums">{{ uploadPercent }}%</span>
+        <div v-if="loading" class="fixed inset-0 z-[95] overflow-hidden flex items-center justify-center px-6 bg-brand-cream dark:bg-brand-navy-deep">
+          <div class="absolute inset-0 bg-grid-lines mask-radial-fade pointer-events-none" />
+          <div class="absolute inset-0 bg-grid-lines-lg mask-radial-fade pointer-events-none" />
+          <div class="absolute left-1/2 top-1/2 -translate-x-1/2 -translate-y-1/2 h-[28rem] w-[28rem] max-w-full rounded-full bg-brand-gold/15 dark:bg-brand-gold/[0.08] blur-[110px] pointer-events-none" />
+          <div class="relative w-full max-w-xs flex flex-col items-center text-center" role="status" aria-live="polite">
+            <img src="/realtylinkphlogo-trim.png" alt="RealtyLinkPH" class="h-20 w-auto block dark:hidden" />
+            <img src="/realtylinkphlogo-light-trim.png" alt="RealtyLinkPH" class="h-20 w-auto hidden dark:block" />
+            <p class="mt-7 font-heading text-[1.375rem] font-semibold text-brand-navy dark:text-white">Submitting your application</p>
+            <div class="mt-5 h-1.5 w-full overflow-hidden rounded-full bg-brand-navy/10 dark:bg-white/10" role="progressbar" :aria-valuenow="uploadPercent" aria-valuemin="0" aria-valuemax="100" aria-label="Upload">
+              <div class="h-full rounded-full bg-gradient-to-r from-brand-gold-deep via-brand-gold to-brand-gold-light transition-[width] duration-200 ease-out" :style="{ width: uploadPercent + '%' }" />
             </div>
-            <div class="h-2.5 w-full rounded-full bg-white/10 overflow-hidden" role="progressbar" :aria-valuenow="uploadPercent" aria-valuemin="0" aria-valuemax="100">
-              <div class="h-full rounded-full bg-brand-gold transition-[width] duration-200 ease-out" :style="{ width: uploadPercent + '%' }" />
-            </div>
+            <p class="mt-3 flex w-full items-center justify-between text-xs font-medium text-brand-navy/55 dark:text-white/55">
+              <span>{{ submitPhase }}</span>
+              <span class="tabular-nums font-bold text-brand-gold-deep dark:text-brand-gold">{{ uploadPercent }}%</span>
+            </p>
+            <p class="mt-10 text-[0.6875rem] text-brand-navy/40 dark:text-white/35">Please keep this page open until it finishes.</p>
           </div>
-
-          <p class="text-white/30 text-[0.6875rem]">Please keep this page open until it finishes.</p>
         </div>
       </Transition>
     </Teleport>
 
-    <!-- ════════ Submitted / Pending status ════════ -->
-    <div v-if="showStatus" class="max-w-4xl mx-auto bg-white dark:bg-[#10264D] rounded-2xl border border-gray-200 dark:border-white/10 p-8">
-      <div class="text-center">
-        <div class="h-16 w-16 rounded-full bg-emerald-100 flex items-center justify-center mx-auto mb-4">
-          <svg class="h-8 w-8 text-emerald-600" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
+    <!-- ── Page heading (every state) ── -->
+    <header class="mb-6">
+      <p class="text-[0.6875rem] font-bold uppercase tracking-[0.18em] text-brand-navy/45 dark:text-white/40">Agent verification</p>
+      <h1 class="mt-1.5 font-display text-2xl sm:text-[1.875rem] font-bold tracking-[-0.01em] leading-tight text-brand-navy dark:text-white">Become a Verified Agent</h1>
+      <p class="mt-1.5 text-sm text-brand-text-secondary dark:text-white/55">
+        <template v-if="showStatus">Your application is in. Here's where it stands.</template>
+        <template v-else-if="showRejected">Your last application wasn't approved. Here's why, and when you can try again.</template>
+        <template v-else>A few minutes of details and documents. RealtyLink AI runs a first check, then an admin approves.</template>
+      </p>
+    </header>
+
+    <!-- ════════ Submitted / under review ════════ -->
+    <div v-if="showStatus" class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_20rem] gap-6 items-start">
+    <section class="vcard lg:sticky lg:top-24">
+      <div class="flex flex-wrap items-start gap-4">
+        <span class="h-14 w-14 flex-none rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
+          <svg class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+        </span>
+        <div class="min-w-0 flex-1">
+          <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.6875rem] font-bold uppercase tracking-wide bg-amber-500/10 text-amber-700 dark:text-amber-400">
+            <span class="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse motion-reduce:animate-none" /> Under review
+          </span>
+          <h2 class="mt-2 font-heading text-2xl font-semibold text-brand-navy dark:text-white">Application submitted</h2>
+          <p class="mt-1 text-sm text-brand-text-secondary dark:text-white/55">
+            {{ pending?.applicant_type === 'broker' ? 'Real Estate Broker' : 'Real Estate Salesperson' }} application<template v-if="submittedOn">, sent {{ submittedOn }}</template>.
+            An admin usually decides <span class="font-semibold text-brand-navy dark:text-white">within 24 hours</span>, and we'll notify you either way.
+          </p>
         </div>
-        <h2 class="font-playfair text-2xl font-bold text-brand-navy dark:text-white">Application Submitted</h2>
-        <p class="text-sm text-gray-500 dark:text-white/50 mt-2 max-w-md mx-auto">
-          Your application is now <span class="font-semibold text-amber-600">pending admin review</span>. Our team reviews applications <span class="font-semibold text-brand-navy dark:text-white">within 24 hours</span> — we'll notify you of the outcome.
-        </p>
       </div>
+
+      <!-- Tracker -->
+      <ol class="mt-7 grid grid-cols-1 sm:grid-cols-4 gap-3">
+        <li
+          v-for="(t, i) in TRACK"
+          :key="t.label"
+          class="rounded-2xl p-4 ring-1"
+          :class="t.state === 'done' ? 'ring-emerald-500/30 bg-emerald-500/[0.06]' : t.state === 'active' ? 'ring-brand-gold bg-brand-gold/[0.08]' : 'ring-brand-navy/[0.08] dark:ring-white/10'"
+        >
+          <span
+            class="h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold"
+            :class="t.state === 'done' ? 'bg-emerald-500 text-white' : t.state === 'active' ? 'bg-brand-gold text-brand-navy' : 'bg-brand-navy/[0.07] text-brand-navy/50 dark:bg-white/10 dark:text-white/50'"
+          >
+            <svg v-if="t.state === 'done'" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+            <template v-else>{{ i + 1 }}</template>
+          </span>
+          <p class="mt-2.5 text-sm font-semibold text-brand-navy dark:text-white">{{ t.label }}</p>
+          <p class="text-xs text-brand-navy/55 dark:text-white/50">{{ t.sub }}</p>
+        </li>
+      </ol>
+
+      <div v-if="pending?.ai_comment" class="mt-6 rounded-2xl bg-brand-gold/[0.07] ring-1 ring-brand-gold/25 p-4">
+        <p class="flex items-center gap-2 text-xs font-bold text-brand-navy dark:text-white">
+          <img src="/ai/avatar-96.webp" alt="" class="h-6 w-6 rounded-full object-cover" /> RealtyLink AI · first check
+        </p>
+        <p class="mt-2 text-sm leading-relaxed text-brand-navy/80 dark:text-white/70 whitespace-pre-wrap">{{ pending.ai_comment }}</p>
+        <p class="mt-2 text-[0.6875rem] text-brand-navy/45 dark:text-white/40">This is only a helper note. The admin makes the decision.</p>
+      </div>
+
+      <div class="mt-6 flex flex-wrap gap-2">
+        <NuxtLink to="/dashboard" class="rounded-full bg-brand-navy px-5 py-2.5 text-sm font-bold text-white dark:bg-brand-gold dark:text-brand-navy hover:-translate-y-0.5 transition">Back to dashboard</NuxtLink>
+        <NuxtLink to="/dashboard/profile?section=application" class="rounded-full px-5 py-2.5 text-sm font-semibold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20 transition">Track it in My Profile</NuxtLink>
+      </div>
+    </section>
+      <aside class="space-y-4">
+        <section class="vside">
+          <p class="text-sm font-bold text-brand-navy dark:text-white">What you sent</p>
+          <dl class="mt-3 space-y-2.5 text-sm">
+            <div class="flex items-center justify-between gap-3">
+              <dt class="text-brand-navy/55 dark:text-white/50">Applying as</dt>
+              <dd class="font-semibold text-brand-navy dark:text-white">{{ pending?.applicant_type === 'broker' ? 'Broker' : 'Salesperson' }}</dd>
+            </div>
+            <div v-if="pending?.prc_number" class="flex items-center justify-between gap-3">
+              <dt class="text-brand-navy/55 dark:text-white/50">{{ pending?.applicant_type === 'broker' ? 'PRC license no.' : 'Accreditation no.' }}</dt>
+              <dd class="font-semibold tabular-nums text-brand-navy dark:text-white">{{ pending.prc_number }}</dd>
+            </div>
+          </dl>
+          <ul class="mt-4 space-y-2 border-t border-brand-navy/[0.07] dark:border-white/10 pt-4">
+            <li v-for="d in sentDocs" :key="d" class="flex items-center gap-2.5 text-sm text-brand-navy/80 dark:text-white/75">
+              <span class="h-5 w-5 flex-none rounded-full flex items-center justify-center bg-emerald-500 text-white">
+                <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+              </span>
+              {{ d }}
+            </li>
+          </ul>
+        </section>
+
+        <section class="vside">
+          <p class="text-sm font-bold text-brand-navy dark:text-white">While you wait</p>
+          <ul class="mt-3 space-y-1.5">
+            <li v-for="w in WHILE_WAITING" :key="w.to">
+              <NuxtLink :to="w.to" class="group flex items-center gap-3 rounded-xl p-2 -mx-2 hover:bg-brand-navy/[0.04] dark:hover:bg-white/[0.05] transition">
+                <span class="h-8 w-8 flex-none rounded-lg flex items-center justify-center bg-brand-gold/15 text-brand-gold-deep dark:text-brand-gold">
+                  <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" :d="w.icon" /></svg>
+                </span>
+                <span class="min-w-0 flex-1">
+                  <span class="block text-sm font-semibold text-brand-navy dark:text-white">{{ w.label }}</span>
+                  <span class="block text-xs text-brand-navy/50 dark:text-white/45">{{ w.hint }}</span>
+                </span>
+                <svg class="h-4 w-4 flex-none text-brand-navy/30 group-hover:text-brand-gold-deep dark:text-white/30 dark:group-hover:text-brand-gold transition" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
+              </NuxtLink>
+            </li>
+          </ul>
+        </section>
+
+        <section class="relative overflow-hidden rounded-3xl p-5 bg-brand-navy text-white ring-1 ring-brand-gold/25">
+          <div class="absolute inset-0 bg-grid-gold opacity-[0.06] pointer-events-none" />
+          <p class="relative text-[0.6875rem] font-bold uppercase tracking-[0.16em] text-brand-gold">Once you're approved</p>
+          <ul class="relative mt-3 space-y-2.5">
+            <li v-for="b in benefits" :key="b" class="flex items-start gap-2.5 text-sm text-white/85">
+              <svg class="mt-0.5 h-4 w-4 flex-none text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+              {{ b }}
+            </li>
+          </ul>
+        </section>
+      </aside>
     </div>
 
-    <!-- ════════ Rejected ════════ -->
-    <div v-else-if="showRejected" class="max-w-2xl mx-auto bg-white dark:bg-[#10264D] rounded-2xl border border-gray-200 dark:border-white/10 p-8 text-center">
-      <div class="h-16 w-16 rounded-full bg-red-100 flex items-center justify-center mx-auto mb-4">
-        <svg class="h-8 w-8 text-red-500" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+    <!-- ════════ Not approved ════════ -->
+    <div v-else-if="showRejected" class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_20rem] gap-6 items-start">
+    <section class="vcard lg:sticky lg:top-24">
+      <div class="flex flex-wrap items-start gap-4">
+        <span class="h-14 w-14 flex-none rounded-2xl bg-red-500/10 text-red-600 dark:text-red-400 flex items-center justify-center">
+          <svg class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" /></svg>
+        </span>
+        <div class="min-w-0 flex-1">
+          <span class="inline-flex rounded-full px-2.5 py-1 text-[0.6875rem] font-bold uppercase tracking-wide bg-red-500/10 text-red-600 dark:text-red-400">Not approved</span>
+          <h2 class="mt-2 font-heading text-2xl font-semibold text-brand-navy dark:text-white">Your application wasn't approved this time</h2>
+        </div>
       </div>
-      <h2 class="font-playfair text-2xl font-bold text-brand-navy dark:text-white">Application Not Approved</h2>
-      <p v-if="existing?.admin_note" class="text-sm text-gray-500 dark:text-white/50 mt-2">Reason: {{ existing.admin_note }}</p>
 
-      <!-- 12h cool-down countdown -->
-      <div v-if="inCooldown" class="mt-5">
-        <div class="inline-flex items-center gap-2 text-sm text-amber-700 dark:text-amber-300 bg-amber-50 dark:bg-amber-500/10 border border-amber-200 dark:border-amber-500/20 rounded-xl px-4 py-2.5">
-          <svg class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+      <div v-if="existing?.admin_note" class="mt-5 rounded-2xl bg-red-500/[0.06] ring-1 ring-red-500/20 p-4">
+        <p class="text-xs font-bold uppercase tracking-wide text-red-700/70 dark:text-red-300/70">Reason from the admin</p>
+        <p class="mt-1 text-sm text-red-800 dark:text-red-200">{{ existing.admin_note }}</p>
+      </div>
+
+      <p class="mt-5 mb-2 text-sm font-semibold text-brand-navy dark:text-white">Before you re-apply</p>
+      <ul class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-brand-navy/75 dark:text-white/70">
+        <li v-for="t in TIPS" :key="t" class="flex items-start gap-2">
+          <svg class="mt-0.5 h-4 w-4 flex-none text-brand-gold-deep dark:text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+          {{ t }}
+        </li>
+      </ul>
+
+      <div class="mt-6 flex flex-wrap items-center gap-3">
+        <div v-if="inCooldown" class="inline-flex items-center gap-2 rounded-full bg-amber-500/10 px-4 py-2.5 text-sm text-amber-800 dark:text-amber-300">
+          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
           You can re-apply in <span class="font-bold tabular-nums">{{ cooldownText }}</span>
         </div>
-        <p class="text-[0.6875rem] text-gray-400 dark:text-white/40 mt-2">There's a 12-hour cool-down before you can submit a new application.</p>
+        <button v-else type="button" class="rounded-full bg-brand-gold px-6 py-2.5 text-sm font-bold text-brand-navy shadow-[0_6px_18px_rgba(212,165,74,0.45)] hover:bg-brand-gold-light hover:-translate-y-0.5 transition" @click="startReapply">
+          Re-apply now
+        </button>
       </div>
+      <p class="mt-3 text-xs text-brand-navy/45 dark:text-white/40">This review clears from your account when the wait is over, and your uploaded documents are deleted.</p>
+    </section>
+      <aside class="space-y-4">
+        <section class="vside">
+          <p class="text-sm font-bold text-brand-navy dark:text-white">Your last application</p>
+          <dl class="mt-3 space-y-2.5 text-sm">
+            <div class="flex items-center justify-between gap-3">
+              <dt class="text-brand-navy/55 dark:text-white/50">Applied as</dt>
+              <dd class="font-semibold text-brand-navy dark:text-white">{{ existing?.applicant_type === 'broker' ? 'Broker' : 'Salesperson' }}</dd>
+            </div>
+            <div v-if="existing?.prc_number" class="flex items-center justify-between gap-3">
+              <dt class="text-brand-navy/55 dark:text-white/50">{{ existing?.applicant_type === 'broker' ? 'PRC license no.' : 'Accreditation no.' }}</dt>
+              <dd class="font-semibold tabular-nums text-brand-navy dark:text-white">{{ existing.prc_number }}</dd>
+            </div>
+            <div v-if="existing?.reviewed_at" class="flex items-center justify-between gap-3">
+              <dt class="text-brand-navy/55 dark:text-white/50">Reviewed</dt>
+              <dd class="font-semibold text-brand-navy dark:text-white">{{ new Date(existing.reviewed_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) }}</dd>
+            </div>
+          </dl>
+        </section>
 
-      <button
-        v-else
-        class="mt-5 inline-flex items-center gap-2 bg-brand-gold text-brand-navy font-bold text-sm px-6 py-3 rounded-xl hover:-translate-y-0.5 transition-all"
-        @click="startReapply"
-      >
-        Re-apply
-      </button>
+        <section class="vside">
+          <p class="text-sm font-bold text-brand-navy dark:text-white">How verification works</p>
+          <ol class="mt-3 space-y-3">
+            <li class="flex gap-3"><span class="h-6 w-6 flex-none rounded-full flex items-center justify-center text-xs font-bold bg-brand-navy text-white dark:bg-white dark:text-brand-navy">1</span><p class="pt-0.5 text-xs leading-relaxed text-brand-navy/70 dark:text-white/65">You send your details, documents and a live face scan.</p></li>
+            <li class="flex gap-3"><span class="h-6 w-6 flex-none rounded-full flex items-center justify-center text-xs font-bold bg-brand-gold text-brand-navy">2</span><p class="pt-0.5 text-xs leading-relaxed text-brand-navy/70 dark:text-white/65"><span class="font-semibold text-brand-navy dark:text-white">RealtyLink AI</span> runs a first check for the admin.</p></li>
+            <li class="flex gap-3"><span class="h-6 w-6 flex-none rounded-full flex items-center justify-center text-xs font-bold bg-brand-navy text-white dark:bg-white dark:text-brand-navy">3</span><p class="pt-0.5 text-xs leading-relaxed text-brand-navy/70 dark:text-white/65">An admin reviews it and approves, usually within 24 hours.</p></li>
+          </ol>
+        </section>
+      </aside>
     </div>
 
     <!-- ════════ Wizard ════════ -->
-    <div v-else>
-      <!-- Header -->
-      <div class="mb-6">
-        <h1 class="font-playfair text-2xl font-bold text-brand-navy dark:text-white">Become a Verified Agent</h1>
-        <p class="text-sm text-gray-500 dark:text-white/50 mt-1">Complete your application — RealtyLink AI runs an initial check, then an admin approves.</p>
-      </div>
+    <div v-else class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_20rem] gap-6 items-start">
+      <div class="min-w-0">
 
-      <div class="grid lg:grid-cols-3 gap-6 lg:gap-8 items-start">
-      <!-- ░░░░ LEFT: wizard ░░░░ -->
-      <div class="lg:col-span-2">
-
-      <!-- Progress -->
-      <div v-if="step > 0" class="flex items-center gap-2 mb-6">
-        <template v-for="(label, i) in stepLabels" :key="label">
-          <div class="flex items-center gap-2">
-            <div
-              class="h-7 w-7 rounded-full flex items-center justify-center text-xs font-bold transition-colors"
-              :class="step > i + 1 ? 'bg-brand-gold text-brand-navy' : step === i + 1 ? 'bg-brand-navy dark:bg-white text-white dark:text-brand-navy' : 'bg-gray-200 dark:bg-white/10 text-gray-400'"
-            >
-              <svg v-if="step > i + 1" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" /></svg>
-              <span v-else>{{ i + 1 }}</span>
-            </div>
-            <span class="text-xs font-medium hidden sm:block" :class="step === i + 1 ? 'text-brand-navy dark:text-white' : 'text-gray-400'">{{ label }}</span>
+        <!-- Step bar -->
+        <div v-if="step > 0" class="mb-5 rounded-2xl px-5 py-4 bg-white dark:bg-[#0d2550] ring-1 ring-brand-navy/[0.06] dark:ring-white/10">
+          <div class="flex items-center justify-between gap-3">
+            <p class="text-sm font-semibold text-brand-navy dark:text-white">
+              Step {{ step }} of {{ lastStep }} · <span class="text-brand-gold-deep dark:text-brand-gold">{{ stepKey }}</span>
+            </p>
+            <p class="text-xs text-brand-navy/50 dark:text-white/45">{{ type === 'broker' ? 'Broker' : 'Salesperson' }} application</p>
           </div>
-          <div v-if="i < stepLabels.length - 1" class="flex-1 h-px bg-gray-200 dark:bg-white/10 min-w-[12px]" />
-        </template>
-      </div>
-
-      <div class="bg-white dark:bg-[#10264D] rounded-2xl border border-gray-200 dark:border-white/10 p-6 sm:p-8">
-        <p v-if="error" class="text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3 mb-5">{{ error }}</p>
-        <p v-if="docError" class="text-sm text-amber-800 bg-amber-50 border border-amber-200 rounded-xl px-4 py-3 mb-5">{{ docError }}</p>
-
-        <!-- ── Step 0: choose type ── -->
-        <div v-if="step === 0">
-          <h2 class="font-bold text-brand-navy dark:text-white mb-1">What are you applying as?</h2>
-          <p class="text-xs text-gray-500 dark:text-white/40 mb-5">This determines the documents you'll need.</p>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
-            <button
-              type="button"
-              class="text-left p-5 rounded-2xl border-2 border-gray-200 dark:border-white/10 hover:border-brand-gold hover:bg-brand-gold/5 transition-all"
-              @click="chooseType('broker')"
-            >
-              <div class="h-10 w-10 rounded-xl bg-brand-gold/10 flex items-center justify-center mb-3">
-                <svg class="h-5 w-5 text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M9 12l2 2 4-4m5.618-4.016A11.955 11.955 0 0112 2.944a11.955 11.955 0 01-8.618 3.04A12.02 12.02 0 003 9c0 5.591 3.824 10.29 9 11.622 5.176-1.332 9-6.03 9-11.622 0-1.042-.133-2.052-.382-3.016z" /></svg>
-              </div>
-              <p class="font-bold text-brand-navy dark:text-white">Real Estate Broker</p>
-              <p class="text-xs text-gray-500 dark:text-white/40 mt-1">Licensed to transact independently. Requires your PRC broker license card.</p>
-            </button>
-            <button
-              type="button"
-              class="text-left p-5 rounded-2xl border-2 border-gray-200 dark:border-white/10 hover:border-brand-gold hover:bg-brand-gold/5 transition-all"
-              @click="chooseType('salesperson')"
-            >
-              <div class="h-10 w-10 rounded-xl bg-brand-gold/10 flex items-center justify-center mb-3">
-                <svg class="h-5 w-5 text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" /></svg>
-              </div>
-              <p class="font-bold text-brand-navy dark:text-white">Real Estate Salesperson</p>
-              <p class="text-xs text-gray-500 dark:text-white/40 mt-1">Accredited under a licensed broker. Requires accreditation + a valid ID.</p>
-            </button>
-          </div>
-        </div>
-
-        <!-- ── Information ── -->
-        <div v-else-if="stepKey === 'Information'" class="space-y-5">
-          <h2 class="font-bold text-brand-navy dark:text-white">Your information</h2>
-          <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
-            <div>
-              <label class="block text-sm font-semibold text-brand-navy dark:text-white/80 mb-1.5">Full name</label>
-              <input v-model="form.fullName" type="text" class="w-full px-4 py-3 text-sm border border-gray-200 dark:border-white/10 rounded-xl bg-gray-50 dark:bg-white/5 dark:text-white focus:bg-white dark:focus:bg-white/10 focus:outline-none focus:ring-2 focus:ring-brand-gold/30 focus:border-brand-gold" />
-            </div>
-            <div>
-              <label class="block text-sm font-semibold text-brand-navy dark:text-white/80 mb-1.5">Mobile number</label>
-              <input v-model="form.mobile" type="tel" placeholder="+63 9XX XXX XXXX" class="w-full px-4 py-3 text-sm border border-gray-200 dark:border-white/10 rounded-xl bg-gray-50 dark:bg-white/5 dark:text-white focus:bg-white dark:focus:bg-white/10 focus:outline-none focus:ring-2 focus:ring-brand-gold/30 focus:border-brand-gold" />
-            </div>
-          </div>
-          <div>
-            <label class="block text-sm font-semibold text-brand-navy dark:text-white/80 mb-1.5">
-              {{ type === 'broker' ? 'PRC License Number' : 'Accreditation Number' }}
-            </label>
-            <input v-model="form.prcNumber" type="text" placeholder="0123456" class="w-full px-4 py-3 text-sm border border-gray-200 dark:border-white/10 rounded-xl bg-gray-50 dark:bg-white/5 dark:text-white focus:bg-white dark:focus:bg-white/10 focus:outline-none focus:ring-2 focus:ring-brand-gold/30 focus:border-brand-gold" />
-          </div>
-          <div v-if="type === 'salesperson'">
-            <label class="block text-sm font-semibold text-brand-navy dark:text-white/80 mb-1.5">Supervising broker <span class="text-gray-400 font-normal">(optional)</span></label>
-            <input v-model="form.supervisingBroker" type="text" placeholder="Broker name / PRC no." class="w-full px-4 py-3 text-sm border border-gray-200 dark:border-white/10 rounded-xl bg-gray-50 dark:bg-white/5 dark:text-white focus:bg-white dark:focus:bg-white/10 focus:outline-none focus:ring-2 focus:ring-brand-gold/30 focus:border-brand-gold" />
-          </div>
-        </div>
-
-        <!-- ── Document uploads ── -->
-        <div v-else-if="stepKey === 'License Card' || stepKey === 'Accreditation' || stepKey === 'Valid ID'">
-          <h2 class="font-bold text-brand-navy dark:text-white mb-1">
-            {{ stepKey === 'License Card' ? 'Broker license card' : stepKey === 'Accreditation' ? 'Accreditation document (front)' : 'Valid ID' }}
-          </h2>
-          <p class="text-xs text-gray-500 dark:text-white/40 mb-4">Upload a clear photo or PDF. JPG, PNG, or PDF up to 5MB.</p>
-
-          <label
-            class="block border-2 border-dashed border-gray-300 dark:border-white/15 hover:border-brand-gold rounded-2xl p-6 cursor-pointer transition-colors text-center"
-          >
-            <template v-if="stepKey === 'License Card'">
-              <img v-if="previews.licenseDoc" :src="previews.licenseDoc" class="max-h-48 mx-auto rounded-lg" />
-              <div v-else-if="files.licenseDoc" class="text-sm text-brand-navy dark:text-white">📄 {{ files.licenseDoc.name }}</div>
-              <div v-else class="py-6 text-gray-400">
-                <svg class="h-9 w-9 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-                <p class="text-sm">Click to upload license card</p>
-              </div>
-              <input type="file" class="sr-only" accept="image/*,application/pdf" @change="setDoc('licenseDoc', $event)" />
-            </template>
-            <template v-else-if="stepKey === 'Accreditation'">
-              <img v-if="previews.accreditationDoc" :src="previews.accreditationDoc" class="max-h-48 mx-auto rounded-lg" />
-              <div v-else-if="files.accreditationDoc" class="text-sm text-brand-navy dark:text-white">📄 {{ files.accreditationDoc.name }}</div>
-              <div v-else class="py-6 text-gray-400">
-                <svg class="h-9 w-9 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-                <p class="text-sm">Click to upload accreditation (front)</p>
-              </div>
-              <input type="file" class="sr-only" accept="image/*,application/pdf" @change="setDoc('accreditationDoc', $event)" />
-            </template>
-            <template v-else>
-              <img v-if="previews.validId" :src="previews.validId" class="max-h-48 mx-auto rounded-lg" />
-              <div v-else-if="files.validId" class="text-sm text-brand-navy dark:text-white">📄 {{ files.validId.name }}</div>
-              <div v-else class="py-6 text-gray-400">
-                <svg class="h-9 w-9 mx-auto mb-2" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M7 16a4 4 0 01-.88-7.903A5 5 0 1115.9 6L16 6a5 5 0 011 9.9M15 13l-3-3m0 0l-3 3m3-3v12" /></svg>
-                <p class="text-sm">Click to upload your valid ID</p>
-              </div>
-              <input type="file" class="sr-only" accept="image/*,application/pdf" @change="setDoc('validId', $event)" />
-            </template>
-          </label>
-        </div>
-
-        <!-- ── Live Scan ── -->
-        <div v-else-if="stepKey === 'Live Scan'">
-          <h2 class="font-bold text-brand-navy dark:text-white mb-1">Live face scan</h2>
-          <p class="text-xs text-gray-500 dark:text-white/40 mb-4">
-            We use this to confirm you're a real applicant<span v-if="type === 'broker'"> and to compare with your license photo</span>. Your camera is only used when you start it.
-          </p>
-          <LiveFaceCapture @captured="setFace" />
-        </div>
-
-        <!-- ── Review ── -->
-        <div v-else-if="stepKey === 'Review'" class="space-y-4">
-          <h2 class="font-bold text-brand-navy dark:text-white mb-1">Review &amp; submit</h2>
-          <p class="text-xs text-gray-500 dark:text-white/40 mb-4">Please confirm everything looks right before submitting for review.</p>
-
-          <!-- Details -->
-          <div class="rounded-2xl border border-gray-200 dark:border-white/10 divide-y divide-gray-100 dark:divide-white/10 overflow-hidden">
-            <div class="flex items-center justify-between px-4 py-3 text-sm">
-              <span class="text-gray-500 dark:text-white/50">Applying as</span>
-              <span class="font-semibold text-brand-navy dark:text-white capitalize">{{ type }}</span>
-            </div>
-            <div class="flex items-center justify-between px-4 py-3 text-sm">
-              <span class="text-gray-500 dark:text-white/50">Full name</span>
-              <span class="font-semibold text-brand-navy dark:text-white">{{ form.fullName }}</span>
-            </div>
-            <div v-if="form.mobile" class="flex items-center justify-between px-4 py-3 text-sm">
-              <span class="text-gray-500 dark:text-white/50">Mobile</span>
-              <span class="font-semibold text-brand-navy dark:text-white">{{ form.mobile }}</span>
-            </div>
-            <div class="flex items-center justify-between px-4 py-3 text-sm">
-              <span class="text-gray-500 dark:text-white/50">{{ type === 'broker' ? 'PRC license no.' : 'Accreditation no.' }}</span>
-              <span class="font-semibold text-brand-navy dark:text-white">{{ form.prcNumber || '—' }}</span>
-            </div>
-          </div>
-
-          <!-- Uploaded documents + face -->
-          <div class="grid grid-cols-2 gap-3">
-            <div class="rounded-2xl border border-gray-200 dark:border-white/10 p-3">
-              <p class="text-[0.625rem] font-bold uppercase tracking-wide text-gray-400 dark:text-white/40 mb-2">{{ type === 'broker' ? 'License card' : 'Accreditation' }}</p>
-              <img v-if="type === 'broker' ? previews.licenseDoc : previews.accreditationDoc" :src="type === 'broker' ? previews.licenseDoc : previews.accreditationDoc" class="w-full h-28 object-cover rounded-lg" />
-              <div v-else class="h-28 flex items-center justify-center text-xs text-gray-400 dark:text-white/40">📄 PDF uploaded</div>
-            </div>
-            <div class="rounded-2xl border border-gray-200 dark:border-white/10 p-3">
-              <p class="text-[0.625rem] font-bold uppercase tracking-wide text-gray-400 dark:text-white/40 mb-2">Live face scan</p>
-              <img v-if="previews.faceImage" :src="previews.faceImage" class="w-full h-28 object-cover rounded-lg" />
-              <div v-else class="h-28 flex items-center justify-center text-xs text-gray-400 dark:text-white/40">Captured ✓</div>
-            </div>
-          </div>
-
-          <div v-if="type === 'salesperson'" class="rounded-2xl border border-gray-200 dark:border-white/10 p-3">
-            <p class="text-[0.625rem] font-bold uppercase tracking-wide text-gray-400 dark:text-white/40 mb-2">Valid ID</p>
-            <img v-if="previews.validId" :src="previews.validId" class="w-full h-28 object-cover rounded-lg" />
-            <div v-else class="h-28 flex items-center justify-center text-xs text-gray-400 dark:text-white/40">📄 PDF uploaded</div>
-          </div>
-
-          <p class="text-xs text-gray-500 dark:text-white/40 flex items-center gap-1.5">
-            <svg class="h-3.5 w-3.5 text-brand-gold flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
-            Your documents are encrypted and used only for verification.
-          </p>
-        </div>
-
-        <!-- Nav buttons -->
-        <div v-if="step > 0" class="flex items-center justify-between mt-7 pt-5 border-t border-gray-100 dark:border-white/10">
-          <button type="button" class="text-sm font-semibold text-gray-500 dark:text-white/50 hover:text-brand-navy dark:hover:text-white flex items-center gap-1" @click="back">
-            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
-            Back
-          </button>
-
-          <button
-            v-if="step < lastStep"
-            type="button"
-            :disabled="!canAdvance"
-            class="inline-flex items-center gap-2 bg-brand-navy dark:bg-brand-gold text-white dark:text-brand-navy font-bold text-sm px-6 py-2.5 rounded-xl hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-            @click="next"
-          >
-            Continue
-            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M9 5l7 7-7 7" /></svg>
-          </button>
-
-          <button
-            v-else
-            type="button"
-            :disabled="!canAdvance || loading"
-            class="inline-flex items-center gap-2 bg-brand-gold text-brand-navy font-bold text-sm px-6 py-2.5 rounded-xl shadow-[0_4px_18px_rgba(212,175,55,0.35)] hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
-            @click="submit"
-          >
-            <svg v-if="loading" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-            {{ loading ? 'Submitting & running AI check…' : 'Submit application' }}
-          </button>
-        </div>
-      </div>
-      </div><!-- /left -->
-
-      <!-- ░░░░ RIGHT: sticky context panel ░░░░ -->
-      <aside class="lg:sticky lg:top-6 space-y-4">
-
-        <!-- What you'll need (live checklist) -->
-        <div class="bg-white dark:bg-[#10264D] rounded-2xl border border-gray-200 dark:border-white/10 p-5">
-          <p class="text-sm font-bold text-brand-navy dark:text-white mb-3">What you'll need</p>
-          <p v-if="!type" class="text-xs text-gray-500 dark:text-white/50 leading-relaxed">
-            Pick <span class="font-semibold text-brand-navy dark:text-white">Broker</span> or
-            <span class="font-semibold text-brand-navy dark:text-white">Salesperson</span> to see the exact documents for your path.
-          </p>
-          <ul v-else class="space-y-3">
-            <li v-for="item in checklist" :key="item.label" class="flex items-start gap-3">
+          <ol class="mt-3 flex gap-1.5" aria-label="Progress">
+            <li v-for="(label, i) in stepLabels" :key="label" class="flex-1 min-w-0">
               <span
-                class="mt-0.5 h-5 w-5 rounded-full flex items-center justify-center flex-shrink-0 transition-colors"
-                :class="item.done ? 'bg-emerald-500' : 'bg-gray-200 dark:bg-white/10'"
-              >
-                <svg v-if="item.done" class="h-3 w-3 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" /></svg>
-                <span v-else class="h-1.5 w-1.5 rounded-full bg-gray-400 dark:bg-white/30" />
-              </span>
-              <div class="min-w-0">
-                <p class="text-xs font-semibold" :class="item.done ? 'text-brand-navy dark:text-white' : 'text-gray-500 dark:text-white/60'">{{ item.label }}</p>
-                <p class="text-[0.6875rem] text-gray-400 dark:text-white/40">{{ item.desc }}</p>
-              </div>
-            </li>
-          </ul>
-        </div>
-
-        <!-- How verification works -->
-        <div class="bg-white dark:bg-[#10264D] rounded-2xl border border-gray-200 dark:border-white/10 p-5">
-          <p class="text-sm font-bold text-brand-navy dark:text-white mb-3">How verification works</p>
-          <ol class="space-y-3">
-            <li class="flex gap-3">
-              <span class="h-6 w-6 rounded-full bg-brand-navy dark:bg-white text-white dark:text-brand-navy text-xs font-bold flex items-center justify-center flex-shrink-0">1</span>
-              <p class="text-xs text-gray-600 dark:text-white/70 leading-relaxed pt-0.5">You submit your documents and a live face scan.</p>
-            </li>
-            <li class="flex gap-3">
-              <span class="h-6 w-6 rounded-full bg-brand-gold text-brand-navy text-xs font-bold flex items-center justify-center flex-shrink-0">2</span>
-              <p class="text-xs text-gray-600 dark:text-white/70 leading-relaxed pt-0.5"><span class="font-semibold text-brand-navy dark:text-white">RealtyLink AI</span> runs an instant pre-check on your application.</p>
-            </li>
-            <li class="flex gap-3">
-              <span class="h-6 w-6 rounded-full bg-brand-navy dark:bg-white text-white dark:text-brand-navy text-xs font-bold flex items-center justify-center flex-shrink-0">3</span>
-              <p class="text-xs text-gray-600 dark:text-white/70 leading-relaxed pt-0.5">An admin reviews and makes the final approval.</p>
+                class="block h-1.5 rounded-full transition-colors duration-300"
+                :class="step > i + 1 ? 'bg-emerald-500' : step === i + 1 ? 'bg-brand-gold' : 'bg-brand-navy/10 dark:bg-white/10'"
+              />
+              <span
+                class="mt-1.5 hidden sm:block truncate text-[0.6875rem]"
+                :class="step === i + 1 ? 'font-bold text-brand-navy dark:text-white' : step > i + 1 ? 'text-brand-navy/60 dark:text-white/55' : 'text-brand-navy/35 dark:text-white/30'"
+              >{{ label }}</span>
             </li>
           </ol>
-          <p class="text-[0.6875rem] text-gray-400 dark:text-white/40 mt-3">Reviews are usually completed within 1–2 business days.</p>
         </div>
 
-        <!-- Benefits -->
-        <div class="bg-white dark:bg-[#10264D] rounded-2xl border border-gray-200 dark:border-white/10 p-5">
-          <p class="text-sm font-bold text-brand-navy dark:text-white mb-3">Why become verified?</p>
-          <ul class="space-y-2.5">
-            <li v-for="b in benefits" :key="b" class="flex items-start gap-2.5">
-              <svg class="h-4 w-4 text-brand-gold flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
-              <span class="text-xs text-gray-600 dark:text-white/70">{{ b }}</span>
+        <section class="vcard">
+          <p v-if="error" class="mb-5 rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-400">{{ error }}</p>
+          <p v-if="docError" class="mb-5 rounded-xl bg-amber-500/10 px-4 py-3 text-sm text-amber-800 dark:text-amber-300">{{ docError }}</p>
+
+          <Transition name="vstep" mode="out-in">
+            <!-- ── Step 0: choose a path ── -->
+            <div v-if="step === 0" key="choose">
+              <h2 class="font-heading text-xl font-semibold text-brand-navy dark:text-white">What are you applying as?</h2>
+              <p class="mt-1 mb-5 text-sm text-brand-text-secondary dark:text-white/55">This decides which documents we ask for.</p>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+                <button
+                  v-for="p in PATHS"
+                  :key="p.type"
+                  type="button"
+                  class="group flex flex-col text-left rounded-3xl p-5 ring-1 ring-brand-navy/10 hover:ring-2 hover:ring-brand-gold hover:-translate-y-0.5 hover:shadow-[0_18px_40px_-26px_rgba(11,42,92,0.55)] dark:ring-white/10 dark:hover:ring-brand-gold transition"
+                  @click="chooseType(p.type)"
+                >
+                  <span class="h-11 w-11 rounded-2xl flex items-center justify-center bg-brand-gold/15 text-brand-gold-deep dark:text-brand-gold group-hover:bg-brand-gold group-hover:text-brand-navy transition-colors">
+                    <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" :d="p.icon" /></svg>
+                  </span>
+                  <span class="mt-4 font-heading text-lg font-semibold text-brand-navy dark:text-white">{{ p.title }}</span>
+                  <span class="mt-0.5 text-sm text-brand-text-secondary dark:text-white/55">{{ p.blurb }}</span>
+                  <span class="mt-4 text-[0.6875rem] font-bold uppercase tracking-[0.14em] text-brand-navy/45 dark:text-white/40">You'll need</span>
+                  <span class="mt-2 space-y-1.5">
+                    <span v-for="n in p.needs" :key="n" class="flex items-start gap-2 text-sm text-brand-navy/80 dark:text-white/75">
+                      <svg class="mt-0.5 h-4 w-4 flex-none text-brand-gold-deep dark:text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                      {{ n }}
+                    </span>
+                  </span>
+                  <span class="mt-auto pt-5 flex items-center justify-between">
+                    <span class="text-xs text-brand-navy/50 dark:text-white/45">{{ p.time }}</span>
+                    <span class="inline-flex items-center gap-1 text-sm font-bold text-brand-gold-deep dark:text-brand-gold">
+                      Start
+                      <svg class="h-4 w-4 transition-transform group-hover:translate-x-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
+                    </span>
+                  </span>
+                </button>
+              </div>
+            </div>
+
+            <!-- ── Information ── -->
+            <div v-else-if="stepKey === 'Information'" key="info">
+              <h2 class="font-heading text-xl font-semibold text-brand-navy dark:text-white">Your information</h2>
+              <p class="mt-1 mb-6 text-sm text-brand-text-secondary dark:text-white/55">Use your name exactly as it appears on your PRC record.</p>
+              <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+                <div>
+                  <label for="v-name" :class="labelCls">Full name <span class="text-red-500" aria-hidden="true">*</span></label>
+                  <input id="v-name" v-model="form.fullName" type="text" autocomplete="name" aria-required="true" :class="fieldCls" />
+                </div>
+                <div>
+                  <label for="v-mobile" :class="labelCls">Mobile number</label>
+                  <input id="v-mobile" v-model="form.mobile" type="tel" autocomplete="tel" placeholder="+63 9XX XXX XXXX" :class="fieldCls" />
+                </div>
+                <div>
+                  <label for="v-prc" :class="labelCls">{{ type === 'broker' ? 'PRC license number' : 'Accreditation number' }} <span class="text-red-500" aria-hidden="true">*</span></label>
+                  <input id="v-prc" v-model="form.prcNumber" type="text" placeholder="0123456" aria-required="true" :class="fieldCls" />
+                </div>
+                <div v-if="type === 'salesperson'">
+                  <label for="v-broker" :class="labelCls">Supervising broker <span class="text-xs font-medium text-brand-navy/40 dark:text-white/40">Optional</span></label>
+                  <input id="v-broker" v-model="form.supervisingBroker" type="text" placeholder="Broker name / PRC no." :class="fieldCls" />
+                </div>
+              </div>
+            </div>
+
+            <!-- ── Document upload ── -->
+            <div v-else-if="docKey" :key="stepKey">
+              <h2 class="font-heading text-xl font-semibold text-brand-navy dark:text-white">
+                {{ stepKey === 'License Card' ? 'Your PRC license card' : stepKey === 'Accreditation' ? 'Your accreditation document' : 'A valid government ID' }}
+              </h2>
+              <p class="mt-1 mb-5 text-sm text-brand-text-secondary dark:text-white/55">A clear photo or PDF of the front. JPG, PNG, WebP or PDF, up to 5 MB.</p>
+
+              <!-- Picked -->
+              <div v-if="files[docKey]" class="flex flex-col sm:flex-row items-center gap-4 rounded-3xl p-4 ring-1 ring-emerald-500/30 bg-emerald-500/[0.05]">
+                <img v-if="previews[docKey]" :src="previews[docKey]" alt="" class="h-36 w-full sm:w-56 flex-none rounded-2xl object-cover ring-1 ring-brand-navy/10" />
+                <span v-else class="h-36 w-full sm:w-56 flex-none rounded-2xl flex flex-col items-center justify-center bg-white dark:bg-white/[0.06] ring-1 ring-brand-navy/10 dark:ring-white/10 text-brand-navy/60 dark:text-white/60">
+                  <svg class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
+                  <span class="mt-1 text-xs font-bold">PDF</span>
+                </span>
+                <div class="min-w-0 flex-1 text-center sm:text-left">
+                  <p class="flex items-center justify-center sm:justify-start gap-1.5 text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.6" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                    Uploaded
+                  </p>
+                  <p class="mt-0.5 truncate text-sm text-brand-navy dark:text-white">{{ files[docKey]!.name }}</p>
+                  <p class="text-xs text-brand-navy/50 dark:text-white/45">{{ (files[docKey]!.size / 1024 / 1024).toFixed(1) }} MB</p>
+                  <div class="mt-3 flex justify-center sm:justify-start gap-2">
+                    <label class="cursor-pointer rounded-full px-4 py-2 text-xs font-bold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20 transition">
+                      Replace
+                      <input type="file" class="sr-only" accept="image/*,application/pdf" @change="setDoc(docKey, $event)" />
+                    </label>
+                    <button type="button" class="rounded-full px-4 py-2 text-xs font-bold text-red-600 hover:bg-red-500/10 dark:text-red-400 transition" @click="clearDoc(docKey)">Remove</button>
+                  </div>
+                </div>
+              </div>
+
+              <!-- Empty: click or drop -->
+              <label
+                v-else
+                class="flex flex-col items-center justify-center rounded-3xl border-2 border-dashed px-6 py-12 text-center cursor-pointer transition"
+                :class="dragKey === docKey ? 'border-brand-gold bg-brand-gold/[0.08]' : 'border-brand-navy/15 hover:border-brand-gold hover:bg-brand-gold/[0.04] dark:border-white/15'"
+                @dragover.prevent="dragKey = docKey"
+                @dragleave="dragKey = null"
+                @drop.prevent="dropDoc(docKey, $event)"
+              >
+                <span class="h-14 w-14 rounded-2xl flex items-center justify-center bg-brand-gold/15 text-brand-gold-deep dark:text-brand-gold">
+                  <svg class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 16.5v2.25A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75V16.5m-13.5-9L12 3m0 0l4.5 4.5M12 3v13.5" /></svg>
+                </span>
+                <span class="mt-4 text-sm font-semibold text-brand-navy dark:text-white">Drag a file here, or <span class="text-brand-gold-deep dark:text-brand-gold underline underline-offset-4">browse</span></span>
+                <span class="mt-1 text-xs text-brand-navy/50 dark:text-white/45">Photos from your phone work fine.</span>
+                <input type="file" class="sr-only" accept="image/*,application/pdf" @change="setDoc(docKey, $event)" />
+              </label>
+            </div>
+
+            <!-- ── Live scan ── -->
+            <div v-else-if="stepKey === 'Live Scan'" key="scan">
+              <h2 class="font-heading text-xl font-semibold text-brand-navy dark:text-white">Live face scan</h2>
+              <p class="mt-1 mb-5 text-sm text-brand-text-secondary dark:text-white/55">
+                This confirms you're a real person<span v-if="type === 'broker'"> and lets the admin compare you with your license photo</span>. The camera only turns on when you start it.
+              </p>
+              <LiveFaceCapture @captured="setFace" />
+            </div>
+
+            <!-- ── Review ── -->
+            <div v-else-if="stepKey === 'Review'" key="review">
+              <h2 class="font-heading text-xl font-semibold text-brand-navy dark:text-white">Review and submit</h2>
+              <p class="mt-1 mb-5 text-sm text-brand-text-secondary dark:text-white/55">Check everything once more. You can edit any part.</p>
+
+              <div class="overflow-hidden rounded-2xl ring-1 ring-brand-navy/[0.08] dark:ring-white/10">
+                <div class="flex items-center justify-between gap-3 px-4 py-3 bg-brand-cream/80 dark:bg-white/[0.04]">
+                  <p class="text-xs font-bold uppercase tracking-wide text-brand-navy/55 dark:text-white/50">Your information</p>
+                  <button type="button" class="text-xs font-bold text-brand-gold-deep dark:text-brand-gold hover:underline underline-offset-4" @click="goStep('Information')">Edit</button>
+                </div>
+                <dl class="grid grid-cols-1 sm:grid-cols-2 text-sm">
+                  <div class="px-4 py-3 border-t border-brand-navy/[0.06] dark:border-white/10"><dt class="text-xs text-brand-navy/50 dark:text-white/45">Applying as</dt><dd class="font-semibold text-brand-navy dark:text-white capitalize">{{ type }}</dd></div>
+                  <div class="px-4 py-3 border-t border-brand-navy/[0.06] dark:border-white/10"><dt class="text-xs text-brand-navy/50 dark:text-white/45">Full name</dt><dd class="font-semibold text-brand-navy dark:text-white">{{ form.fullName }}</dd></div>
+                  <div class="px-4 py-3 border-t border-brand-navy/[0.06] dark:border-white/10"><dt class="text-xs text-brand-navy/50 dark:text-white/45">{{ type === 'broker' ? 'PRC license no.' : 'Accreditation no.' }}</dt><dd class="font-semibold text-brand-navy dark:text-white">{{ form.prcNumber || '—' }}</dd></div>
+                  <div class="px-4 py-3 border-t border-brand-navy/[0.06] dark:border-white/10"><dt class="text-xs text-brand-navy/50 dark:text-white/45">Mobile</dt><dd class="font-semibold text-brand-navy dark:text-white">{{ form.mobile || '—' }}</dd></div>
+                  <div v-if="type === 'salesperson'" class="px-4 py-3 border-t border-brand-navy/[0.06] dark:border-white/10 sm:col-span-2"><dt class="text-xs text-brand-navy/50 dark:text-white/45">Supervising broker</dt><dd class="font-semibold text-brand-navy dark:text-white">{{ form.supervisingBroker || '—' }}</dd></div>
+                </dl>
+              </div>
+
+              <div class="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
+                <div v-for="d in reviewDocs" :key="d.k" class="rounded-2xl p-3 ring-1 ring-brand-navy/[0.08] dark:ring-white/10">
+                  <div class="mb-2 flex items-center justify-between">
+                    <p class="text-[0.6875rem] font-bold uppercase tracking-wide text-brand-navy/50 dark:text-white/45">{{ d.label }}</p>
+                    <button type="button" class="text-[0.6875rem] font-bold text-brand-gold-deep dark:text-brand-gold hover:underline" @click="goStep(d.step)">Edit</button>
+                  </div>
+                  <img v-if="previews[d.k]" :src="previews[d.k]" alt="" class="h-24 w-full rounded-xl object-cover" />
+                  <div v-else class="h-24 rounded-xl flex items-center justify-center bg-brand-navy/[0.04] dark:bg-white/[0.05] text-xs font-semibold text-brand-navy/55 dark:text-white/50">PDF uploaded</div>
+                </div>
+                <div class="rounded-2xl p-3 ring-1 ring-brand-navy/[0.08] dark:ring-white/10">
+                  <div class="mb-2 flex items-center justify-between">
+                    <p class="text-[0.6875rem] font-bold uppercase tracking-wide text-brand-navy/50 dark:text-white/45">Face scan</p>
+                    <button type="button" class="text-[0.6875rem] font-bold text-brand-gold-deep dark:text-brand-gold hover:underline" @click="goStep('Live Scan')">Retake</button>
+                  </div>
+                  <img v-if="previews.faceImage" :src="previews.faceImage" alt="" class="h-24 w-full rounded-xl object-cover" />
+                  <div v-else class="h-24 rounded-xl flex items-center justify-center bg-emerald-500/[0.07] text-xs font-semibold text-emerald-700 dark:text-emerald-400">Captured ✓</div>
+                </div>
+              </div>
+
+              <p class="mt-5 flex items-start gap-2 text-xs text-brand-navy/55 dark:text-white/50">
+                <svg class="mt-px h-4 w-4 flex-none text-brand-gold-deep dark:text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
+                Your documents are stored privately and only seen by the admin who reviews your application.
+              </p>
+            </div>
+          </Transition>
+
+          <!-- Nav -->
+          <div v-if="step > 0" class="mt-7 pt-5 flex items-center justify-between gap-3 border-t border-brand-navy/[0.07] dark:border-white/10">
+            <button type="button" class="inline-flex items-center gap-1 rounded-full px-4 py-2.5 text-sm font-semibold text-brand-navy/70 ring-1 ring-brand-navy/15 hover:ring-brand-gold hover:text-brand-navy dark:text-white/70 dark:ring-white/20 dark:hover:text-white transition" @click="back">
+              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
+              Back
+            </button>
+            <button
+              v-if="step < lastStep"
+              type="button"
+              :disabled="!canAdvance"
+              class="inline-flex items-center gap-1.5 rounded-full bg-brand-navy px-6 py-2.5 text-sm font-bold text-white dark:bg-brand-gold dark:text-brand-navy hover:-translate-y-0.5 transition disabled:opacity-40 disabled:hover:translate-y-0 disabled:cursor-not-allowed"
+              @click="next"
+            >
+              Continue
+              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M8.25 4.5l7.5 7.5-7.5 7.5" /></svg>
+            </button>
+            <button
+              v-else
+              type="button"
+              :disabled="!canAdvance || loading"
+              class="inline-flex items-center gap-1.5 rounded-full bg-brand-gold px-6 py-2.5 text-sm font-bold text-brand-navy shadow-[0_6px_18px_rgba(212,165,74,0.45)] hover:bg-brand-gold-light hover:-translate-y-0.5 transition disabled:opacity-40"
+              @click="submit"
+            >
+              Submit application
+              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" /></svg>
+            </button>
+          </div>
+        </section>
+      </div>
+
+      <!-- ░░ Side column ░░ -->
+      <aside class="lg:sticky lg:top-24 space-y-4">
+        <section class="vside">
+          <p class="text-sm font-bold text-brand-navy dark:text-white">What you'll need</p>
+          <p v-if="!type" class="mt-2 text-xs leading-relaxed text-brand-text-secondary dark:text-white/55">Pick <span class="font-semibold text-brand-navy dark:text-white">Broker</span> or <span class="font-semibold text-brand-navy dark:text-white">Salesperson</span> to see the exact list.</p>
+          <ul v-else class="mt-3 space-y-3">
+            <li v-for="item in checklist" :key="item.label" class="flex items-start gap-3">
+              <span class="mt-0.5 h-5 w-5 flex-none rounded-full flex items-center justify-center transition-colors" :class="item.done ? 'bg-emerald-500 text-white' : 'ring-1 ring-brand-navy/20 dark:ring-white/25'">
+                <svg v-if="item.done" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+              </span>
+              <div class="min-w-0">
+                <p class="text-sm font-semibold" :class="item.done ? 'text-brand-navy dark:text-white' : 'text-brand-navy/60 dark:text-white/60'">{{ item.label }}</p>
+                <p class="text-xs text-brand-navy/45 dark:text-white/40">{{ item.desc }}</p>
+              </div>
             </li>
           </ul>
-        </div>
+        </section>
 
-        <!-- Tips for fast approval -->
-        <div class="rounded-2xl border border-brand-gold/25 bg-brand-gold/5 p-5">
-          <p class="text-sm font-bold text-brand-navy dark:text-white mb-2.5 flex items-center gap-1.5">
-            <svg class="h-4 w-4 text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M9.663 17h4.673M12 3v1m6.364 1.636l-.707.707M21 12h-1M4 12H3m3.343-5.657l-.707-.707m2.828 9.9a5 5 0 117.072 0l-.548.547A3.374 3.374 0 0014 18.469V19a2 2 0 11-4 0v-.531c0-.895-.356-1.754-.988-2.386l-.548-.547z" /></svg>
-            Tips for fast approval
-          </p>
-          <ul class="space-y-1.5 text-xs text-brand-navy/80 dark:text-white/70 list-disc list-inside marker:text-brand-gold">
-            <li>Use clear, well-lit photos — no glare or blur.</li>
-            <li>Make sure your name matches your PRC record.</li>
-            <li>Face the camera in good lighting for the scan.</li>
-            <li>Upload the front of documents, fully in frame.</li>
+        <section class="vside">
+          <p class="text-sm font-bold text-brand-navy dark:text-white">How verification works</p>
+          <ol class="mt-3 space-y-3">
+            <li class="flex gap-3"><span class="h-6 w-6 flex-none rounded-full flex items-center justify-center text-xs font-bold bg-brand-navy text-white dark:bg-white dark:text-brand-navy">1</span><p class="pt-0.5 text-xs leading-relaxed text-brand-navy/70 dark:text-white/65">You send your details, documents and a live face scan.</p></li>
+            <li class="flex gap-3"><span class="h-6 w-6 flex-none rounded-full flex items-center justify-center text-xs font-bold bg-brand-gold text-brand-navy">2</span><p class="pt-0.5 text-xs leading-relaxed text-brand-navy/70 dark:text-white/65"><span class="font-semibold text-brand-navy dark:text-white">RealtyLink AI</span> runs a first check for the admin.</p></li>
+            <li class="flex gap-3"><span class="h-6 w-6 flex-none rounded-full flex items-center justify-center text-xs font-bold bg-brand-navy text-white dark:bg-white dark:text-brand-navy">3</span><p class="pt-0.5 text-xs leading-relaxed text-brand-navy/70 dark:text-white/65">An admin reviews it and approves, usually within 24 hours.</p></li>
+          </ol>
+        </section>
+
+        <section class="relative overflow-hidden rounded-3xl p-5 bg-brand-navy text-white ring-1 ring-brand-gold/25">
+          <div class="absolute inset-0 bg-grid-gold opacity-[0.06] pointer-events-none" />
+          <p class="relative text-[0.6875rem] font-bold uppercase tracking-[0.16em] text-brand-gold">Why get verified</p>
+          <ul class="relative mt-3 space-y-2.5">
+            <li v-for="b in benefits" :key="b" class="flex items-start gap-2.5 text-sm text-white/85">
+              <svg class="mt-0.5 h-4 w-4 flex-none text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+              {{ b }}
+            </li>
           </ul>
-        </div>
+        </section>
 
+        <section class="rounded-3xl p-5 bg-brand-gold/[0.07] ring-1 ring-brand-gold/25">
+          <p class="text-sm font-bold text-brand-navy dark:text-white">Tips for a fast approval</p>
+          <ul class="mt-2.5 space-y-1.5 text-xs text-brand-navy/75 dark:text-white/70 list-disc list-inside marker:text-brand-gold">
+            <li v-for="t in TIPS" :key="t">{{ t }}</li>
+          </ul>
+        </section>
       </aside>
-      </div><!-- /grid -->
     </div>
   </div>
 </template>
 
 <style scoped>
+.vcard { @apply rounded-[1.75rem] bg-white dark:bg-[#0d2550] p-6 sm:p-8 ring-1 ring-brand-navy/[0.06] dark:ring-white/10 shadow-[0_18px_44px_-30px_rgba(11,42,92,0.45)]; }
+.vside { @apply rounded-3xl p-5 bg-white dark:bg-[#0d2550] ring-1 ring-brand-navy/[0.06] dark:ring-white/10; }
+.vstep-enter-active, .vstep-leave-active { transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.22, 1, 0.36, 1); }
+.vstep-enter-from { opacity: 0; transform: translateX(12px); }
+.vstep-leave-to   { opacity: 0; transform: translateX(-8px); }
+@media (prefers-reduced-motion: reduce) { .vstep-enter-active, .vstep-leave-active { transition: none; } }
 .verify-fade-enter-active, .verify-fade-leave-active { transition: opacity .3s ease; }
 .verify-fade-enter-from, .verify-fade-leave-to { opacity: 0; }
 </style>

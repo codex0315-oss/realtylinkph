@@ -22,6 +22,9 @@ use Intervention\Image\ImageManager;
  * 360° panoramas keep their original bytes as the main image — the sphere
  * viewer maps the whole equirectangular image onto a sphere and downscaling
  * it makes the tour visibly blurry — but still get a thumbnail for the strip.
+ * A big panorama (wider than PANO_EDGE, or heavier than PANO_PREVIEW_BYTES)
+ * also gets a preview: long edge 4096 px, JPEG q85, usually 0.5–1.5 MB. The
+ * tour opens on it within a second and swaps in the original once loaded.
  *
  * Auto-orientation is on by default in Intervention v3, so a portrait phone
  * photo comes out upright instead of relying on the EXIF flag the browser
@@ -42,12 +45,17 @@ final class ListingImage
     public const MAIN_QUALITY  = 82;
     public const THUMB_QUALITY = 75;
 
+    /** 360° preview: sharp enough in the viewer, a fraction of a camera original. */
+    public const PANO_EDGE          = 4096;
+    public const PANO_QUALITY       = 85;
+    public const PANO_PREVIEW_BYTES = 1536 * 1024;
+
     /** GD bytes per pixel, plus headroom for the encoder's working copy. */
     private const BYTES_PER_PIXEL = 5;
 
     /**
-     * @return array{main: string, thumb: string, width: int, height: int}|null
-     *         encoded JPEG bytes, or null when the file can't be decoded
+     * @return array{main: string, thumb: string, preview: string|null, width: int, height: int}|null
+     *         encoded JPEG bytes (preview: 360° only, when worth it), or null when the file can't be decoded
      *         (corrupt, unsupported, or too large for memory) — the caller
      *         then stores the upload untouched, exactly as before.
      */
@@ -66,8 +74,15 @@ final class ListingImage
             $width  = $image->width();
             $height = $image->height();
 
+            $preview = null;
             if ($is360) {
                 $main = (string) file_get_contents($path);
+                // Scaled in place, so the thumbnail below is made from the
+                // already-smaller preview rather than the full original.
+                if (max($width, $height) > self::PANO_EDGE || strlen($main) > self::PANO_PREVIEW_BYTES) {
+                    self::capLongEdge($image, self::PANO_EDGE);
+                    $preview = (string) $image->toJpeg(self::PANO_QUALITY);
+                }
             } else {
                 self::capLongEdge($image, self::MAIN_EDGE);
                 $main = (string) $image->toJpeg(self::MAIN_QUALITY);
@@ -79,7 +94,7 @@ final class ListingImage
             return null;
         }
 
-        return ['main' => $main, 'thumb' => $thumb, 'width' => $width, 'height' => $height];
+        return ['main' => $main, 'thumb' => $thumb, 'preview' => $preview, 'width' => $width, 'height' => $height];
     }
 
     /** Scale in place so the longer edge is at most $edge. Never upscales. */

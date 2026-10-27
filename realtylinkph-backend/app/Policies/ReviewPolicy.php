@@ -36,6 +36,12 @@ class ReviewPolicy
         return $agentReview->buyer_id === $user->id || $user->isAdmin();
     }
 
+    /** Only the reviewed agent answers a review. */
+    public function reply(User $user, AgentReview $agentReview): bool
+    {
+        return $agentReview->agent_id === $user->id;
+    }
+
     public function toggleVisibility(User $user, AgentReview $agentReview): bool
     {
         return $user->isAdmin();

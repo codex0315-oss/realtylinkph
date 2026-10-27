@@ -1,34 +1,52 @@
 <script setup lang="ts">
-import type { AgentAiMessage, AgentListingProposal } from '~/composables/useAgentAi'
+import type { AgentListingProposal } from '~/composables/useAgentAi'
 
+/**
+ * RealtyLink AI for agents, docked in the dashboard like the buyer's panel:
+ * same header, thread ground and composer. Beyond writing descriptions and
+ * drafting listings it answers from the agent's own data (cards), prepares
+ * tasks to approve, checks prices and listings, and drafts replies.
+ *
+ * The thread lives in useAgentAi, so a prompt from the dashboard's AI card
+ * (`agent-ai-prompt`) continues here and a reload keeps the conversation.
+ */
 defineProps<{ closable?: boolean }>()
 const emit = defineEmits<{ close: [] }>()
 
-const { chat, loading } = useAgentAi()
+const authStore = useAuthStore()
+const { messages, loading, send, patch, patchCard, patchAction, reset } = useAgentAi()
 const { createProperty, error: createError } = useProperty()
-const createErrorMsg = ref('')
+const pending = useState<string | null>('agent-ai-prompt', () => null)
 
-const messages   = ref<AgentAiMessage[]>([])
-const input      = ref('')
-const threadEl   = ref<HTMLElement | null>(null)
-const fileInput  = ref<HTMLInputElement | null>(null)
-const mascotOk   = ref(true)
-
+const draft     = ref('')
+const threadEl  = ref<HTMLElement | null>(null)
+const inputEl   = ref<HTMLTextAreaElement | null>(null)
+const fileInput = ref<HTMLInputElement | null>(null)
 const attachedFile    = ref<File | null>(null)
 const attachedPreview = ref('')
 
-const creating  = ref(false)
-const createdAt = ref<Set<number>>(new Set()) // message indexes whose draft was created
+const firstName = computed(() => authStore.user?.name?.split(' ')[0] ?? '')
 
-const suggestions = [
-  'Write a description for a 3BR house in Quezon City',
-  'Create a listing: condo in BGC, ₱8M, 2BR 2BA, 60sqm',
-  'Which of my listings has the most views?',
-  'Suggest a price for a 120sqm lot in Cebu',
+/* One starter per kind of help; the photo one opens the picker. */
+const STARTERS = [
+  { label: 'Which viewing requests need my answer?', icon: 'M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5' },
+  { label: 'Check my listings for fixes',            icon: 'M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
+  { label: 'Is my listing priced right?',            icon: 'M2.25 18L9 11.25l4.306 4.307a11.95 11.95 0 015.814-5.519l2.74-1.22m0 0l-5.94-2.28m5.94 2.28l-2.28 5.941' },
+  { label: 'Draft a reply to my latest inquiry',     icon: 'M7.5 8.25h9m-9 3H12m-9.75 1.51c0 1.6 1.123 2.994 2.707 3.227 1.129.166 2.27.293 3.423.379.35.026.67.21.865.501L12 21l2.755-4.133a1.14 1.14 0 01.865-.501 48.172 48.172 0 003.423-.379c1.584-.233 2.707-1.626 2.707-3.228V6.741c0-1.602-1.123-2.995-2.707-3.228A48.394 48.394 0 0012 3c-2.392 0-4.744.175-7.043.513C3.373 3.746 2.25 5.14 2.25 6.741v6.018z' },
+  { label: 'Block tomorrow afternoon',               icon: 'M18.364 18.364A9 9 0 005.636 5.636m12.728 12.728A9 9 0 015.636 5.636m12.728 12.728L5.636 5.636' },
+  { label: 'Write a description from a photo',       icon: 'M6.827 6.175A2.31 2.31 0 015.186 7.23c-.38.054-.757.112-1.134.175C2.999 7.58 2.25 8.507 2.25 9.574V18a2.25 2.25 0 002.25 2.25h15A2.25 2.25 0 0021.75 18V9.574c0-1.067-.75-1.994-1.802-2.169a47.865 47.865 0 00-1.134-.175 2.31 2.31 0 01-1.64-1.055l-.822-1.316a2.192 2.192 0 00-1.736-1.039 48.774 48.774 0 00-5.232 0 2.192 2.192 0 00-1.736 1.039l-.821 1.316z M16.5 12.75a4.5 4.5 0 11-9 0 4.5 4.5 0 019 0z', photo: true },
 ]
 
-function scrollToBottom() {
-  nextTick(() => { if (threadEl.value) threadEl.value.scrollTop = threadEl.value.scrollHeight })
+function scrollToBottom(smooth = true) {
+  nextTick(() => threadEl.value?.scrollTo({ top: threadEl.value.scrollHeight, behavior: smooth ? 'smooth' : 'auto' }))
+}
+watch(() => [messages.value.length, loading.value], () => { if (messages.value.length) scrollToBottom() })
+
+function autosize() {
+  const el = inputEl.value
+  if (!el) return
+  el.style.height = 'auto'
+  el.style.height = `${Math.min(el.scrollHeight, 140)}px`
 }
 
 function onFile(e: Event) {
@@ -38,6 +56,7 @@ function onFile(e: Event) {
   const reader = new FileReader()
   reader.onload = ev => { attachedPreview.value = ev.target?.result as string }
   reader.readAsDataURL(file)
+  nextTick(() => inputEl.value?.focus())
 }
 function clearAttachment() {
   attachedFile.value = null
@@ -45,31 +64,54 @@ function clearAttachment() {
   if (fileInput.value) fileInput.value.value = ''
 }
 
-async function send(text?: string) {
-  const content = (text ?? input.value).trim()
+async function submit(text?: string) {
+  const content = (text ?? draft.value).trim()
   if ((!content && !attachedFile.value) || loading.value) return
-
-  messages.value.push({
-    role: 'user',
-    content: content || 'Write a description for this property photo.',
-    image: attachedPreview.value || undefined,
-  })
-
-  const fileToSend = attachedFile.value
-  input.value = ''
+  const file = attachedFile.value
+  const preview = attachedPreview.value
+  draft.value = ''
   clearAttachment()
-  scrollToBottom()
-
-  const res = await chat(messages.value, fileToSend)
-  messages.value.push({
-    role: 'assistant',
-    content: res?.reply ?? "Sorry, I'm having trouble right now. Please try again.",
-    proposal: res?.listing_proposal ?? null,
-  })
-  scrollToBottom()
+  nextTick(autosize)
+  await send(content, file, preview)
 }
 
-async function createDraft(proposal: AgentListingProposal, msgIndex: number) {
+function onKeydown(e: KeyboardEvent) {
+  if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submit() }
+}
+
+function starter(s: typeof STARTERS[number]) {
+  if (s.photo) fileInput.value?.click()
+  else submit(s.label)
+}
+
+function newChat() {
+  reset()
+  clearAttachment()
+  nextTick(() => inputEl.value?.focus())
+}
+
+/* Leaving for a page: on phones the panel covers it, so step aside. */
+function onNavigate() {
+  if (!window.matchMedia('(min-width: 1024px)').matches) emit('close')
+}
+
+function takePending() {
+  if (!pending.value) return
+  const p = pending.value
+  pending.value = null
+  submit(p)
+}
+onMounted(() => {
+  if (messages.value.length) scrollToBottom(false)
+  inputEl.value?.focus({ preventScroll: true })
+  takePending()
+})
+watch(pending, takePending)
+
+/* ── A proposed listing → a draft to add photos to ── */
+const creating = ref(false)
+const createErrorMsg = ref('')
+async function createDraft(proposal: AgentListingProposal, index: number) {
   if (creating.value) return
   creating.value = true
   createErrorMsg.value = ''
@@ -86,11 +128,11 @@ async function createDraft(proposal: AgentListingProposal, msgIndex: number) {
   })
   creating.value = false
   if (prop) {
-    createdAt.value.add(msgIndex)
-    emit('close')
+    patch(index, { created: true })
+    onNavigate()
     await navigateTo(`/dashboard/listings/${prop.id}/edit`)
   } else {
-    createErrorMsg.value = createError.value || 'Could not create the draft. Restart the dev server and make sure you are a verified agent, then try again.'
+    createErrorMsg.value = createError.value || 'Couldn’t create the draft. Please try again.'
   }
 }
 
@@ -102,170 +144,182 @@ function peso(n: number): string {
 </script>
 
 <template>
-  <div class="flex flex-col h-full w-full bg-white dark:bg-[#10264D] overflow-hidden">
+  <div class="flex h-full w-full flex-col overflow-hidden">
     <!-- Header -->
-    <div class="flex items-center gap-3 px-5 py-3.5 border-b border-gray-100 dark:border-white/10">
-      <div class="h-10 w-10 rounded-full bg-brand-navy/5 dark:bg-white/5 flex items-center justify-center overflow-hidden flex-shrink-0">
-        <img v-if="mascotOk" src="/realtylink-ai1.png" alt="RealtyLink AI" class="w-full h-full object-contain" @error="mascotOk = false" />
-        <svg v-else class="h-5 w-5 text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" /></svg>
-      </div>
-      <div class="min-w-0">
-        <p class="text-sm font-bold text-brand-navy dark:text-white flex items-center gap-1.5">
+    <div class="flex items-center gap-3 px-5 pt-5 pb-4 border-b border-brand-navy/[0.06] dark:border-white/10">
+      <span class="relative flex-none">
+        <img src="/ai/avatar-96.webp" alt="" class="h-11 w-11 rounded-full object-cover bg-white ring-2 ring-brand-gold/70" />
+        <span class="absolute bottom-0 right-0 h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-white dark:ring-[#0b1f45]" aria-hidden="true" />
+      </span>
+      <div class="min-w-0 flex-1">
+        <h2 class="font-heading text-xl font-semibold leading-tight text-brand-navy dark:text-white flex items-center gap-2">
           RealtyLink AI
-          <span class="text-[0.5625rem] font-bold uppercase tracking-wide bg-brand-gold/15 text-brand-gold px-1.5 py-0.5 rounded">Agent</span>
-        </p>
-        <p class="text-[0.6875rem] text-gray-400 dark:text-white/40">Your listing assistant</p>
+          <span class="rounded-md bg-brand-gold/15 px-1.5 py-0.5 text-[0.5625rem] font-bold uppercase tracking-wide text-brand-gold-deep dark:text-brand-gold">Agent</span>
+        </h2>
+        <p class="truncate text-xs text-brand-navy/55 dark:text-white/50">Works with your listings, viewings and inquiries</p>
       </div>
-
       <button
-        v-if="closable"
+        v-if="messages.length"
         type="button"
-        class="ml-auto h-9 w-9 rounded-full flex items-center justify-center text-gray-400 hover:text-brand-navy dark:hover:text-white hover:bg-gray-100 dark:hover:bg-white/10 transition-colors flex-shrink-0"
-        aria-label="Close"
-        @click="emit('close')"
+        class="h-9 w-9 flex-none rounded-full flex items-center justify-center text-brand-navy/55 hover:text-brand-navy hover:bg-brand-navy/[0.06] dark:text-white/55 dark:hover:text-white dark:hover:bg-white/10 transition"
+        title="New chat"
+        aria-label="Start a new chat"
+        @click="newChat"
       >
-        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
+        <svg class="h-[1.125rem] w-[1.125rem]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125M18 14v4.75A2.25 2.25 0 0115.75 21H5.25A2.25 2.25 0 013 18.75V8.25A2.25 2.25 0 015.25 6H10" /></svg>
+      </button>
+      <button v-if="closable" type="button" class="h-9 w-9 flex-none rounded-full flex items-center justify-center text-brand-navy/55 hover:text-brand-navy hover:bg-brand-navy/[0.06] dark:text-white/55 dark:hover:text-white dark:hover:bg-white/10 transition" aria-label="Close RealtyLink AI" @click="emit('close')">
+        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
       </button>
     </div>
 
     <!-- Thread -->
-    <div ref="threadEl" class="flex-1 overflow-y-auto px-4 sm:px-6 py-5">
-      <div class="max-w-3xl mx-auto w-full min-h-full space-y-5">
+    <div ref="threadEl" class="flex-1 overflow-y-auto overscroll-contain bg-brand-cream/60 dark:bg-black/10" aria-live="polite">
       <!-- Welcome -->
-      <div v-if="!messages.length" class="h-full flex flex-col items-center justify-center text-center px-4">
-        <div class="h-28 w-28 mb-4 flex items-center justify-center">
-          <img v-if="mascotOk" src="/realtylink-ai1.png" alt="RealtyLink AI" class="w-full h-full object-contain drop-shadow-xl" @error="mascotOk = false" />
+      <div v-if="!messages.length" class="flex min-h-full flex-col px-5 py-6">
+        <div class="flex flex-col items-center text-center">
+          <img src="/ai/mascot-320.webp" alt="" class="h-28 w-28 object-contain drop-shadow-[0_12px_24px_rgba(11,42,92,0.25)] ai-float" />
+          <p class="mt-3 font-heading text-xl font-semibold text-brand-navy dark:text-white">
+            {{ firstName ? `Hi ${firstName}, what` : 'What' }} can I do for you?
+          </p>
+          <p class="mt-1.5 max-w-[19rem] text-sm leading-relaxed text-brand-navy/60 dark:text-white/55">
+            I can show your viewings and inquiries, confirm or block times, check prices, draft replies and write listings. You approve anything I change.
+          </p>
         </div>
-        <h2 class="font-playfair text-2xl font-bold text-brand-navy dark:text-white">Hi! I'm your listing assistant 🏠</h2>
-        <p class="text-sm text-gray-500 dark:text-white/50 mt-2 max-w-md">
-          Attach a property photo and I'll write the description, draft a full listing from a few details, or answer questions about your listings.
-        </p>
-        <div class="flex flex-wrap items-center justify-center gap-2 mt-6 max-w-lg">
+
+        <p class="mt-6 mb-2 text-[0.6875rem] font-bold uppercase tracking-[0.16em] text-brand-navy/40 dark:text-white/40">Try asking</p>
+        <div class="space-y-2">
           <button
-            v-for="s in suggestions"
-            :key="s"
-            class="text-xs font-medium px-3.5 py-2 rounded-full border border-gray-200 dark:border-white/10 text-brand-navy dark:text-white/80 hover:border-brand-gold hover:text-brand-gold transition-colors"
-            @click="send(s)"
+            v-for="s in STARTERS"
+            :key="s.label"
+            type="button"
+            class="group w-full flex items-center gap-3 rounded-2xl px-3.5 py-3 text-left text-sm font-medium transition
+                   bg-white text-brand-navy ring-1 ring-brand-navy/[0.07] hover:ring-brand-gold hover:-translate-y-px
+                   dark:bg-white/[0.06] dark:text-white dark:ring-white/10 dark:hover:ring-brand-gold"
+            @click="starter(s)"
           >
-            {{ s }}
+            <span class="h-8 w-8 flex-none rounded-xl flex items-center justify-center bg-brand-gold/15 text-brand-gold-deep dark:text-brand-gold">
+              <svg class="h-[1.125rem] w-[1.125rem]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" :d="s.icon" /></svg>
+            </span>
+            <span class="flex-1">{{ s.label }}</span>
+            <svg class="h-4 w-4 flex-none text-brand-navy/30 group-hover:text-brand-gold-deep dark:text-white/30 dark:group-hover:text-brand-gold transition" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 4.5L21 12m0 0l-7.5 7.5M21 12H3" /></svg>
           </button>
         </div>
       </div>
 
-      <!-- Messages -->
-      <template v-for="(m, i) in messages" :key="i">
-        <!-- User -->
-        <div v-if="m.role === 'user'" class="flex justify-end">
-          <div class="max-w-[80%] space-y-2">
-            <img v-if="m.image" :src="m.image" class="rounded-2xl rounded-br-md max-h-48 ml-auto border border-gray-200 dark:border-white/10" />
-            <div class="px-4 py-2.5 text-sm leading-relaxed rounded-2xl rounded-br-md text-white shadow-sm" style="background: linear-gradient(135deg, #10264D 0%, #08152F 100%)">{{ m.content }}</div>
+      <!-- Conversation -->
+      <div v-else class="px-4 py-4 space-y-4">
+        <template v-for="(m, i) in messages" :key="i">
+          <div v-if="m.role === 'user'" class="flex flex-col items-end gap-1.5">
+            <img v-if="m.image" :src="m.image" alt="Attached photo" class="max-h-40 rounded-2xl rounded-br-md ring-1 ring-brand-navy/10 dark:ring-white/10" />
+            <div class="max-w-[85%] rounded-2xl rounded-br-md px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words bg-brand-navy text-white dark:bg-brand-gold dark:text-brand-navy">{{ m.content }}</div>
           </div>
-        </div>
 
-        <!-- Assistant -->
-        <div v-else class="flex items-start gap-2.5">
-          <div class="h-8 w-8 rounded-full bg-brand-gold/10 flex items-center justify-center overflow-hidden flex-shrink-0 mt-0.5">
-            <img v-if="mascotOk" src="/realtylink-ai1.png" alt="" class="w-full h-full object-contain" @error="mascotOk = false" />
-          </div>
-          <div class="max-w-[82%] min-w-0">
-            <div class="px-4 py-2.5 text-sm leading-relaxed rounded-2xl rounded-bl-md bg-gray-100 dark:bg-white/10 text-brand-navy dark:text-white whitespace-pre-wrap">{{ m.content }}</div>
+          <div v-else class="flex items-start gap-2">
+            <img src="/ai/avatar-96.webp" alt="" class="mt-0.5 h-7 w-7 flex-none rounded-full object-cover bg-white ring-1 ring-brand-gold/50" />
+            <div class="min-w-0 max-w-[88%] flex-1">
+              <div class="inline-block max-w-full rounded-2xl rounded-bl-md px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words bg-white text-brand-navy ring-1 ring-brand-navy/[0.06] dark:bg-white/[0.08] dark:text-white dark:ring-white/10">{{ m.content }}</div>
 
-            <!-- Listing proposal card -->
-            <div v-if="m.proposal" class="mt-2 rounded-2xl border border-brand-gold/30 bg-brand-gold/5 p-4">
-              <div class="flex items-center gap-1.5 mb-2">
-                <svg class="h-4 w-4 text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
-                <p class="text-xs font-bold text-brand-navy dark:text-white uppercase tracking-wide">Draft listing</p>
+              <!-- Account: theme, calendar, password, page -->
+              <AiActionCard v-if="m.action" :action="m.action" @navigate="onNavigate" @update="p => patchAction(i, p)" />
+
+              <!-- Their data, a task, a check or a draft -->
+              <AgentAiCard v-if="m.card" :card="m.card" @ask="submit" @patch="c => patchCard(i, c)" @navigate="onNavigate" />
+
+              <!-- A listing it proposes to create -->
+              <div v-if="m.proposal" class="mt-2 rounded-2xl bg-white ring-1 ring-brand-gold/40 dark:bg-white/[0.06] p-3.5">
+                <p class="text-[0.625rem] font-bold uppercase tracking-[0.14em] text-brand-gold-deep dark:text-brand-gold">Draft listing</p>
+                <p class="mt-1 text-[0.8125rem] font-semibold text-brand-navy dark:text-white">{{ m.proposal.title }}</p>
+                <div class="mt-1 flex flex-wrap items-center gap-x-2.5 gap-y-1 text-[0.6875rem] text-brand-navy/60 dark:text-white/55">
+                  <span class="rounded px-1.5 py-0.5 text-[0.5625rem] font-bold uppercase tracking-wide" :class="m.proposal.offer_type === 'rent' ? 'bg-sky-500/15 text-sky-700 dark:text-sky-300' : 'bg-emerald-500/15 text-emerald-700 dark:text-emerald-300'">{{ m.proposal.offer_type === 'rent' ? 'For rent' : 'For sale' }}</span>
+                  <span class="capitalize">{{ m.proposal.type }}</span>
+                  <span class="font-semibold text-brand-navy dark:text-white">{{ peso(m.proposal.price) }}</span>
+                  <span v-if="m.proposal.bedrooms">{{ m.proposal.bedrooms }} BR</span>
+                  <span v-if="m.proposal.bathrooms">{{ m.proposal.bathrooms }} BA</span>
+                  <span v-if="m.proposal.floor_area">{{ m.proposal.floor_area }} sqm</span>
+                </div>
+                <p class="mt-1 text-[0.6875rem] text-brand-navy/45 dark:text-white/40">{{ m.proposal.address }}</p>
+                <p class="mt-2 line-clamp-3 whitespace-pre-wrap text-xs leading-relaxed text-brand-navy/70 dark:text-white/65">{{ m.proposal.description }}</p>
+                <button
+                  v-if="!m.created"
+                  type="button"
+                  class="mt-3 w-full inline-flex items-center justify-center gap-2 rounded-full bg-brand-gold py-2.5 text-xs font-bold text-brand-navy shadow-[0_4px_14px_rgba(212,165,74,0.4)] hover:bg-brand-gold-light disabled:opacity-50 transition"
+                  :disabled="creating"
+                  @click="createDraft(m.proposal, i)"
+                >
+                  {{ creating ? 'Creating draft…' : 'Create draft & add photos' }}
+                </button>
+                <p v-else class="mt-3 text-center text-xs font-semibold text-emerald-600 dark:text-emerald-400">Draft created ✓</p>
+                <p v-if="createErrorMsg && !m.created" class="mt-2 text-center text-xs text-red-600 dark:text-red-400" role="alert">{{ createErrorMsg }}</p>
               </div>
-              <p class="text-sm font-bold text-brand-navy dark:text-white">{{ m.proposal.title }}</p>
-              <div class="flex flex-wrap items-center gap-x-3 gap-y-1 text-xs text-gray-600 dark:text-white/60 mt-1">
-                <span class="text-[0.625rem] font-bold uppercase tracking-wide px-1.5 py-0.5 rounded" :class="m.proposal.offer_type === 'rent' ? 'bg-blue-100 text-blue-700' : 'bg-emerald-100 text-emerald-700'">{{ m.proposal.offer_type === 'rent' ? 'For Rent' : 'For Sale' }}</span>
-                <span class="capitalize">{{ m.proposal.type }}</span>
-                <span class="font-semibold text-brand-gold">{{ peso(m.proposal.price) }}</span>
-                <span v-if="m.proposal.bedrooms">{{ m.proposal.bedrooms }}BR</span>
-                <span v-if="m.proposal.bathrooms">{{ m.proposal.bathrooms }}BA</span>
-                <span v-if="m.proposal.floor_area">{{ m.proposal.floor_area }}sqm</span>
-              </div>
-              <p class="text-xs text-gray-400 mt-1">{{ m.proposal.address }}</p>
-              <p class="text-xs text-gray-600 dark:text-white/60 mt-2 line-clamp-3 whitespace-pre-wrap">{{ m.proposal.description }}</p>
-
-              <button
-                v-if="!createdAt.has(i)"
-                :disabled="creating"
-                class="mt-3 w-full inline-flex items-center justify-center gap-2 bg-brand-gold text-brand-navy font-bold text-xs py-2.5 rounded-xl hover:-translate-y-0.5 transition-all disabled:opacity-50 disabled:cursor-not-allowed"
-                @click="createDraft(m.proposal, i)"
-              >
-                <svg v-if="creating" class="animate-spin h-3.5 w-3.5" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-                {{ creating ? 'Creating draft…' : 'Create draft & add photos' }}
-              </button>
-              <p v-else class="mt-3 text-xs font-semibold text-emerald-600 text-center">Draft created ✓</p>
-              <p v-if="createErrorMsg" class="mt-2 text-xs text-red-500 text-center">{{ createErrorMsg }}</p>
             </div>
           </div>
-        </div>
-      </template>
+        </template>
 
-      <!-- Thinking -->
-      <div v-if="loading" class="flex items-start gap-2.5">
-        <div class="h-8 w-8 rounded-full bg-brand-gold/10 flex items-center justify-center overflow-hidden flex-shrink-0">
-          <img v-if="mascotOk" src="/realtylink-ai1.png" alt="" class="w-full h-full object-contain" @error="mascotOk = false" />
+        <!-- Thinking -->
+        <div v-if="loading" class="flex items-start gap-2" aria-label="RealtyLink AI is replying">
+          <img src="/ai/avatar-96.webp" alt="" class="h-7 w-7 flex-none rounded-full object-cover bg-white ring-1 ring-brand-gold/50" />
+          <div class="inline-flex gap-1 rounded-2xl rounded-bl-md bg-white dark:bg-white/[0.08] px-3.5 py-3 ring-1 ring-brand-navy/[0.06] dark:ring-white/10">
+            <span v-for="d in 3" :key="d" class="h-1.5 w-1.5 rounded-full bg-brand-navy/40 dark:bg-white/50 typing-dot" :style="{ animationDelay: `${(d - 1) * 0.15}s` }" />
+          </div>
         </div>
-        <div class="bg-gray-100 dark:bg-white/10 rounded-2xl rounded-bl-md px-4 py-3">
-          <span class="flex gap-1">
-            <span class="h-1.5 w-1.5 rounded-full bg-gray-400 dark:bg-white/50 ai-dot" style="animation-delay:0ms" />
-            <span class="h-1.5 w-1.5 rounded-full bg-gray-400 dark:bg-white/50 ai-dot" style="animation-delay:150ms" />
-            <span class="h-1.5 w-1.5 rounded-full bg-gray-400 dark:bg-white/50 ai-dot" style="animation-delay:300ms" />
-          </span>
-        </div>
-      </div>
       </div>
     </div>
 
-    <!-- Input -->
-    <div class="px-4 py-3 border-t border-gray-100 dark:border-white/10">
-      <!-- Attachment preview -->
-      <div v-if="attachedPreview" class="mb-2 inline-flex items-center gap-2 bg-gray-100 dark:bg-white/5 rounded-xl p-1.5 pr-3">
-        <img :src="attachedPreview" class="h-10 w-10 rounded-lg object-cover" />
-        <span class="text-xs text-gray-500 dark:text-white/50">Photo attached</span>
-        <button class="text-gray-400 hover:text-red-500" @click="clearAttachment">
-          <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M6 18L18 6M6 6l12 12" /></svg>
-        </button>
-      </div>
-
-      <div class="flex items-center gap-2 bg-gray-50 dark:bg-white/5 rounded-2xl px-2 py-1.5 max-w-3xl mx-auto w-full">
-        <input ref="fileInput" type="file" accept="image/*" class="sr-only" @change="onFile" />
-        <button
-          class="h-9 w-9 rounded-full flex items-center justify-center text-gray-400 hover:text-brand-gold hover:bg-gray-100 dark:hover:bg-white/10 transition-colors flex-shrink-0"
-          title="Attach a property photo"
-          @click="fileInput?.click()"
-        >
-          <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
-        </button>
-        <input
-          v-model="input"
-          type="text"
-          placeholder="Describe a property, or attach a photo…"
-          class="flex-1 bg-transparent text-sm text-brand-navy dark:text-white placeholder-gray-400 outline-none py-2 px-2"
-          :disabled="loading"
-          @keydown.enter.prevent="send()"
-        />
-        <button
-          class="h-9 w-9 rounded-full flex items-center justify-center transition-all disabled:opacity-40 flex-shrink-0"
-          style="background: linear-gradient(135deg, #D4AF37 0%, #c9a227 100%)"
-          :disabled="loading || (!input.trim() && !attachedFile)"
-          @click="send()"
-        >
-          <svg class="h-4 w-4 text-brand-navy" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>
-        </button>
-      </div>
-      <p class="text-[0.625rem] text-gray-400 dark:text-white/30 text-center mt-1.5">RealtyLink AI can make mistakes — review drafts before publishing.</p>
+    <!-- Attached photo -->
+    <div v-if="attachedPreview" class="flex items-center gap-2 px-4 pt-3">
+      <img :src="attachedPreview" alt="" class="h-11 w-11 rounded-xl object-cover ring-1 ring-brand-navy/10 dark:ring-white/10" />
+      <span class="text-xs text-brand-navy/60 dark:text-white/55">Photo attached</span>
+      <button type="button" class="ml-1 h-7 w-7 rounded-full flex items-center justify-center text-brand-navy/45 hover:text-red-600 hover:bg-red-500/10 dark:text-white/45 transition" aria-label="Remove photo" @click="clearAttachment">
+        <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+      </button>
     </div>
+
+    <!-- Composer -->
+    <form class="flex items-end gap-2 px-3 pt-3 border-t border-brand-navy/[0.06] dark:border-white/10" :class="attachedPreview ? 'border-t-0 pt-2' : ''" @submit.prevent="submit()">
+      <input ref="fileInput" type="file" accept="image/*" class="sr-only" tabindex="-1" @change="onFile" />
+      <button
+        type="button"
+        class="flex-none h-10 w-10 rounded-full flex items-center justify-center text-brand-navy/50 hover:text-brand-gold-deep hover:bg-brand-navy/[0.06] dark:text-white/50 dark:hover:text-brand-gold dark:hover:bg-white/10 transition"
+        title="Attach a property photo"
+        aria-label="Attach a property photo"
+        @click="fileInput?.click()"
+      >
+        <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M18.375 12.739l-7.693 7.693a4.5 4.5 0 01-6.364-6.364l10.94-10.94A3 3 0 1119.5 7.372L8.552 18.32m.009-.01l-.01.01m5.699-9.941l-7.81 7.81a1.5 1.5 0 002.112 2.13" /></svg>
+      </button>
+      <textarea
+        ref="inputEl"
+        v-model="draft"
+        rows="1"
+        maxlength="1000"
+        :placeholder="attachedPreview ? 'Add details, or just send…' : 'Ask about your listings, viewings…'"
+        aria-label="Ask RealtyLink AI"
+        class="flex-1 resize-none rounded-2xl border-0 bg-brand-navy/[0.05] dark:bg-white/[0.07] px-4 py-2.5 text-sm text-brand-navy dark:text-white placeholder-brand-navy/45 dark:placeholder-white/40 focus:ring-2 focus:ring-brand-gold"
+        @input="autosize"
+        @keydown="onKeydown"
+      />
+      <button
+        type="submit"
+        class="flex-none h-10 w-10 rounded-full bg-brand-gold text-brand-navy flex items-center justify-center shadow-[0_4px_14px_rgba(212,165,74,0.45)] hover:bg-brand-gold-light disabled:opacity-40 disabled:shadow-none transition"
+        :disabled="(!draft.trim() && !attachedFile) || loading"
+        aria-label="Send"
+      >
+        <svg class="h-[1.125rem] w-[1.125rem]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" /></svg>
+      </button>
+    </form>
+    <p class="px-4 pt-1.5 pb-2.5 text-[0.625rem] text-brand-navy/40 dark:text-white/35">AI can make mistakes. Check drafts before you send or publish.</p>
   </div>
 </template>
 
 <style scoped>
-.ai-dot { animation: ai-bounce 1s infinite ease-in-out; }
-@keyframes ai-bounce {
-  0%, 60%, 100% { transform: translateY(0); opacity: 0.5; }
-  30% { transform: translateY(-4px); opacity: 1; }
+.typing-dot { animation: typing 1s ease-in-out infinite; }
+@keyframes typing { 0%, 60%, 100% { transform: translateY(0); opacity: 0.5; } 30% { transform: translateY(-3px); opacity: 1; } }
+
+/* The mascot idles with a slow bob on the welcome screen. */
+.ai-float { animation: ai-float 4s ease-in-out infinite; }
+@keyframes ai-float { 0%, 100% { transform: translateY(0); } 50% { transform: translateY(-5px); } }
+
+@media (prefers-reduced-motion: reduce) {
+  .typing-dot, .ai-float { animation: none; }
 }
 </style>

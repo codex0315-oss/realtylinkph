@@ -12,29 +12,29 @@ const agentHref = useAgentHref()
 
 <template>
   <div
-    class="group h-full bg-white dark:bg-brand-navy-mid rounded-2xl border border-gray-200 dark:border-white/10 p-5
-           hover:shadow-[0_18px_44px_rgba(8,21,47,0.14)] dark:hover:shadow-[0_18px_44px_rgba(0,0,0,0.55)]
+    class="group h-full flex flex-col overflow-hidden bg-white dark:bg-brand-navy-mid rounded-2xl border border-gray-200 dark:border-white/10
+           hover:shadow-[0_18px_44px_rgba(11,42,92,0.14)] dark:hover:shadow-[0_18px_44px_rgba(0,0,0,0.55)]
            hover:border-brand-gold/40 hover:-translate-y-1.5 transition-all duration-300"
   >
-    <!-- Avatar + info -->
-    <div class="flex items-start gap-4">
+    <!-- Cover strip (the agent's cover photo, or the default navy banner) -->
+    <AgentCover :src="agent.cover_url" :position="agent.cover_position ?? 50" compact class="h-20 flex-none" />
+
+    <div class="flex-1 flex flex-col px-5 pb-5">
+    <!-- Avatar (overlapping the strip) + info -->
+    <div class="flex items-end gap-4 -mt-7 mb-5">
       <div class="relative flex-shrink-0">
-        <div class="transition-transform duration-300 group-hover:scale-105">
+        <div class="rounded-full ring-4 ring-white dark:ring-brand-navy-mid transition-transform duration-300 group-hover:scale-105">
           <AppAvatar :name="agent.name" :src="agent.avatar" size="lg" />
         </div>
-        <div
+        <span
           v-if="agent.agent_profile?.status === 'approved'"
-          class="absolute -bottom-1 -right-1 w-5 h-5 bg-brand-gold rounded-full flex items-center justify-center
-                 ring-2 ring-white dark:ring-brand-navy-mid"
-          title="PRC-verified agent"
+          class="absolute -bottom-1 -right-1 rounded-full bg-white dark:bg-brand-navy-mid p-px"
         >
-          <svg class="h-3 w-3 text-brand-navy" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3" d="M5 13l4 4L19 7" />
-          </svg>
-        </div>
+          <AppVerifiedTick size="md" />
+        </span>
       </div>
 
-      <div class="min-w-0 flex-1">
+      <div class="min-w-0 flex-1 pb-0.5">
         <p class="font-semibold text-brand-text-primary dark:text-white text-sm leading-tight truncate
                   group-hover:text-brand-gold transition-colors duration-200">
           {{ agent.name }}
@@ -61,12 +61,13 @@ const agentHref = useAgentHref()
     <!-- View Profile button -->
     <NuxtLink
       :to="agentHref(agent.id)"
-      class="mt-5 block w-full text-center text-xs font-bold rounded-lg py-2.5
+      class="mt-auto block w-full text-center text-xs font-bold rounded-lg py-2.5
              border border-brand-navy dark:border-white/25 text-brand-navy dark:text-white
              hover:bg-brand-navy dark:hover:bg-brand-gold hover:text-white dark:hover:text-brand-navy
              dark:hover:border-brand-gold transition-colors duration-200"
     >
       View Profile
     </NuxtLink>
+    </div>
   </div>
 </template>

@@ -71,9 +71,26 @@ export const useReview = () => {
     }
   }
 
-  async function toggleVisibility(reviewId: number): Promise<boolean> {
+  /** Agent: reply to a review on you (or edit the reply); null removes it. */
+  async function replyToReview(reviewId: number, reply: string | null): Promise<AgentReview | null> {
+    error.value = null
     try {
-      await api.post(`/admin/reviews/${reviewId}/toggle-visibility`)
+      const res = reply === null
+        ? await api.del<ApiResponse<AgentReview>>(`/reviews/${reviewId}/reply`)
+        : await api.put<ApiResponse<AgentReview>>(`/reviews/${reviewId}/reply`, { reply })
+      const i = reviews.value.findIndex(r => r.id === reviewId)
+      if (i !== -1) reviews.value[i] = { ...reviews.value[i]!, agent_reply: res.data.agent_reply, agent_replied_at: res.data.agent_replied_at }
+      return res.data
+    } catch (e) {
+      error.value = extractError(e)
+      return null
+    }
+  }
+
+  /** Admin: hide (a reason is required; the reviewer is told) or show again. */
+  async function toggleVisibility(reviewId: number, reason?: string): Promise<boolean> {
+    try {
+      await api.post(`/admin/reviews/${reviewId}/toggle-visibility`, reason ? { reason } : {})
       return true
     } catch {
       return false
@@ -86,7 +103,22 @@ export const useReview = () => {
     return Math.round((sum / reviews.value.length) * 10) / 10
   })
 
+  /** The signed-in buyer's own reviews, newest first. */
+  async function fetchMyReviews(): Promise<void> {
+    loading.value = true
+    error.value   = null
+    try {
+      const res = await api.get<ApiResponse<AgentReview[]>>('/me/reviews')
+      reviews.value = res.data
+    } catch (e) {
+      error.value = extractError(e)
+    } finally {
+      loading.value = false
+    }
+  }
+
   return {
+    fetchMyReviews,
     reviews,
     pagination,
     loading,
@@ -97,6 +129,7 @@ export const useReview = () => {
     updateReview,
     fetchEligibility,
     toggleVisibility,
+    replyToReview,
   }
 }
 

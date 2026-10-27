@@ -95,6 +95,15 @@ export const useConversationStore = defineStore('conversation', () => {
     }
   }
 
+  /** Unread messages across every conversation — the Messages icon's badge. */
+  const totalUnread = computed(() => conversations.value.reduce((n, c) => n + (c.unread_count ?? 0), 0))
+
+  /** The thread was opened and marked read on the server — mirror it here. */
+  function clearUnread(conversationId: number): void {
+    const conv = conversations.value.find(c => c.id === conversationId)
+    if (conv) conv.unread_count = 0
+  }
+
   function decrementUnread(conversationId: number): void {
     const conv = conversations.value.find(c => c.id === conversationId)
     if (conv && conv.unread_count) {
@@ -116,6 +125,8 @@ export const useConversationStore = defineStore('conversation', () => {
     activeId,
     activeMessages,
     active,
+    totalUnread,
+    clearUnread,
     setConversations,
     setActive,
     setMessages,

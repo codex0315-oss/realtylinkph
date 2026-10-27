@@ -95,6 +95,8 @@ export const useConversation = () => {
   async function markRead(conversationId: number): Promise<void> {
     try {
       await api.post(`/conversations/${conversationId}/read`)
+      // Keep the list and the top-bar Messages badge in step without a refetch.
+      conversationStore.clearUnread(conversationId)
     } catch {
       // Non-critical
     }

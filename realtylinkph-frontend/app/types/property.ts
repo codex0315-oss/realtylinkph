@@ -15,6 +15,8 @@ export interface PropertyPhoto {
   url: string
   /** Card-sized copy (≤640 px). The API falls back to `url` for older photos. */
   thumb_url: string
+  /** 360° only: a lighter 4096 px copy the tour opens on; null when the original is already small. */
+  preview_url?: string | null
   is_360: boolean
   sort_order: number
 }
@@ -67,12 +69,18 @@ export interface PropertyFilters {
   max_price?: number
   bedrooms?: number
   search?: string
+  /** Only listings with at least one 360° photo. */
+  has_360?: 1
   lat?: number
   lng?: number
   radius?: number
   agent_id?: number
   page?: number
+  /** Browse sort menu; the API falls back to newest. */
+  sort?: PropertySort
 }
+
+export type PropertySort = 'newest' | 'price_asc' | 'price_desc'
 
 /**
  * Creates a DRAFT, so everything is optional — the wizard saves as the agent

@@ -18,10 +18,9 @@ if (authStore.token && !authStore.user) {
       <NuxtPage />
     </NuxtLayout>
 
-    <!-- Floating RealtyLink AI launcher — buyer & agent variants (each role-gated inside) -->
+    <!-- Floating RealtyLink AI launcher (buyers; agents use the dashboard top bar) -->
     <ClientOnly>
       <RealtyAiBubble />
-      <AgentAiBubble />
     </ClientOnly>
 
     <!-- Global confirmation dialog (replaces window.confirm) -->

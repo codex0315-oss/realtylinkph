@@ -1,4 +1,4 @@
-import type { ApiResponse, AgentProfile, Agent } from '~/types'
+import type { ApiResponse, AgentProfile, Agent, VerificationStatus } from '~/types'
 // Explicit, like useAgentAi/useGoogleAuth: the dev server once served this file
 // with the `useApi` auto-import missing (a stale transform), which took down
 // every admin page with "useApi is not defined".
@@ -59,6 +59,16 @@ export const useAgent = () => {
     }
   }
 
+  /** Admin Agents page: applications in one status, plus counts for the tabs. */
+  async function fetchApplications(status: VerificationStatus): Promise<{ items: AgentProfile[]; counts: Record<VerificationStatus, number> } | null> {
+    try {
+      const res = await api.get<ApiResponse<{ items: AgentProfile[]; counts: Record<VerificationStatus, number> }>>('/admin/applications', { status })
+      return res.data
+    } catch {
+      return null
+    }
+  }
+
   // `profileId` is the AgentProfile id (route binds AgentProfile, not the user).
   async function approveAgent(profileId: number): Promise<boolean> {
     try {
@@ -86,6 +96,7 @@ export const useAgent = () => {
     fetchTopAgents,
     submitVerification,
     fetchPendingAgents,
+    fetchApplications,
     approveAgent,
     rejectAgent,
   }

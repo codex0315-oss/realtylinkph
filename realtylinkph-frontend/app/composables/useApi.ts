@@ -38,8 +38,9 @@ export const useApi = () => {
     return $fetch<T>(path, { baseURL: config.public.apiBase, method: 'PATCH', headers: headers(), body })
   }
 
-  function del<T>(path: string): Promise<T> {
-    return $fetch<T>(path, { baseURL: config.public.apiBase, method: 'DELETE', headers: headers() })
+  /** `body` is for the few deletes that need one (e.g. an admin's reason). */
+  function del<T>(path: string, body?: Record<string, unknown>): Promise<T> {
+    return $fetch<T>(path, { baseURL: config.public.apiBase, method: 'DELETE', headers: headers(), body })
   }
 
   function postForm<T>(path: string, formData: FormData): Promise<T> {

@@ -35,5 +35,7 @@
         <env name="PULSE_ENABLED" value="false"/>
         <env name="TELESCOPE_ENABLED" value="false"/>
         <env name="NIGHTWATCH_ENABLED" value="false"/>
+        <!-- Tests fake Gemini; with no Groq key the Groq fallback stays off, so no test reaches the network. -->
+        <env name="GROQ_API_KEY" value=""/>
     </php>
 </phpunit>

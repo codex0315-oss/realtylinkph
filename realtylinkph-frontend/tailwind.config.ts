@@ -10,24 +10,36 @@ export default {
   theme: {
     extend: {
       colors: {
+        /*
+         * Sampled from the logo: the royal navy of the R's left stroke and the
+         * warm mid-tone of its metallic curve — more saturated than the muted
+         * #0A2240 / #BCA374 pair this replaced, but still on the logo. Avoid
+         * #D4AF37: that flat yellow-gold reads as mustard next to the logo.
+         * For a metallic accent use `bg-gold-metal` / `text-gold-metal`
+         * (main.css), which run the logo's champagne → gold → bronze sweep.
+         *
+         * Use it 60-30-10: light surfaces carry the page, navy carries type and
+         * structure, gold is the accent (primary buttons, active states, small
+         * highlights). Gold FILLS take navy text (6.6:1); gold TEXT on a light
+         * ground must use gold-deep — plain gold on white is only 2.4:1.
+         */
         brand: {
-          navy:           '#08152F',
-          'navy-mid':     '#10264D',
-          'navy-light':   '#2E6DA4',
-          'navy-deep':    '#060E1F',
-          gold:           '#D4AF37',
-          'gold-light':   '#E8C547',
-          // Darker gold for accent *text* on light grounds — #D4AF37 on cream
-          // fails contrast. Only for type, never for fills.
-          'gold-deep':    '#8A6A11',
+          navy:           '#0B2A5C',
+          'navy-mid':     '#17417F',
+          'navy-light':   '#2F78C4',
+          'navy-deep':    '#06183A',
+          gold:           '#D4A54A',
+          'gold-light':   '#E8C77A',   // hover state for gold fills
+          'gold-soft':    '#F4E4BE',   // tints, hairlines, quiet backgrounds
+          'gold-deep':    '#85601A',   // gold-coloured TEXT on light grounds (5.5:1)
           silver:         '#D4D4D4',
           'silver-light': '#F0F0F0',
           white:          '#FFFFFF',
-          cream:          '#F7F5F0',
+          cream:          '#F8F7F4',
           border:         '#E5E7EB',
-          'text-primary':   '#08152F',
-          'text-secondary': '#6B7280',
-          'text-light':     '#9CA3AF',
+          'text-primary':   '#0B2A5C',
+          'text-secondary': '#64748B',
+          'text-light':     '#94A3B8',
         },
       },
       fontFamily: {
@@ -36,6 +48,10 @@ export default {
         // `playfair` is kept as an alias so existing `font-playfair` usages update too.
         display:  ['Sora', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
         playfair: ['Sora', 'Inter', 'ui-sans-serif', 'system-ui', 'sans-serif'],
+        // Landing-page headlines: a refined serif that echoes the logo's R
+        // monogram. Scoped to `font-heading` so the dashboard keeps Sora;
+        // pointing `display` here instead would switch the whole app.
+        heading:  ['Fraunces', 'Georgia', 'ui-serif', 'serif'],
       },
       boxShadow: {
         card:       '0 2px 12px rgba(0,0,0,0.08)',

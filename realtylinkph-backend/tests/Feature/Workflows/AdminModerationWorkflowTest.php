@@ -68,15 +68,24 @@ class AdminModerationWorkflowTest extends TestCase
         $this->assertCount(1, $this->getJson("/api/agents/{$agent->id}/reviews")->json('data'));
 
         $this->actingAsUser($agent)->postJson("/api/admin/reviews/{$review->id}/toggle-visibility")->assertForbidden();
+        // Hiding needs a reason; the reviewer is told, and the review doesn't turn "edited".
         $this->actingAsUser($admin)->postJson("/api/admin/reviews/{$review->id}/toggle-visibility")
-            ->assertOk()->assertJsonPath('data.is_visible', false);
+            ->assertStatus(422)->assertJsonValidationErrors('reason');
+        $this->actingAsUser($admin)->postJson("/api/admin/reviews/{$review->id}/toggle-visibility", ['reason' => 'It includes the agent’s personal phone number.'])
+            ->assertOk()
+            ->assertJsonPath('data.is_visible', false)
+            ->assertJsonPath('data.hidden_reason', 'It includes the agent’s personal phone number.')
+            ->assertJsonPath('data.hidden_by', $admin->name)
+            ->assertJsonPath('data.is_edited', false);
 
         $this->assertCount(0, $this->asGuest()->getJson("/api/agents/{$agent->id}/reviews")->json('data'));
         $this->assertDatabaseHas('admin_actions', ['action' => 'review.hidden', 'subject_id' => $review->id]);
+        $this->assertTrue($review->buyer->notifications()->where('type', 'review_hidden')->exists());
 
-        // Restoring is logged as its own action.
+        // Restoring is logged as its own action, and clears the reason.
         $this->actingAsUser($admin)->postJson("/api/admin/reviews/{$review->id}/toggle-visibility")->assertOk();
         $this->assertDatabaseHas('admin_actions', ['action' => 'review.shown', 'subject_id' => $review->id]);
+        $this->assertNull($review->fresh()->hidden_reason);
     }
 
     public function test_user_deletion_guards_and_audit(): void
@@ -97,7 +106,7 @@ class AdminModerationWorkflowTest extends TestCase
 
         // A second admin can be created, then the first can be removed by them.
         $this->actingAsUser($admin)->postJson('/api/admin/admins', [
-            'name' => 'Second Admin', 'email' => 'second@example.com', 'password' => 'Secret123',
+            'name' => 'Second Admin', 'email' => 'second@example.com', 'password' => 'Secret123', 'password_confirmation' => 'Secret123',
         ])->assertCreated();
         $second = User::where('email', 'second@example.com')->firstOrFail();
         $this->assertTrue($second->isAdmin());

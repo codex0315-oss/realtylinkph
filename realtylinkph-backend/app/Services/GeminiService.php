@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Models\Property;
+use App\Models\SupportTicket;
 use App\Models\User;
 use App\Support\AgentCredentialReference;
 use App\Support\Documents;
@@ -29,11 +30,12 @@ class GeminiService
     {
         $primary = config('services.gemini.model', 'gemini-2.5-flash');
 
-        // Primary, then the most-available fallbacks first.
+        // Primary, then a fallback with its own free-tier quota. (gemini-2.0-flash
+        // was retired by Google in Oct 2026 and now returns 404.)
         return array_values(array_unique([
             $primary,
-            'gemini-2.0-flash',
             'gemini-2.5-flash',
+            'gemini-2.5-flash-lite',
         ]));
     }
 
@@ -76,7 +78,48 @@ class GeminiService
             }
         }
 
-        return null;
+        return $this->viaGroq($payload);
+    }
+
+    /**
+     * Last resort when both Gemini models fail (the free tier's daily quota is
+     * small): the same request through Groq, if it's configured. Text only — a
+     * request carrying images (documents, photos) has no Groq equivalent here.
+     */
+    private function viaGroq(array $payload): ?string
+    {
+        $groq = app(GroqService::class);
+        if (! $groq->isConfigured()) {
+            return null;
+        }
+
+        $history = [];
+        foreach ($payload['contents'] ?? [] as $c) {
+            $text = '';
+            foreach ($c['parts'] ?? [] as $part) {
+                if (isset($part['inline_data'])) {
+                    return null;
+                }
+                $text .= $part['text'] ?? '';
+            }
+            $history[] = ['role' => ($c['role'] ?? 'user') === 'model' ? 'assistant' : 'user', 'content' => $text];
+        }
+
+        $system = $payload['systemInstruction']['parts'][0]['text'] ?? 'You are a helpful assistant.';
+        if (($payload['generationConfig']['responseMimeType'] ?? null) === 'application/json') {
+            $system .= "\n\nReply with the JSON object only: no code fences, no other text.";
+        }
+
+        // Generous budget: Groq's model reasons before it answers, and that counts.
+        $text = $groq->chat($system, $history, (float) ($payload['generationConfig']['temperature'] ?? 0.6), 1200);
+
+        return $text !== null ? self::stripFences($text) : null;
+    }
+
+    /** "```json {…} ```" → "{…}". */
+    private static function stripFences(string $text): string
+    {
+        return trim((string) preg_replace('/^\s*```(?:json)?\s*|\s*```\s*$/i', '', $text));
     }
 
     /**
@@ -164,20 +207,79 @@ class GeminiService
     // RealtyLink AI — buyer assistant
     // ─────────────────────────────────────────────────────────────────────────
 
+    /** Words that name each property type. */
+    private const TYPE_WORDS = [
+        'house'      => '/\b(houses?|house and lot|house & lot|bungalows?|townhouses?|town house|duplex|single[- ]detached)\b/u',
+        'condo'      => '/\b(condos?|condominiums?|studio|penthouse|units?)\b/u',
+        'lot'        => '/(?<!\ba )\blots?\b(?! of)|\b(land|vacant)\b/u',   // not "a lot of space"
+        'commercial' => '/\b(commercial|office|shop|store|warehouse|business space)\b/u',
+        'apartment'  => '/\b(apartments?|apt|flat)\b/u',
+    ];
+
+    /** Everything the buyer (not the assistant) said, lowercased. */
+    private function buyerText(array $history): string
+    {
+        $text = '';
+        foreach ($history as $m) {
+            if (($m['role'] ?? 'user') !== 'assistant') {
+                $text .= ' ' . mb_strtolower((string) ($m['content'] ?? $m['text'] ?? ''));
+            }
+        }
+
+        return $text;
+    }
+
+    /** Things RealtyLink AI can do in the app rather than search. */
+    public const ACTIONS = ['theme_dark', 'theme_light', 'theme_system', 'gcal_connect', 'gcal_disconnect', 'password', 'open_page', 'capabilities'];
+
+    /** Sections "open_page" can take a buyer to: key => [label, path]. */
+    public const PAGES = [
+        'browse'        => ['Browse listings', '/dashboard/browse'],
+        'saved'         => ['Saved homes', '/dashboard/saved'],
+        'appointments'  => ['Appointments', '/dashboard/appointments'],
+        'history'       => ['History', '/dashboard/history'],
+        'reviews'       => ['Reviews', '/dashboard/reviews'],
+        'messages'      => ['Messages', '/dashboard?panel=messages'],
+        'notifications' => ['Notifications', '/dashboard?panel=notifications'],
+        'profile'       => ['My Profile', '/dashboard/profile'],
+        'verify'        => ['Become an agent', '/dashboard/verify'],
+    ];
+
+    /** Places a buyer can ask to be near; keys match NearbyService::KINDS. */
+    private const NEAR_KINDS = ['school', 'hospital', 'clinic', 'pharmacy', 'mall', 'grocery', 'market', 'church', 'transit', 'bank', 'police', 'fire'];
+
     /**
      * Extract structured search criteria from the conversation.
      *
-     * @return array{search:?string,type:?string,min_price:?float,max_price:?float,bedrooms:?int,bathrooms:?int}
+     * The search fields describe the whole conversation; `more`, `saved` and
+     * `action` (+ `page`) describe only the buyer's latest message.
+     *
+     * @return array{search:?string,type:?string,offer_type:?string,min_price:?float,max_price:?float,bedrooms:?int,bathrooms:?int,near:array<int,string>,has_360:bool,sort:?string,more:bool,saved:bool,action:?string,page:?string}
      */
     public function extractSearchCriteria(array $history): array
     {
         $system = 'Extract the buyer\'s property search criteria from the conversation. '
             . 'Respond ONLY with a JSON object using these keys: '
-            . 'location (string or null), type (one of: house, condo, lot, commercial, apartment, or null), '
-            . 'offer_type (one of: sale, rent, or null — choose "rent" if they mention renting, leasing, or a MONTHLY budget; "sale" if buying/purchasing), '
-            . 'min_price (number or null), max_price (number or null), bedrooms (integer or null), bathrooms (integer or null). '
+            . 'location (string or null: a city, municipality, barangay or area as it would appear in an address; for a landmark, give its city), '
+            . 'type (one of: house, condo, lot, commercial, apartment, or null — "home", "homes", "place" or "property" alone is null, not house), '
+            . 'offer_type (one of: sale, rent, or null — choose "rent" if they mention renting, leasing, or a MONTHLY budget; "sale" if buying/purchasing; null if they want either), '
+            . 'min_price (number or null), max_price (number or null), bedrooms (integer or null, the minimum), bathrooms (integer or null, the minimum), '
+            . 'near (array of zero or more of: ' . implode(', ', self::NEAR_KINDS) . ' — places they want the home to be close to; '
+            . 'university/college count as school, supermarket as grocery, palengke as market, drugstore as pharmacy, jeepney/bus/MRT/LRT as transit, ATM as bank), '
+            . 'has_360 (true only if they want a 360° or virtual tour), '
+            . 'sort (price_asc if they want the cheapest/most affordable first, price_desc for the most expensive first, newest for the latest listings, else null), '
+            . 'more (true only if their LATEST message asks for more or different listings for the same search, e.g. "show me more", "any others?"), '
+            . 'saved (true only if their LATEST message is about the homes they saved or favorited), '
+            . 'action (null unless their LATEST message asks the app to do something other than find homes; then one of: '
+            . 'theme_dark, theme_light, theme_system (switch dark/light mode, or follow the device; "turn off light mode" is theme_dark, "turn off dark mode" is theme_light), '
+            . 'gcal_connect, gcal_disconnect (connect or disconnect Google Calendar), '
+            . 'password (change or reset their password), '
+            . 'open_page (go to or show a section of their account), '
+            . 'capabilities (what can you do / how can you help)), '
+            . 'page (only with open_page: one of ' . implode(', ', array_keys(self::PAGES)) . '; "become an agent" is verify, "favorites" is saved, "viewings" is appointments, "past viewings" is history, "settings" or "account" is profile). '
             . 'Use null when a value is not specified. Prices are in Philippine pesos — interpret shorthand like "5M" as 5000000, "500k" as 500000, "25 thousand" as 25000. '
-            . 'A stated budget is the MAXIMUM (max_price). Only fill a field if the buyer clearly stated or implied it.';
+            . 'A stated budget is the MAXIMUM (max_price). Only fill a field if the buyer clearly stated or implied it. '
+            . 'Later messages override earlier ones (a new budget replaces the old one).';
 
         $text = $this->call([
             'systemInstruction' => ['parts' => [['text' => $system]]],
@@ -196,38 +298,151 @@ class GeminiService
         $types = ['house', 'condo', 'lot', 'commercial', 'apartment'];
 
         $type      = in_array($data['type'] ?? null, $types, true) ? $data['type'] : $heur['type'];
+        // The model reads "homes" as house; keep a type only if the buyer used a word for it.
+        if ($type !== null && ! preg_match(self::TYPE_WORDS[$type], $this->buyerText($history))) {
+            $type = $heur['type'];
+        }
         $offerType = in_array($data['offer_type'] ?? null, ['sale', 'rent'], true) ? $data['offer_type'] : $heur['offer_type'];
+        // "for sale or rent" is either; the model tends to pick one.
+        $lastAsk = mb_strtolower((string) (collect($history)->last(fn ($m) => ($m['role'] ?? 'user') !== 'assistant')['content'] ?? ''));
+        if (preg_match('/\b(sale|buy)\b.{0,12}\bor\b.{0,12}\b(rent|lease)|\b(rent|lease)\b.{0,12}\bor\b.{0,12}\b(sale|buy)\b/u', $lastAsk)) {
+            $offerType = null;
+        }
         $maxPrice  = is_numeric($data['max_price'] ?? null) ? (float) $data['max_price'] : $heur['max_price'];
         $minPrice  = is_numeric($data['min_price'] ?? null) ? (float) $data['min_price'] : $heur['min_price'];
         $bedrooms  = is_numeric($data['bedrooms'] ?? null) ? (int) $data['bedrooms'] : $heur['bedrooms'];
+        $bathrooms = is_numeric($data['bathrooms'] ?? null) ? (int) $data['bathrooms'] : $heur['bathrooms'];
+
+        $near = is_array($data['near'] ?? null)
+            ? array_values(array_intersect(self::NEAR_KINDS, $data['near']))
+            : $heur['near'];
+        $sort = in_array($data['sort'] ?? null, ['price_asc', 'price_desc', 'newest'], true) ? $data['sort'] : $heur['sort'];
 
         return [
-            'search'     => is_string($data['location'] ?? null) && $data['location'] !== '' ? $data['location'] : null,
+            'search'     => is_string($data['location'] ?? null) && trim($data['location']) !== '' ? trim($data['location']) : null,
             'type'       => $type,
             'offer_type' => $offerType,
             'min_price'  => $minPrice,
             'max_price'  => $maxPrice,
             'bedrooms'   => $bedrooms,
-            'bathrooms'  => is_numeric($data['bathrooms'] ?? null) ? (int) $data['bathrooms'] : null,
+            'bathrooms'  => $bathrooms,
+            'near'       => array_slice($near, 0, 3),
+            'has_360'    => is_bool($data['has_360'] ?? null) ? $data['has_360'] : $heur['has_360'],
+            'sort'       => $sort,
+            'more'       => is_bool($data['more'] ?? null) ? $data['more'] : $heur['more'],
+            'saved'      => is_bool($data['saved'] ?? null) ? $data['saved'] : $heur['saved'],
+            ...$this->pickAction($data, $heur),
         ];
+    }
+
+    /**
+     * The model's action when it's a known one (and, for open_page, names a
+     * known page); otherwise the keyword backstop's.
+     *
+     * @return array{action: ?string, page: ?string}
+     */
+    private function pickAction(array $data, array $heur): array
+    {
+        $action = in_array($data['action'] ?? null, self::ACTIONS, true) ? $data['action'] : null;
+        $page   = isset(self::PAGES[$data['page'] ?? '']) ? $data['page'] : null;
+
+        if ($action === 'open_page' && $page === null) {
+            $action = null;
+        }
+        if ($action === null) {
+            // A model that answered "no action" is trusted over the keywords.
+            return $data === [] ? ['action' => $heur['action'], 'page' => $heur['page']] : ['action' => null, 'page' => null];
+        }
+
+        return ['action' => $action, 'page' => $action === 'open_page' ? $page : null];
     }
 
     /**
      * Regex-based criteria extraction from the buyer's own messages — a backstop
      * for when Gemini is unavailable, and to catch fields the model misses.
      *
-     * @return array{offer_type:?string,type:?string,min_price:?float,max_price:?float,bedrooms:?int}
+     * @return array{offer_type:?string,type:?string,min_price:?float,max_price:?float,bedrooms:?int,bathrooms:?int,near:array<int,string>,has_360:bool,sort:?string,more:bool,saved:bool}
      */
     private function heuristicCriteria(array $history): array
     {
-        $text = '';
+        $text   = $this->buyerText($history);
+        $latest = '';
         foreach ($history as $m) {
             if (($m['role'] ?? 'user') !== 'assistant') {
-                $text .= ' ' . mb_strtolower((string) ($m['content'] ?? $m['text'] ?? ''));
+                $latest = mb_strtolower((string) ($m['content'] ?? $m['text'] ?? ''));
             }
         }
 
-        $out = ['offer_type' => null, 'type' => null, 'min_price' => null, 'max_price' => null, 'bedrooms' => null];
+        $out = [
+            'offer_type' => null, 'type' => null, 'min_price' => null, 'max_price' => null, 'bedrooms' => null, 'bathrooms' => null,
+            'near' => [], 'has_360' => false, 'sort' => null, 'more' => false, 'saved' => false,
+            'action' => null, 'page' => null,
+        ];
+
+        // App actions, from the latest message only.
+        if ($theme = self::themeAction($latest)) {
+            $out['action'] = $theme;
+        } elseif (str_contains($latest, 'calendar') && preg_match('/\b(disconnect|unlink|remove|stop)\b/', $latest)) {
+            $out['action'] = 'gcal_disconnect';
+        } elseif (str_contains($latest, 'calendar') && preg_match('/\b(connect|link|sync|add|set ?up)\b/', $latest)) {
+            $out['action'] = 'gcal_connect';
+        } elseif (preg_match('/\bpassword\b/', $latest)) {
+            $out['action'] = 'password';
+        } elseif (preg_match('/\bwhat (else )?can you do\b|\bhow can you help\b|\bwhat are you (able|capable)\b/', $latest)) {
+            $out['action'] = 'capabilities';
+        } elseif (preg_match('/\b(open|go to|take me to|bring me to)\s+(my\s+|the\s+)?(appointments?|viewings?|saved( homes)?|favou?rites|history|reviews?|profile|settings|account|messages?|notifications?|browse)\b/', $latest, $m)) {
+            $out['action'] = 'open_page';
+            $out['page']   = match (true) {
+                str_starts_with($m[3], 'appointment'), str_starts_with($m[3], 'viewing') => 'appointments',
+                str_starts_with($m[3], 'saved'), str_starts_with($m[3], 'favo')        => 'saved',
+                str_starts_with($m[3], 'review')                                       => 'reviews',
+                str_starts_with($m[3], 'message')                                      => 'messages',
+                str_starts_with($m[3], 'notification')                                 => 'notifications',
+                in_array($m[3], ['profile', 'settings', 'account'], true)              => 'profile',
+                default                                                                => $m[3],   // history, browse
+            };
+        }
+
+        if (preg_match('/(\d+)\s*(?:ba\b|bath|bathroom|t&b|cr\b|toilet)/', $text, $m)) {
+            $out['bathrooms'] = (int) $m[1];
+        }
+
+        // Only read places when the buyer talks about being close to them, so
+        // "a commercial lot for a school" isn't taken as "near a school".
+        if (preg_match('/\b(near|nearby|close to|walking distance|beside|next to|around|minutes? from|access to)\b/', $text)) {
+            $patterns = [
+                'school'   => '/\b(schools?|universit(y|ies)|colleges?|campus)\b/',
+                'hospital' => '/\bhospitals?\b/',
+                'clinic'   => '/\bclinics?\b/',
+                'pharmacy' => '/\b(pharmac(y|ies)|drugstores?|botika)\b/',
+                'mall'     => '/\b(malls?|shopping)\b/',
+                'grocery'  => '/\b(supermarkets?|grocer(y|ies))\b/',
+                'market'   => '/\b(public market|wet market|palengke)\b/',
+                'church'   => '/\b(church(es)?|chapel|parish)\b/',
+                'transit'  => '/\b(jeepneys?|jeep|bus (stop|terminal)|terminal|mrt|lrt|train|public transport|commute)\b/',
+                'bank'     => '/\b(banks?|atms?)\b/',
+                'police'   => '/\bpolice\b/',
+                'fire'     => '/\bfire station\b/',
+            ];
+            foreach ($patterns as $kind => $re) {
+                if (preg_match($re, $text)) {
+                    $out['near'][] = $kind;
+                }
+            }
+        }
+
+        $out['has_360'] = (bool) preg_match('/\b360\b|virtual tour/', $text);
+
+        if (preg_match('/\b(cheapest|lowest price|most affordable|least expensive)\b/', $text)) {
+            $out['sort'] = 'price_asc';
+        } elseif (preg_match('/\b(most expensive|highest price|priciest)\b/', $text)) {
+            $out['sort'] = 'price_desc';
+        } elseif (preg_match('/\b(newest|latest|most recent)\b/', $text)) {
+            $out['sort'] = 'newest';
+        }
+
+        $out['more']  = (bool) preg_match('/\b(show|see|give|any)\s+(me\s+)?(more|others?)\b|\bmore (options|listings|homes|properties|results|matches)\b|\banything else\b|\bother (options|listings|homes|ones|properties)\b/', $latest);
+        $out['saved'] = (bool) preg_match('/\bmy (saved|favou?rites?|shortlist)|\bsaved (homes?|listings?|properties)\b|\b(i|i\'ve) (saved|hearted|favou?rited)\b/', $latest);
 
         if (preg_match('/\b(rent|rental|lease|leasing|monthly|per month|a month)\b|\/month/', $text)) {
             $out['offer_type'] = 'rent';
@@ -236,7 +451,7 @@ class GeminiService
         }
 
         foreach (['condo', 'apartment', 'house', 'lot', 'commercial'] as $kw) {
-            if (str_contains($text, $kw)) {
+            if (preg_match(self::TYPE_WORDS[$kw], $text)) {
                 $out['type'] = $kw;
                 break;
             }
@@ -252,6 +467,27 @@ class GeminiService
         }
 
         return $out;
+    }
+
+    /**
+     * "dark mode" / "switch to light" / "follow my device" → theme_dark,
+     * theme_light, theme_system. "Turn off light mode" (or "turn of", as it's
+     * often typed) means the other one.
+     */
+    public static function themeAction(string $latest): ?string
+    {
+        $latest = mb_strtolower($latest);
+        $verb   = '\b(switch|change|turn|make|go|back|set|use|enable)\b[^.?!]{0,15}\b';
+        $off    = '\b(turn(ed)?\s*of+|switch\s*of+|disable|no more|stop)\b[^.?!]{0,10}\b';
+
+        return match (true) {
+            (bool) preg_match('/' . $off . '(dark|night)(\s*(mode|theme))?\b/u', $latest)  => 'theme_light',
+            (bool) preg_match('/' . $off . '(light|day)(\s*(mode|theme))?\b/u', $latest)   => 'theme_dark',
+            (bool) preg_match('/\b(dark|night)\s*(mode|theme)\b|' . $verb . 'dark(er)?\b/u', $latest) => 'theme_dark',
+            (bool) preg_match('/\b(light|day)\s*(mode|theme)\b|' . $verb . 'light(er)?\b/u', $latest)  => 'theme_light',
+            (bool) preg_match('/\b(system|device)\s*(theme|setting)|\bfollow (my )?(device|system|phone)\b/u', $latest) => 'theme_system',
+            default => null,
+        };
     }
 
     /** Parse a peso amount from free text, handling 5M / 500k / 25 thousand / 25,000. */
@@ -270,32 +506,108 @@ class GeminiService
         return null;
     }
 
+    /** One listing as a line of facts for the reply prompt. */
+    private function listingLine(Property $p, array $nearby = [], bool $saved = false, array $near = []): string
+    {
+        $price = '₱' . number_format((float) $p->price) . ($p->offer_type === 'rent' ? '/month' : '');
+        $line  = "{$p->title} — {$p->type} for " . ($p->offer_type === 'rent' ? 'rent' : 'sale') . ", {$price}"
+            . ($p->bedrooms > 0 ? ", {$p->bedrooms}BR" : '') . ($p->bathrooms > 0 ? ", {$p->bathrooms}BA" : '')
+            . ((float) $p->floor_area > 0 ? ', ' . rtrim(rtrim((string) $p->floor_area, '0'), '.') . ' sqm' : '')
+            . ", {$p->address}";
+
+        if ($p->relationLoaded('photos') && $p->photos->contains('is_360', true)) {
+            $line .= '. Has a 360° tour';
+        }
+        if ($saved) {
+            $line .= '. The buyer has saved this one';
+        }
+        foreach ($nearby as $kind => $fact) {
+            $label = NearbyService::KINDS[$kind][0] ?? $kind;
+            $line .= $fact
+                ? ". Nearest {$kind}: {$fact['name']}, about " . self::distanceText($fact['distance_m'])
+                : ". No {$kind} found within " . round((NearbyService::KINDS[$kind][3] ?? 0) / 1000) . " km ({$label})";
+        }
+        foreach (array_diff($near, array_keys($nearby)) as $kind) {
+            $line .= ". Distance to a {$kind} couldn't be checked";
+        }
+
+        return $line;
+    }
+
+    private static function distanceText(int $metres): string
+    {
+        return $metres < 1000 ? (round($metres / 10) * 10) . ' m' : round($metres / 1000, 1) . ' km';
+    }
+
     /**
      * Generate a friendly, grounded reply that recommends ONLY the given listings.
      *
      * @param  array<int, Property>  $properties
+     * @param  array{mode?:string, total?:int, remaining?:int, more?:bool, near?:array<int,string>, nearby?:array<int,array<string,mixed>>, nearby_available?:bool, saved?:array<int,Property>, saved_ids?:array<int,int>, broadened?:?array{from:string,to:string}}  $context
      */
-    public function generateAssistantReply(array $history, array $properties): string
+    public function generateAssistantReply(array $history, array $properties, array $context = []): string
     {
+        $mode     = $context['mode'] ?? 'search';
+        $nearby   = $context['nearby'] ?? [];
+        $savedIds = $context['saved_ids'] ?? [];
+
         if (empty($properties)) {
-            $listingText = 'No matching listings were found in the database for the current criteria.';
+            $listingText = $mode === 'saved'
+                ? ($savedIds ? 'None of the buyer\'s saved homes fit what they asked.' : 'The buyer has not saved any homes yet.')
+                : 'No matching listings were found in the database for the current criteria.';
         } else {
             $lines = [];
-            foreach ($properties as $i => $p) {
-                $lines[] = ($i + 1) . ". {$p->title} — {$p->type}, ₱" . number_format((float) $p->price)
-                    . ", {$p->bedrooms}BR/{$p->bathrooms}BA, {$p->address}";
+            foreach (array_values($properties) as $i => $p) {
+                $lines[] = ($i + 1) . '. ' . $this->listingLine(
+                    $p,
+                    $nearby[$p->id] ?? [],
+                    in_array($p->id, $savedIds, true),
+                    ($context['nearby_available'] ?? false) ? ($context['near'] ?? []) : [],
+                );
             }
             $listingText = implode("\n", $lines);
+        }
+
+        $facts = [];
+        if ($mode === 'saved') {
+            $facts[] = 'The buyer asked about their SAVED homes; the listings above are from their saved list. Compare them plainly on price, size, location and what each is best for.';
+        } else {
+            $total = (int) ($context['total'] ?? count($properties));
+            $facts[] = "{$total} listing(s) match this search in total.";
+            if (! empty($context['more'])) {
+                $facts[] = 'The buyer asked for more options; these are listings they have NOT been shown yet.';
+            }
+            if (($context['remaining'] ?? 0) > 0) {
+                $facts[] = "{$context['remaining']} more match(es) are not shown yet — the buyer can tap \"Show more\" under the cards.";
+            }
+            if (! empty($context['broadened'])) {
+                $facts[] = "Nothing matched \"{$context['broadened']['from']}\" exactly, so these are from the wider \"{$context['broadened']['to']}\" area — say so.";
+            }
+        }
+        if (! empty($context['near'])) {
+            $facts[] = ($context['nearby_available'] ?? false)
+                ? 'The buyer wants to be near: ' . implode(', ', $context['near']) . '. Listings are ranked by how close those are; mention the distances given (they are straight-line estimates). Never state a distance that is not given.'
+                : 'The buyer wants to be near: ' . implode(', ', $context['near']) . ', but nearby-place data is unavailable right now. Say you couldn\'t check distances this time and suggest the "What\'s nearby" section on each listing page.';
+        }
+        if ($mode !== 'saved' && ! empty($context['saved'])) {
+            $facts[] = "For reference, the buyer's saved homes:\n" . implode("\n", array_map(
+                fn (Property $p) => '- ' . $p->title . ' (₱' . number_format((float) $p->price) . ($p->offer_type === 'rent' ? '/month' : '') . ", {$p->address})",
+                $context['saved'],
+            ));
         }
 
         $system = "You are RealtyLink AI, a friendly and knowledgeable real estate assistant for buyers in the Philippines. "
             . "Help the buyer find a home based on their budget, location, and preferences. You may give brief, practical buying advice "
             . "(financing, what to inspect, neighborhood considerations), but stay concise. "
-            . "IMPORTANT RULES: Only recommend properties from the 'Available listings' below — never invent listings, prices, or details. "
+            . "IMPORTANT RULES: Only recommend properties from the 'Available listings' below — never invent listings, prices, distances, or details. "
+            . "Refer to listings by their title. When comparing, be specific (price per sqm, bedrooms, location) and say which suits what kind of buyer. "
             . "If no listings match, say so honestly and suggest how to broaden the search (e.g. higher budget, nearby area) or offer general advice. "
-            . "Ask a short clarifying question if the buyer hasn't shared a budget or location yet. "
-            . "Use Philippine pesos (₱). Keep replies under 180 words. Be warm but not overly verbose.\n\n"
-            . "Available listings:\n{$listingText}";
+            . "If the buyer hasn't shared a budget or location yet, still present the listings found, then end with one short question to narrow it down. "
+            . "The app shows the listings as cards under your reply, each with Save and Book viewing buttons; if the buyer wants to save, book or contact an agent, point them to those buttons — you cannot do it for them. Never draw or list the cards or buttons yourself. "
+            . "Write plain text: no markdown, no asterisks, no headings. Never copy the listing data lines below into your reply; describe listings in your own words. "
+            . "Greet only in your first reply of the conversation. Use Philippine pesos (₱). Keep replies under 180 words. Be warm but not overly verbose.\n\n"
+            . "Available listings:\n{$listingText}\n\n"
+            . implode("\n", $facts);
 
         $text = $this->call([
             'systemInstruction' => ['parts' => [['text' => $system]]],
@@ -304,14 +616,26 @@ class GeminiService
         ]);
 
         if (is_string($text) && trim($text) !== '') {
-            return $text;
+            // The model sometimes echoes the prompt's data lines back; the cards already show them.
+            // So do imitation cards: a bare title line, or "Save | Book viewing".
+            foreach ($properties as $p) {
+                $title = preg_quote($p->title, '/');
+                $text  = preg_replace(["/^\\s*\\d+\\.\\s+{$title}\\s+—.*$\\R?/mu", "/^\\s*{$title}\\s*$\\R?/mu"], '', $text) ?? $text;
+            }
+            $text = preg_replace('/^\s*Save\s*\|\s*Book viewing\s*$\R?/mui', '', $text) ?? $text;
+
+            return self::plainText($text);
+        }
+
+        if ($mode === 'saved' && ! $savedIds) {
+            return "You haven't saved any homes yet. Tap the heart on a listing (or the Save button on the cards I show you) and I can compare them for you.";
         }
 
         // Model unavailable — still be useful since we have REAL matches in hand.
         if (! empty($properties)) {
             $top   = array_slice($properties, 0, 3);
             $names = array_map(
-                static fn ($p) => $p->title . ' (₱' . number_format((float) $p->price) . ')',
+                static fn ($p) => $p->title . ' (₱' . number_format((float) $p->price) . ($p->offer_type === 'rent' ? '/month' : '') . ')',
                 $top,
             );
 
@@ -322,6 +646,107 @@ class GeminiService
 
         return "I couldn't find listings matching that just yet. Share your budget and preferred area "
             . '(e.g. "a condo for rent under ₱25,000 in Cebu City") and I\'ll pull up some options.';
+    }
+
+    /** The chat shows plain text, so markdown the model slips in would show as literal asterisks. */
+    private static function plainText(string $text): string
+    {
+        $text = preg_replace('/\*\*(.+?)\*\*|__(.+?)__/u', '$1$2', $text);
+        $text = preg_replace('/^\s{0,3}#{1,6}\s+/mu', '', $text);
+        $text = preg_replace('/^\s*[*-]\s+/mu', '• ', $text);
+        $text = preg_replace('/\n{3,}/', "\n\n", (string) $text);
+
+        return trim((string) $text);
+    }
+
+    // ─────────────────────────────────────────────────────────────────────────
+    // RealtyLink AI — Help & support
+    // ─────────────────────────────────────────────────────────────────────────
+
+    /** What support may tell people about how RealtyLink PH works. The only source it answers from. */
+    private const SUPPORT_FACTS = <<<'TXT'
+RealtyLink PH connects home buyers and renters in the Philippines with verified real estate agents.
+Buyers: browse listings (filters, map, 360° tours, nearby places), save homes (heart), compare up to 3, message an agent from a listing, book a viewing (pick a time; the agent confirms; reminders are sent; unanswered requests expire), cancel a viewing (at least 24 hours before is free; five late cancellations in 30 days pause booking for a while), rate an agent after a viewing or a chat, use RealtyLink AI to search, connect Google Calendar in Profile → Connected apps, change theme and password in Profile.
+Becoming an agent: Profile → Become an agent. Brokers upload their PRC license card; salespersons upload their accreditation and a valid ID; everyone does a live face scan. An admin reviews it, usually within 24 hours. Rejected applicants see the reason and can apply again after 12 hours.
+Agents: create listings (draft → publish), edit or mark sold, answer inquiries and messages, confirm or decline viewings, set unavailable dates on the Calendar, see reviews. RealtyLink AI replies to buyers while an agent is offline.
+Admins can unpublish listings (the agent sees the reason and can fix and re-publish), hide reviews, and review agent applications.
+Accounts: sign up with email (a 6-digit code verifies it) or Continue with Google. Forgot password is on the sign-in screen. RealtyLink PH does not handle payments or deposits; never pay anyone through the app.
+TXT;
+
+    /**
+     * First-line support reply. Answers how-to questions from SUPPORT_FACTS
+     * only, and says when a person is needed (a bug, an account problem, a
+     * dispute, anything it can't fix or isn't sure about).
+     *
+     * @param  array<int, array{role:string, content:string}>  $history  user/assistant turns
+     * @return array{reply: ?string, needs_human: bool, category: ?string}
+     */
+    public function supportReply(array $history, string $role, bool $standIn = false): array
+    {
+        // Standing in while the team is away: they've already replied in this
+        // thread, so build on what they said and keep to the basics.
+        $away = $standIn
+            ? 'The RealtyLink PH team has been helping in this conversation (their messages start with [RealtyLink PH team]) but nobody from the team is online right now. '
+              . 'If you have not said so already in this conversation, briefly say the team is away right now and you will help in the meantime. Answer only basic questions from the facts below, never contradict or overrule what the team said, '
+              . 'and for anything else say the team will pick it up when they are back. '
+            : '';
+
+        $system = "You are RealtyLink AI, the support assistant for RealtyLink PH. You are chatting with a {$role}. " . $away
+            . "Help with questions about how the app works using ONLY these facts:\n" . self::SUPPORT_FACTS . "\n\n"
+            . 'Rules: never invent features, fixes, refunds, approvals or timelines that are not in the facts. You cannot change accounts, listings, viewings or applications. '
+            . 'Set needs_human to true when the person reports something broken (a bug or error), an account or login problem you cannot solve with the facts, '
+            . 'a complaint about another user, a scam or safety concern, a request to undo an admin decision, or when they ask for a person, or you are unsure. '
+            . 'When needs_human is true, say briefly that you are passing it to the RealtyLink PH team and they will reply here. '
+            . 'Be warm and short (under 120 words), plain text, no markdown. '
+            . 'Respond ONLY with JSON: {"reply": string, "needs_human": boolean, "category": one of ' . implode(', ', SupportTicket::CATEGORIES) . '}.';
+
+        $text = $this->call([
+            'systemInstruction' => ['parts' => [['text' => $system]]],
+            'contents'          => $this->toContents($history),
+            'generationConfig'  => ['responseMimeType' => 'application/json', 'temperature' => 0.3],
+        ]);
+        $data = json_decode($text ?? '', true);
+
+        // A null reply means no AI could answer; the caller says so to the person.
+        if (! is_array($data) || ! is_string($data['reply'] ?? null) || trim($data['reply']) === '') {
+            return ['reply' => null, 'needs_human' => false, 'category' => null];
+        }
+
+        return [
+            'reply'       => self::plainText($data['reply']),
+            'needs_human' => (bool) ($data['needs_human'] ?? false),
+            'category'    => in_array($data['category'] ?? null, SupportTicket::CATEGORIES, true) ? $data['category'] : null,
+        ];
+    }
+
+    /**
+     * For the admin: a category, a two-line summary of the problem, and a
+     * draft reply grounded in the same facts. Null fields when unavailable.
+     *
+     * @param  array<int, array{role:string, content:string}>  $history
+     * @return array{category: ?string, summary: ?string, suggested_reply: ?string}
+     */
+    public function supportBrief(array $history, string $userName): array
+    {
+        $system = 'You help an admin of RealtyLink PH handle a support ticket. The app works like this:' . "\n" . self::SUPPORT_FACTS . "\n\n"
+            . "Read the conversation between {$userName} (user) and the support assistant (model). "
+            . 'Respond ONLY with JSON: {"category": one of ' . implode(', ', SupportTicket::CATEGORIES) . ', '
+            . '"summary": what the problem is in at most two plain sentences, '
+            . '"suggested_reply": a friendly reply the admin could send, addressed to the user by first name, plain text, under 100 words, '
+            . 'promising nothing the admin has not decided (say you are looking into it when unsure)}.';
+
+        $text = $this->call([
+            'systemInstruction' => ['parts' => [['text' => $system]]],
+            'contents'          => $this->toContents($history),
+            'generationConfig'  => ['responseMimeType' => 'application/json', 'temperature' => 0.3],
+        ]);
+        $data = json_decode($text ?? '', true);
+
+        return [
+            'category'        => in_array($data['category'] ?? null, SupportTicket::CATEGORIES, true) ? $data['category'] : null,
+            'summary'         => is_string($data['summary'] ?? null) ? self::plainText($data['summary']) : null,
+            'suggested_reply' => is_string($data['suggested_reply'] ?? null) ? self::plainText($data['suggested_reply']) : null,
+        ];
     }
 
     /**
@@ -555,6 +980,70 @@ class GeminiService
         }
 
         return ['reply' => $text, 'listing_proposal' => null];
+    }
+
+    /**
+     * What the agent's latest message asks for, when the keyword reader in
+     * AgentAssistantService couldn't tell. Null when Gemini is unavailable.
+     *
+     * @param  array<int, string>  $intents
+     * @param  array<int, string>  $pages
+     * @return array<string, mixed>|null
+     */
+    public function agentIntent(array $history, array $intents, array $pages, string $today): ?array
+    {
+        $system = 'You route messages for a real estate AGENT\'s assistant on RealtyLinkPH. Today is ' . $today . ' (Asia/Manila). '
+            . 'Read ONLY the agent\'s LATEST message (earlier turns are context) and respond ONLY with a JSON object using these keys: '
+            . 'intent (one of: ' . implode(', ', $intents) . '). '
+            . 'chat = anything else: writing a description, creating a new listing, general questions or advice. '
+            . 'listings = show their listings; viewings = show their viewing appointments; inquiries = show inquiries from buyers; reviews = show reviews buyers left them; '
+            . 'price_check = is a listing priced right / suggest a price; listing_check = what to improve on their listings; '
+            . 'draft_reply = write a reply to an inquiry, review or chat message for them; '
+            . 'confirm_viewing, block_day (mark a whole day unavailable), block_hours (block a time range), publish, unpublish, mark_sold = do that task; '
+            . 'theme_dark, theme_light, theme_system ("turn off light mode" is theme_dark, "turn off dark mode" is theme_light), gcal_connect, gcal_disconnect, password, open_page, capabilities (what can you do). '
+            . 'listing (string or null: words naming one of their listings), '
+            . 'person (string or null: a buyer\'s name), '
+            . 'target (only for draft_reply: inquiry, review, chat, or null), '
+            . 'status (only for listings: draft, published, sold, or null; for viewings: pending, upcoming, or null), '
+            . 'date (YYYY-MM-DD or null: resolve "tomorrow", "Friday", "Oct 30" against today), '
+            . 'start_time and end_time ("HH:MM" 24-hour or null), '
+            . 'page (only with open_page: one of ' . implode(', ', $pages) . ').';
+
+        $text = $this->call([
+            'systemInstruction' => ['parts' => [['text' => $system]]],
+            'contents'          => $this->toContents($history),
+            'generationConfig'  => ['responseMimeType' => 'application/json', 'temperature' => 0],
+        ]);
+
+        $data = json_decode($text ?? '', true);
+
+        return is_array($data) && in_array($data['intent'] ?? null, $intents, true) ? $data : null;
+    }
+
+    /**
+     * A reply the agent can send to a buyer: an inquiry, a review, or a chat
+     * message. A draft only; the agent reviews it and sends it themselves.
+     */
+    public function draftAgentReply(string $kind, string $context, string $agentName, string $ask = ''): ?string
+    {
+        $how = match ($kind) {
+            'review'  => 'a short public reply to this review (2–4 sentences): thank the buyer, address any concern calmly and specifically, no excuses, no discounts or promises',
+            'inquiry' => 'a reply to this inquiry (3–6 sentences): answer what they asked from the listing facts, invite them to book a viewing on RealtyLink PH, sign off with the agent\'s first name',
+            default   => 'a chat reply to the buyer\'s latest message (1–4 sentences, friendly and direct, no sign-off)',
+        };
+
+        $system = "You write on behalf of {$agentName}, a verified real estate agent on RealtyLinkPH (Philippines). Write {$how}. "
+            . 'Use only the facts given; never invent prices, dates or features. Plain text, no markdown, no placeholders like [Name]. '
+            . 'Reply in the same language the buyer used (English, Filipino or Taglish).'
+            . ($ask !== '' ? " The agent's instructions: {$ask}" : '');
+
+        $text = $this->call([
+            'systemInstruction' => ['parts' => [['text' => $system]]],
+            'contents'          => [['role' => 'user', 'parts' => [['text' => $context]]]],
+            'generationConfig'  => ['temperature' => 0.5],
+        ]);
+
+        return $text !== null ? self::plainText($text) : null;
     }
 
     private function mimeForPath(string $path): string

@@ -44,6 +44,7 @@ class AgentProfile extends Model
             'google_token_expires_at' => 'datetime',
             'ai_assessed_at'          => 'datetime',
             'reviewed_at'             => 'datetime',
+            'held_at'                 => 'datetime',
         ];
     }
 

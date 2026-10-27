@@ -44,13 +44,14 @@ const columns = [
       { label: 'About Us',   href: '#about' },
       { label: 'Careers',    href: '#' },
       { label: 'Blog',       href: '#' },
-      { label: 'Contact Us', href: '#' },
+      { label: 'Contact Us', href: '/dashboard/support' },
     ],
   },
   {
     title: 'Support',
     links: [
-      { label: 'Help Center',    href: '#' },
+      // Signed-out visitors are asked to sign in first (auth middleware).
+      { label: 'Help & support', href: '/dashboard/support' },
       { label: 'FAQs',           href: '#' },
       { label: 'Terms of Use',   href: '#' },
       { label: 'Privacy Policy', href: '#' },
@@ -71,7 +72,7 @@ const columns = [
 
         <!-- Brand col -->
         <div v-reveal class="lg:col-span-1">
-          <AppLogo :on-dark="true" size="md" />
+          <AppLogo :on-dark="true" size="xl" />
           <p class="mt-4 text-sm text-white/50 leading-relaxed">
             Your trusted partner in finding verified properties across the Philippines.
           </p>
@@ -134,7 +135,7 @@ const columns = [
             />
             <button
               class="group flex-shrink-0 h-10 w-10 bg-brand-gold rounded-lg flex items-center justify-center
-                     hover:shadow-[0_4px_18px_rgba(212,175,55,0.5)] hover:-translate-y-0.5 transition-all duration-200"
+                     hover:shadow-[0_4px_18px_rgba(212,165,74,0.5)] hover:-translate-y-0.5 transition-all duration-200"
               aria-label="Subscribe"
               @click="email = ''"
             >
@@ -162,8 +163,8 @@ const columns = [
       <button
         v-if="showTop"
         class="fixed bottom-6 left-6 z-30 h-11 w-11 rounded-full bg-brand-gold text-brand-navy
-               flex items-center justify-center shadow-[0_6px_24px_rgba(212,175,55,0.45)]
-               hover:-translate-y-1 hover:shadow-[0_10px_32px_rgba(212,175,55,0.6)] transition-all duration-200"
+               flex items-center justify-center shadow-[0_6px_24px_rgba(212,165,74,0.45)]
+               hover:-translate-y-1 hover:shadow-[0_10px_32px_rgba(212,165,74,0.6)] transition-all duration-200"
         aria-label="Back to top"
         @click="toTop"
       >

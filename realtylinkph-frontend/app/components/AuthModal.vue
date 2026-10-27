@@ -200,9 +200,11 @@ const isLogin = computed(() => mode.value === 'login')
  * Everything is now `dark:` variants, so the first paint is already correct.
  */
 const fieldBase =
-  'w-full rounded-xl px-4 py-3 text-sm outline-none border transition-colors ' +
+  'w-full rounded-xl px-4 py-3 text-[0.9375rem] font-medium outline-none border transition-colors ' +
   'bg-white/70 dark:bg-white/5 backdrop-blur-sm ' +
-  'text-brand-navy dark:text-white placeholder-brand-navy/30 dark:placeholder-white/25 focus:ring-0'
+  'text-brand-navy dark:text-white placeholder:font-normal placeholder-brand-navy/35 dark:placeholder-white/30 focus:ring-0'
+/** One label style for every field (they used to mix xs/medium and sm/semibold). */
+const labelClass = 'block text-[0.8125rem] font-semibold tracking-[0.01em] text-brand-navy/80 dark:text-white/75'
 const fieldBorder    = 'border-brand-navy/15 dark:border-white/10 focus:border-brand-gold dark:focus:border-brand-gold/50'
 const fieldBorderErr = 'border-red-500/60 dark:border-red-500/50'
 /** Ready-made class for fields with no inline validation state. */
@@ -219,7 +221,7 @@ const fieldClass = `${fieldBase} ${fieldBorder}`
       >
         <!-- Blurred backdrop -->
         <div
-          class="absolute inset-0 bg-brand-navy/40 dark:bg-[#060E1F]/65 backdrop-blur-[10px]"
+          class="absolute inset-0 bg-brand-navy/40 dark:bg-[#06183A]/65 backdrop-blur-[10px]"
           @click="close"
         />
 
@@ -231,7 +233,7 @@ const fieldClass = `${fieldBase} ${fieldBorder}`
                    transition-[max-width] duration-300
                    bg-brand-cream dark:bg-brand-navy-deep
                    border border-brand-navy/10 dark:border-white/10
-                   shadow-[0_40px_100px_rgba(8,21,47,0.28)] dark:shadow-[0_40px_100px_rgba(0,0,0,0.6)]"
+                   shadow-[0_40px_100px_rgba(11,42,92,0.28)] dark:shadow-[0_40px_100px_rgba(0,0,0,0.6)]"
             :class="isLogin ? 'max-w-[26.25rem]' : 'max-w-[38.75rem]'"
           >
             <!-- Ruled grid, same texture as the landing page and Browse -->
@@ -259,15 +261,16 @@ const fieldClass = `${fieldBase} ${fieldBorder}`
             </button>
 
             <!-- Header: logo + heading (compact, horizontal) -->
-            <div class="flex items-center gap-3 mb-5">
+            <!-- Title in the landing page's serif, accent word in gold italic -->
+            <div class="flex items-center gap-3.5 mb-6 pr-8">
               <AppLogo size="sm" />
-              <div class="border-l border-brand-navy/10 dark:border-white/10 pl-3">
-                <h2 class="font-playfair text-xl sm:text-2xl font-bold text-brand-navy dark:text-white leading-tight">
-                  <template v-if="view === 'forgot'">Reset <span class="text-brand-gold-deep dark:text-brand-gold">password</span></template>
-                  <template v-else-if="isLogin">Welcome <span class="text-brand-gold-deep dark:text-brand-gold">back!</span></template>
-                  <template v-else>Create <span class="text-brand-gold-deep dark:text-brand-gold">account</span></template>
+              <div class="border-l border-brand-navy/10 dark:border-white/10 pl-3.5">
+                <h2 class="font-heading text-[1.75rem] sm:text-[2rem] font-semibold tracking-[-0.02em] leading-[1.1] text-brand-navy dark:text-white">
+                  <template v-if="view === 'forgot'">Reset <em class="italic font-medium pr-[0.06em] text-gold-metal">password</em>.</template>
+                  <template v-else-if="isLogin">Welcome <em class="italic font-medium pr-[0.06em] text-gold-metal">back</em>.</template>
+                  <template v-else>Create <em class="italic font-medium pr-[0.06em] text-gold-metal">account</em>.</template>
                 </h2>
-                <p class="text-brand-navy/50 dark:text-white/40 text-xs mt-0.5">
+                <p class="mt-1 text-[0.8125rem] text-brand-navy/55 dark:text-white/50">
                   {{ view === 'forgot'
                     ? 'We\'ll email you a link to choose a new one.'
                     : (isLogin ? 'Sign in to access your account.' : 'Join RealtyLinkPH today.') }}
@@ -314,7 +317,7 @@ const fieldClass = `${fieldBase} ${fieldBorder}`
                   <span>{{ error || forgotNote }}</span>
                 </div>
 
-                <label class="block text-xs font-medium text-brand-navy/70 dark:text-white/70 mb-1.5">Email address</label>
+                <label :class="[labelClass, 'mb-2']">Email address</label>
                 <input
                   v-model="forgotEmail"
                   type="email"
@@ -327,7 +330,7 @@ const fieldClass = `${fieldBase} ${fieldBorder}`
                   type="submit"
                   :disabled="loading"
                   class="w-full mt-5 bg-brand-gold text-brand-navy font-bold text-sm py-3 rounded-xl
-                         shadow-[0_4px_16px_rgba(201,162,39,0.35)] hover:shadow-[0_6px_24px_rgba(201,162,39,0.5)]
+                         shadow-[0_4px_16px_rgba(212,165,74,0.35)] hover:shadow-[0_6px_24px_rgba(212,165,74,0.5)]
                          hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200
                          disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
                 >
@@ -380,7 +383,7 @@ const fieldClass = `${fieldBase} ${fieldBorder}`
 
                 <!-- Full name (register only) -->
                 <div v-if="!isLogin" class="space-y-2">
-                  <label class="block text-sm font-semibold text-brand-navy/70 dark:text-white/70">Full name</label>
+                  <label :class="labelClass">Full name</label>
                   <input
                     v-model="form.name"
                     type="text"
@@ -393,7 +396,7 @@ const fieldClass = `${fieldBase} ${fieldBorder}`
 
                 <!-- Email -->
                 <div class="space-y-2">
-                  <label class="block text-sm font-semibold text-brand-navy/70 dark:text-white/70">Email address</label>
+                  <label :class="labelClass">Email address</label>
                   <input
                     v-model="form.email"
                     type="email"
@@ -406,7 +409,7 @@ const fieldClass = `${fieldBase} ${fieldBorder}`
 
                 <!-- Password -->
                 <div class="space-y-2">
-                  <label class="block text-sm font-semibold text-brand-navy/70 dark:text-white/70">Password</label>
+                  <label :class="labelClass">Password</label>
                   <div class="relative">
                     <input
                       v-model="form.password"
@@ -431,12 +434,12 @@ const fieldClass = `${fieldBase} ${fieldBorder}`
                     </button>
                   </div>
                   <p v-if="ve.password" class="text-[0.6875rem] text-red-600 dark:text-red-400">{{ ve.password }}</p>
-                  <p v-else-if="!isLogin" class="text-[0.6875rem] text-brand-navy/45 dark:text-white/40">At least 8 characters, including a letter and a number.</p>
+                  <p v-else-if="!isLogin" class="text-xs leading-snug text-brand-navy/55 dark:text-white/45">At least 8 characters, including a letter and a number.</p>
                 </div>
 
                 <!-- Confirm password (register only) -->
                 <div v-if="!isLogin" class="space-y-2">
-                  <label class="block text-sm font-semibold text-brand-navy/70 dark:text-white/70">Confirm password</label>
+                  <label :class="labelClass">Confirm password</label>
                   <div class="relative">
                     <input
                       v-model="form.password_confirmation"
@@ -477,11 +480,11 @@ const fieldClass = `${fieldBase} ${fieldBorder}`
                       <path stroke-linecap="round" stroke-linejoin="round" stroke-width="3.5" d="M5 13l4 4L19 7" />
                     </svg>
                   </div>
-                  <span class="text-xs text-brand-navy/55 group-hover:text-brand-navy dark:text-white/45 dark:group-hover:text-white/65 transition-colors">Remember me</span>
+                  <span class="text-[0.8125rem] font-medium text-brand-navy/65 group-hover:text-brand-navy dark:text-white/55 dark:group-hover:text-white/80 transition-colors">Remember me</span>
                 </label>
                 <button
                   type="button"
-                  class="text-xs text-brand-navy/55 dark:text-white/45 hover:text-brand-gold-deep dark:hover:text-brand-gold transition-colors"
+                  class="text-[0.8125rem] font-semibold text-brand-gold-deep dark:text-brand-gold hover:underline underline-offset-4 transition-colors"
                   @click="openForgot"
                 >
                   Forgot password?
@@ -492,22 +495,22 @@ const fieldClass = `${fieldBase} ${fieldBorder}`
               <button
                 type="submit"
                 :disabled="loading"
-                class="w-full flex items-center justify-center gap-2 font-bold text-sm py-3.5 rounded-xl mt-5
+                class="w-full flex items-center justify-center gap-2 font-bold text-[0.9375rem] tracking-[0.01em] py-3.5 rounded-xl mt-6
                        transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                style="background: linear-gradient(135deg, #D4AF37 0%, #c9a227 100%); color: #08152F; box-shadow: 0 4px 24px rgba(212,175,55,0.4);"
+                style="background: linear-gradient(135deg, #D4A54A 0%, #D4A54A 100%); color: #0B2A5C; box-shadow: 0 4px 24px rgba(212,165,74,0.4);"
               >
                 <svg v-if="loading" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />
                   <path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" />
                 </svg>
-                {{ loading ? (isLogin ? 'Signing in…' : 'Creating account…') : (isLogin ? 'Sign In' : 'Create account') }}
+                {{ loading ? (isLogin ? 'Signing in…' : 'Creating account…') : (isLogin ? 'Sign in' : 'Create account') }}
               </button>
             </form>
 
             <!-- Divider — hidden on the forgot-password detour -->
             <div v-if="view === 'form'" class="flex items-center gap-3 my-4">
               <div class="flex-1 h-px bg-brand-navy/10 dark:bg-white/10" />
-              <span class="text-[0.6875rem] text-brand-navy/35 dark:text-white/25 font-medium">or</span>
+              <span class="text-[0.6875rem] font-semibold uppercase tracking-[0.18em] text-brand-navy/40 dark:text-white/35">or</span>
               <div class="flex-1 h-px bg-brand-navy/10 dark:bg-white/10" />
             </div>
 
@@ -516,7 +519,7 @@ const fieldClass = `${fieldBase} ${fieldBorder}`
               v-if="view === 'form'"
               type="button"
               :disabled="googleLoading || loading"
-              class="w-full flex items-center justify-center gap-3 text-sm font-medium rounded-xl py-3 border
+              class="w-full flex items-center justify-center gap-3 text-[0.9375rem] font-semibold rounded-xl py-3 border
                      transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed
                      bg-white/70 hover:bg-white border-brand-navy/10 text-brand-navy/75 hover:text-brand-navy
                      dark:bg-white/5 dark:hover:bg-white/10 dark:border-white/10 dark:text-white/60 dark:hover:text-white/90"
@@ -536,7 +539,7 @@ const fieldClass = `${fieldBase} ${fieldBorder}`
             </button>
 
             <!-- Switch login/register -->
-            <p v-if="view === 'form'" class="text-center text-xs text-brand-navy/50 dark:text-white/35 mt-4">
+            <p v-if="view === 'form'" class="text-center text-[0.8125rem] text-brand-navy/60 dark:text-white/50 mt-5">
               <template v-if="isLogin">
                 Don't have an account?
                 <button type="button" class="font-semibold ml-1 text-brand-gold-deep dark:text-brand-gold hover:underline" @click="switchTo('register')">

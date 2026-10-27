@@ -8,14 +8,14 @@ const authModal  = useAuthModal()
 const menuOpen  = ref(false)
 const userOpen  = ref(false)
 const notifOpen = ref(false)
+const msgOpen   = ref(false)
 
-const navLinks = [
-  { label: 'Buy',          href: '/properties?type=house' },
-  { label: 'Sell',         href: '/dashboard/listings/new' },
-  { label: 'Rent',         href: '/properties?type=apartment' },
-  { label: 'About',        href: '#about' },
-  { label: 'Testimonials', href: '#testimonials' },
-]
+/*
+ * One destination link, not a row of them. Buy / Rent / type were all just
+ * Browse with a filter preset — and Browse now has type chips, a buy-or-rent
+ * menu and city search of its own — so the bar points there and stays quiet.
+ */
+const onBrowse = computed(() => route.path === '/properties' || route.path.startsWith('/properties/'))
 
 /* ── Scroll state + reading progress ─────────────────────────────────────── */
 const scrolled = ref(false)
@@ -38,12 +38,21 @@ function onScroll() {
  *
  * Keep this list in step with the pages that actually render `bg-grid-lines`
  * at the top of the page. An entry also covers its sub-paths, so `/properties`
- * takes in `/properties/7`.
+ * takes in `/properties/7`. `gridBackedChildren` covers only the sub-paths:
+ * agent profiles (`/agents/12`) sit on the grid, the directory doesn't.
  */
 const gridBackedRoutes = ['/', '/properties']
+const gridBackedChildren = ['/agents']
 const transparentAllowed = computed(() =>
-  gridBackedRoutes.some(r => route.path === r || (r !== '/' && route.path.startsWith(r + '/'))),
+  gridBackedRoutes.some(r => route.path === r || (r !== '/' && route.path.startsWith(r + '/')))
+  || gridBackedChildren.some(r => route.path.startsWith(r + '/')),
 )
+
+/*
+ * The homepage hero sits on the light ruled grid like Browse (it used to be a
+ * dark photo that needed white type), so the bar uses theme colours everywhere.
+ */
+const iconTone = 'text-brand-navy/75 hover:text-brand-navy hover:bg-brand-navy/5 dark:text-white/80 dark:hover:text-white dark:hover:bg-white/10'
 
 /*
  * Colours are driven by Tailwind `dark:` variants, not a JS flag.
@@ -65,14 +74,10 @@ function closeAll() {
   menuOpen.value  = false
   userOpen.value  = false
   notifOpen.value = false
+  msgOpen.value   = false
 }
 
 watch(() => route.path, closeAll)
-
-function isActive(href: string): boolean {
-  if (href.startsWith('#')) return false
-  return route.fullPath === href
-}
 
 /* ── Magnetic CTA ────────────────────────────────────────────────────────── */
 const ctaEl = ref<HTMLElement | null>(null)
@@ -105,17 +110,9 @@ const panelClass =
   <header
     class="fixed top-0 inset-x-0 z-40 transition-[background-color,box-shadow,backdrop-filter] duration-300"
     :class="(scrolled || !transparentAllowed)
-      ? 'bg-white/95 dark:bg-brand-navy/95 backdrop-blur-xl shadow-[0_4px_30px_rgba(8,21,47,0.10)] dark:shadow-black/30'
+      ? 'bg-white/95 dark:bg-brand-navy/95 backdrop-blur-xl shadow-[0_4px_30px_rgba(11,42,92,0.10)] dark:shadow-black/30'
       : 'bg-transparent'"
   >
-    <!-- Trust bar — collapses away once you start scrolling to reclaim height -->
-    <div
-      class="overflow-hidden transition-[max-height,opacity] duration-300"
-      :class="scrolled ? 'max-h-0 opacity-0' : 'max-h-10 opacity-100'"
-    >
-      <TheTopBar />
-    </div>
-
     <!-- Reading progress -->
     <div
       class="absolute top-0 left-0 h-[2px] bg-gradient-to-r from-brand-gold via-brand-gold-light to-brand-gold transition-[width] duration-150 ease-out"
@@ -127,49 +124,52 @@ const panelClass =
 
       <!-- Left: Logo -->
       <NuxtLink to="/" class="flex-shrink-0 group" aria-label="RealtyLink PH home" @click="closeAll">
-        <AppLogo size="md" />
+        <AppLogo size="xl" />
       </NuxtLink>
 
-      <!-- Center: Desktop nav -->
-      <nav class="hidden md:flex absolute left-1/2 -translate-x-1/2 items-center gap-1">
-        <NuxtLink
-          v-for="link in navLinks"
-          :key="link.href"
-          :to="link.href"
-          class="nav-underline px-4 py-2 text-sm font-medium transition-colors duration-200
-                 text-brand-navy/70 hover:text-brand-navy
-                 dark:text-white/75 dark:hover:text-white"
-          :class="isActive(link.href) ? 'is-active' : ''"
-        >
-          {{ link.label }}
-        </NuxtLink>
-      </nav>
-
-      <!-- Right -->
+      <!-- Right: Browse · theme · account -->
       <div class="ml-auto flex items-center gap-2 sm:gap-3">
 
-        <ThemeToggle />
+        <NuxtLink
+          to="/properties"
+          class="nav-underline hidden sm:inline-block mx-2 text-sm font-semibold transition-colors duration-200"
+          :class="onBrowse
+            ? 'is-active text-brand-navy dark:text-white'
+            : 'text-brand-navy/70 hover:text-brand-navy dark:text-white/75 dark:hover:text-white'"
+          :aria-current="route.path === '/properties' ? 'page' : undefined"
+        >
+          Browse properties
+        </NuxtLink>
 
-        <!-- Notification bell -->
+        <ThemeToggle class="ring-1 ring-brand-navy/10 dark:ring-white/15 bg-white/60 dark:bg-white/[0.04]" />
+
+        <!-- Messages (chats), beside the bell. Admins don't chat. -->
+        <MessagesMenu
+          v-if="authStore.isAuthenticated && !authStore.isAdmin"
+          v-model:open="msgOpen"
+          :class="iconTone"
+          @update:open="(o: boolean) => { if (o) { notifOpen = false; userOpen = false } }"
+        />
+
+        <!-- Notification bell (everything except chat messages) -->
         <div v-if="authStore.isAuthenticated" class="relative">
           <button
-            class="relative p-2.5 rounded-xl transition-colors
-                   text-brand-navy/60 hover:text-brand-navy hover:bg-brand-navy/5
-                   dark:text-white/70 dark:hover:text-white dark:hover:bg-white/10"
+            class="relative p-2.5 rounded-xl transition-colors"
+            :class="iconTone"
             aria-label="Notifications"
-            @click="notifOpen = !notifOpen; userOpen = false"
+            @click="notifOpen = !notifOpen; userOpen = false; msgOpen = false"
           >
             <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
               <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15 17h5l-1.405-1.405A2.032 2.032 0 0118 14.158V11a6.002 6.002 0 00-4-5.659V5a2 2 0 10-4 0v.341C7.67 6.165 6 8.388 6 11v3.159c0 .538-.214 1.055-.595 1.436L4 17h5m6 0v1a3 3 0 11-6 0v-1m6 0H9" />
             </svg>
             <span
-              v-if="notifStore.unreadCount > 0"
+              v-if="notifStore.bellUnread > 0"
               class="absolute top-1 right-1 h-4 w-4 bg-brand-gold rounded-full text-[0.625rem] font-bold text-brand-navy flex items-center justify-center"
             >
-              {{ notifStore.unreadCount > 9 ? '9+' : notifStore.unreadCount }}
+              {{ notifStore.bellUnread > 9 ? '9+' : notifStore.bellUnread }}
             </span>
             <span
-              v-if="notifStore.unreadCount > 0"
+              v-if="notifStore.bellUnread > 0"
               class="absolute top-1 right-1 h-4 w-4 rounded-full bg-brand-gold animate-pulse-ring pointer-events-none"
               aria-hidden="true"
             />
@@ -184,11 +184,11 @@ const panelClass =
                 </button>
               </div>
               <div class="max-h-72 overflow-y-auto">
-                <p v-if="!notifStore.notifications.length" class="text-sm text-brand-text-secondary dark:text-white/50 text-center py-6">
+                <p v-if="!notifStore.bellNotifications.length" class="text-sm text-brand-text-secondary dark:text-white/50 text-center py-6">
                   No notifications yet
                 </p>
                 <button
-                  v-for="n in notifStore.notifications.slice(0, 10)"
+                  v-for="n in notifStore.bellNotifications.slice(0, 10)"
                   :key="n.id"
                   class="w-full text-left px-4 py-3 hover:bg-gray-50 dark:hover:bg-white/5 transition-colors border-b border-gray-50 dark:border-white/5 last:border-0"
                   :class="{ 'bg-brand-gold/5': !n.read_at }"
@@ -209,10 +209,9 @@ const panelClass =
         <!-- User menu -->
         <div v-if="authStore.isAuthenticated" class="relative">
           <button
-            class="flex items-center gap-2 p-1.5 rounded-xl transition-colors
-                   text-brand-navy hover:bg-brand-navy/5
-                   dark:text-white/80 dark:hover:bg-white/10"
-            @click="userOpen = !userOpen; notifOpen = false"
+            class="flex items-center gap-2 p-1.5 rounded-xl transition-colors"
+            :class="iconTone"
+            @click="userOpen = !userOpen; notifOpen = false; msgOpen = false"
           >
             <AppAvatar :name="authStore.user?.name" :src="authStore.user?.avatar" size="sm" />
             <svg class="h-4 w-4 hidden md:block transition-transform duration-200" :class="userOpen ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -252,9 +251,8 @@ const panelClass =
         <template v-else>
           <button
             type="button"
-            class="hidden md:block text-sm font-medium transition-colors px-3 py-2 rounded-lg
-                   text-brand-navy/75 hover:text-brand-navy hover:bg-brand-navy/5
-                   dark:text-white/80 dark:hover:text-white dark:hover:bg-white/10"
+            class="hidden sm:block text-sm font-medium transition-colors px-3 py-2 rounded-lg"
+            :class="iconTone"
             @click="authModal.open('login')"
           >
             Sign in
@@ -263,7 +261,7 @@ const panelClass =
             ref="ctaEl"
             type="button"
             class="relative overflow-hidden bg-brand-gold text-brand-navy font-bold text-sm px-5 py-2.5 rounded-xl
-                   shadow-[0_4px_16px_rgba(201,162,39,0.35)] hover:shadow-[0_8px_28px_rgba(201,162,39,0.55)]
+                   shadow-[0_4px_16px_rgba(212,165,74,0.35)] hover:shadow-[0_8px_28px_rgba(212,165,74,0.55)]
                    transition-[box-shadow,transform] duration-200 group/cta"
             :style="{ transform: `translate(${ctaOffset.x}px, ${ctaOffset.y}px)` }"
             @mousemove="onCtaMove"
@@ -282,9 +280,8 @@ const panelClass =
 
         <!-- Mobile hamburger -->
         <button
-          class="md:hidden p-2 rounded-lg transition-colors
-                 text-brand-navy/75 hover:bg-brand-navy/5
-                 dark:text-white/80 dark:hover:bg-white/10"
+          class="sm:hidden p-2 rounded-lg transition-colors"
+          :class="iconTone"
           aria-label="Menu"
           @click="menuOpen = !menuOpen; userOpen = false"
         >
@@ -300,19 +297,16 @@ const panelClass =
     <Transition name="slide-down">
       <div
         v-if="menuOpen"
-        class="md:hidden bg-white/95 dark:bg-brand-navy/95 backdrop-blur-xl border-t border-gray-100 dark:border-white/10 px-4 py-3 space-y-1"
+        class="sm:hidden bg-white/95 dark:bg-brand-navy/95 backdrop-blur-xl border-t border-gray-100 dark:border-white/10 px-4 py-3 space-y-1"
       >
         <NuxtLink
-          v-for="(link, i) in navLinks"
-          :key="link.href"
-          :to="link.href"
+          to="/properties"
           class="block px-3 py-2.5 text-sm font-medium rounded-lg transition-colors
                  text-brand-navy/80 dark:text-white/75 hover:text-brand-navy dark:hover:text-white
                  hover:bg-brand-navy/5 dark:hover:bg-white/10"
-          :style="{ animationDelay: `${i * 40}ms` }"
           @click="closeAll"
         >
-          {{ link.label }}
+          Browse properties
         </NuxtLink>
         <template v-if="!authStore.isAuthenticated">
           <button
