@@ -23,6 +23,7 @@ class AdminAction extends Model
         'user.deleted'        => 'Deleted user',
         'user.cover_removed'  => 'Removed cover photo',
         'admin.created'       => 'Created admin account',
+        'system.reset'        => 'Reset all data to a single admin',
     ];
 
     /** Areas for the Activity page's tabs: area => action prefixes. */

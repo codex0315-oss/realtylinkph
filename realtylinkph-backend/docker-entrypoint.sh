@@ -32,6 +32,16 @@ if [ "${SKIP_MIGRATIONS}" != "true" ]; then
     php artisan migrate --force
 fi
 
+# One-off: empty the database down to one admin account (clears demo data).
+# RESET_TO_ADMIN is a code word; the reset records it and never runs twice for
+# the same code, so a wake-up restart can't wipe real data. Needs
+# RESET_ADMIN_EMAIL and RESET_ADMIN_PASSWORD. Remove all three afterwards.
+if [ -n "${RESET_TO_ADMIN}" ]; then
+    echo "==> Reset to a single admin (code: ${RESET_TO_ADMIN})"
+    php artisan app:reset-to-admin "${RESET_TO_ADMIN}" \
+        --email="${RESET_ADMIN_EMAIL}" --password="${RESET_ADMIN_PASSWORD}" || true
+fi
+
 # ── In-container queue worker and scheduler ──────────────────────────────────
 # Render's free tier has no Background Worker or Cron Job, so these run here
 # beside Apache. It is not how you'd scale this, but it beats the alternative:
