@@ -29,10 +29,19 @@ final class Documents
         return (string) config('filesystems.documents', 'local');
     }
 
-    /** Store an uploaded file under $dir; returns the stored path. */
+    /**
+     * Store an uploaded file under $dir; returns the stored path. A refused
+     * write (the disks don't throw) is an error here: an application saved
+     * without its documents reaches the admin as "No documents on file".
+     */
     public static function put(string $dir, \Illuminate\Http\UploadedFile $file): string
     {
-        return (string) self::disk()->put($dir, $file);
+        $path = self::disk()->put($dir, $file);
+        if (! $path) {
+            throw new \Symfony\Component\HttpKernel\Exception\HttpException(503, 'Your documents couldn’t be uploaded right now. Please try again in a moment.');
+        }
+
+        return (string) $path;
     }
 
     /** Short-lived signed URL, or null when there is no file. */

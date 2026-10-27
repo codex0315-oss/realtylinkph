@@ -11,6 +11,7 @@ use App\Support\Uploads;
 use Illuminate\Http\UploadedFile;
 use Illuminate\Support\Facades\DB;
 use Illuminate\Support\Str;
+use Symfony\Component\HttpKernel\Exception\HttpException;
 
 class PropertyPhotoService
 {
@@ -56,10 +57,15 @@ class PropertyPhotoService
         $options  = ['CacheControl' => self::CACHE_CONTROL];
 
         if ($sizes === null) {
-            return [$file->storeAs($dir, $base . '.' . $file->getClientOriginalExtension(), [
+            $path = $file->storeAs($dir, $base . '.' . $file->getClientOriginalExtension(), [
                 'disk' => Uploads::name(),
                 ...$options,
-            ]), null, null];
+            ]);
+            if ($path === false) {
+                throw self::storageFailed();
+            }
+
+            return [$path, null, null];
         }
 
         // A pano keeps its original bytes, so keep its original extension too.
@@ -67,16 +73,33 @@ class PropertyPhotoService
         $mainPath  = "{$dir}/{$base}.{$mainExt}";
         $thumbPath = "{$dir}/{$base}-thumb.jpg";
 
-        Uploads::disk()->put($mainPath, $sizes['main'], $options);
-        Uploads::disk()->put($thumbPath, $sizes['thumb'], $options);
+        $this->write($mainPath, $sizes['main'], $options);
+        $this->write($thumbPath, $sizes['thumb'], $options);
 
         $previewPath = null;
         if ($sizes['preview'] !== null) {
             $previewPath = "{$dir}/{$base}-preview.jpg";
-            Uploads::disk()->put($previewPath, $sizes['preview'], $options);
+            $this->write($previewPath, $sizes['preview'], $options);
         }
 
         return [$mainPath, $thumbPath, $previewPath];
+    }
+
+    /**
+     * The disks are configured not to throw, so a refused write (bad storage
+     * keys, a full bucket) comes back as `false`. Saving the photo row anyway
+     * left listings full of photos that were never stored, so stop here.
+     */
+    private function write(string $path, string $bytes, array $options): void
+    {
+        if (! Uploads::disk()->put($path, $bytes, $options)) {
+            throw self::storageFailed();
+        }
+    }
+
+    public static function storageFailed(): HttpException
+    {
+        return new HttpException(503, 'The photo couldn’t be saved to storage. Please try again in a moment; if it keeps failing, tell the site admin.');
     }
 
     public function reorder(Property $property, array $orderedIds): void

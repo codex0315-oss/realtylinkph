@@ -83,7 +83,7 @@ return [
             'endpoint' => env('AWS_ENDPOINT'),
             'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
             'throw' => false,
-            'report' => false,
+            'report' => true,   // failures land in the logs (they used to vanish)
             // Sent with every object written. Nothing is ever overwritten in
             // place (uploads get random names), so browsers may cache for a
             // year. Without it Supabase serves `cache-control: no-cache` and
@@ -105,7 +105,7 @@ return [
             'use_path_style_endpoint' => env('AWS_USE_PATH_STYLE_ENDPOINT', false),
             'visibility' => 'private',
             'throw' => false,
-            'report' => false,
+            'report' => true,
             'options' => [
                 'CacheControl' => 'private, no-store',
             ],

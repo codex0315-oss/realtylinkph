@@ -50,8 +50,14 @@ class GeminiController extends Controller
             $property = \App\Models\Property::with('photos')->find($request->integer('property_id'));
             if ($property && $property->agent_id === $request->user()->id) {
                 foreach ($property->photos->take(6) as $photo) {
-                    if (! \App\Support\Uploads::disk()->exists($photo->url)) continue;
-                    $bytes = \App\Support\Uploads::disk()->get($photo->url);
+                    // A photo storage can't hand back is skipped, not fatal:
+                    // the description can still be written from the details.
+                    try {
+                        $bytes = \App\Support\Uploads::disk()->get($photo->url);
+                    } catch (\Throwable $e) {
+                        report($e);
+                        continue;
+                    }
                     if ($bytes === null || $bytes === '') continue;
                     $ext = strtolower(pathinfo($photo->url, PATHINFO_EXTENSION));
                     $images[] = [
