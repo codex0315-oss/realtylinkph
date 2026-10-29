@@ -2,7 +2,6 @@
 const authStore  = useAuthStore()
 const notifStore = useNotificationStore()
 const route      = useRoute()
-const { logout } = useAuth()
 const authModal  = useAuthModal()
 
 const menuOpen  = ref(false)
@@ -206,46 +205,13 @@ const panelClass =
           </Transition>
         </div>
 
-        <!-- User menu -->
-        <div v-if="authStore.isAuthenticated" class="relative">
-          <button
-            class="flex items-center gap-2 p-1.5 rounded-xl transition-colors"
-            :class="iconTone"
-            @click="userOpen = !userOpen; notifOpen = false; msgOpen = false"
-          >
-            <AppAvatar :name="authStore.user?.name" :src="authStore.user?.avatar" size="sm" />
-            <svg class="h-4 w-4 hidden md:block transition-transform duration-200" :class="userOpen ? 'rotate-180' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-              <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 9l-7 7-7-7" />
-            </svg>
-          </button>
-
-          <Transition name="dropdown">
-            <div v-if="userOpen" class="absolute right-0 mt-2 w-52 z-50" :class="panelClass">
-              <div class="px-4 py-3 border-b border-gray-100 dark:border-white/10">
-                <p class="text-sm font-semibold text-brand-text-primary dark:text-white truncate">{{ authStore.user?.name }}</p>
-                <p class="text-xs text-brand-text-secondary dark:text-white/50 truncate">{{ authStore.user?.email }}</p>
-              </div>
-              <nav class="py-1">
-                <NuxtLink to="/dashboard/appointments" class="flex items-center px-4 py-2.5 text-sm text-brand-text-primary dark:text-white/85 hover:bg-gray-50 dark:hover:bg-white/5 hover:text-brand-gold transition-colors" @click="closeAll">
-                  Dashboard
-                </NuxtLink>
-                <NuxtLink v-if="authStore.isAgent" to="/dashboard/listings" class="flex items-center px-4 py-2.5 text-sm text-brand-text-primary dark:text-white/85 hover:bg-gray-50 dark:hover:bg-white/5 hover:text-brand-gold transition-colors" @click="closeAll">
-                  My Listings
-                </NuxtLink>
-                <NuxtLink to="/dashboard/messages" class="flex items-center px-4 py-2.5 text-sm text-brand-text-primary dark:text-white/85 hover:bg-gray-50 dark:hover:bg-white/5 hover:text-brand-gold transition-colors" @click="closeAll">
-                  Messages
-                </NuxtLink>
-                <NuxtLink v-if="authStore.isAdmin" to="/admin" class="flex items-center px-4 py-2.5 text-sm text-brand-text-primary dark:text-white/85 hover:bg-gray-50 dark:hover:bg-white/5 hover:text-brand-gold transition-colors" @click="closeAll">
-                  Admin Panel
-                </NuxtLink>
-                <hr class="my-1 border-gray-100 dark:border-white/10" />
-                <button class="flex items-center w-full px-4 py-2.5 text-sm text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-colors" @click="logout">
-                  Sign out
-                </button>
-              </nav>
-            </div>
-          </Transition>
-        </div>
+        <!-- Account menu (shared with the dashboard header) -->
+        <UserMenu
+          v-if="authStore.isAuthenticated"
+          v-model:open="userOpen"
+          variant="compact"
+          @update:open="(o: boolean) => { if (o) { notifOpen = false; msgOpen = false } }"
+        />
 
         <!-- Guest buttons -->
         <template v-else>
