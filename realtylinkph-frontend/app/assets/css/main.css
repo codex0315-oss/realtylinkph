@@ -236,6 +236,16 @@
 }
 
 @layer components {
+  /*
+   * Dashboard page container. 72rem like before, then it grows with the space
+   * the page really has (see the cw-* variants in tailwind.config.ts):
+   * 80rem from cw-xl, 87.5rem (1400px at the base size) from cw-2xl. Everything
+   * is in rem, so on a big monitor it scales with the rest of the UI.
+   */
+  .page-shell { width: 100%; margin-inline: auto; max-width: 72rem; }
+  .cw-xl .page-shell { max-width: 80rem; }
+  .cw-2xl .page-shell { max-width: 87.5rem; }
+
   .btn-primary {
     @apply inline-flex items-center justify-center gap-2
            bg-brand-gold text-brand-navy font-bold

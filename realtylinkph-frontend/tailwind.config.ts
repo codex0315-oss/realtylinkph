@@ -1,5 +1,25 @@
 import type { Config } from 'tailwindcss'
 import forms from '@tailwindcss/forms'
+import plugin from 'tailwindcss/plugin'
+
+/*
+ * Content-width variants (cw-sm … cw-2xl).
+ *
+ * Tailwind's sm:/md:/lg: look at the SCREEN. Inside the dashboard the page gets
+ * much less than the screen: the sidebar takes 16rem and a docked Messages / AI /
+ * Notifications panel another 24rem, so a 1366px laptop can leave a page only
+ * ~45rem. A page that picks its columns from the screen then draws a wide layout
+ * into a narrow space. These variants look at the space the page really has:
+ * the dashboard layout measures <main> and sets cw-sm … cw-2xl on it (a class
+ * per step reached, in rem so it scales with the big-monitor font scaling).
+ *
+ *   cw-sm 40rem · cw-md 48rem · cw-lg 64rem · cw-xl 80rem · cw-2xl 96rem
+ *
+ * Use them in place of sm:/md:/lg:/xl: for layout inside dashboard pages.
+ */
+const contentWidth = plugin(({ addVariant }) => {
+  for (const step of ['sm', 'md', 'lg', 'xl', '2xl']) addVariant(`cw-${step}`, `.cw-${step} &`)
+})
 
 export default {
   darkMode: 'class',
@@ -66,5 +86,5 @@ export default {
       },
     },
   },
-  plugins: [forms],
+  plugins: [forms, contentWidth],
 } satisfies Config

@@ -43,6 +43,30 @@ watch(() => route.path, (p) => {
   if (import.meta.client && authStore.isAdmin && p.startsWith('/dashboard')) navigateTo('/admin')
 })
 
+/*
+ * The space a page really gets: <main> minus its padding, in rem. The sidebar
+ * (open or collapsed) and a docked panel both change it, and the pages' layouts
+ * follow through the cw-* variants (see tailwind.config.ts).
+ */
+const mainEl = ref<HTMLElement | null>(null)
+const contentRem = ref(0)
+const CW_STEPS = [['sm', 40], ['md', 48], ['lg', 64], ['xl', 80], ['2xl', 96]] as const
+const cwClasses = computed(() => CW_STEPS.filter(([, min]) => contentRem.value >= min).map(([k]) => `cw-${k}`))
+function measureMain() {
+  const el = mainEl.value
+  if (!el) return
+  const cs = getComputedStyle(el)
+  const px = el.clientWidth - parseFloat(cs.paddingLeft) - parseFloat(cs.paddingRight)
+  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
+  contentRem.value = px / rem
+}
+let mainObserver: ResizeObserver | null = null
+onMounted(() => {
+  measureMain()   // before first paint, so the first frame already has the right layout
+  if (mainEl.value) { mainObserver = new ResizeObserver(measureMain); mainObserver.observe(mainEl.value) }
+})
+onUnmounted(() => mainObserver?.disconnect())
+
 const sidebarOpen = ref(false)   // mobile drawer
 const userOpen    = ref(false)   // profile dropdown
 const cmdkOpen    = ref(false)   // Ctrl K search
@@ -576,7 +600,7 @@ const topIconOn =
 
       <!-- Content + docked panel -->
       <div class="flex-1 flex min-h-0">
-        <main class="flex-1 min-w-0 p-5 sm:p-8">
+        <main ref="mainEl" class="flex-1 min-w-0 p-5 sm:p-8" :class="cwClasses">
           <slot />
         </main>
 

@@ -347,7 +347,7 @@ const memberSince = computed(() =>
 )
 </script>
 <template>
-  <div class="max-w-6xl mx-auto">
+  <div class="page-shell">
 
     <!-- Buyers: same page heading as Appointments, History… -->
     <header v-if="isBuyerView" class="mb-5">
@@ -371,7 +371,7 @@ const memberSince = computed(() =>
       />
 
       <div class="px-6 sm:px-8" :class="isBuyerView ? 'pb-5' : 'pb-6'">
-        <div class="flex flex-col sm:flex-row sm:items-end gap-4 sm:gap-6">
+        <div class="flex flex-col cw-sm:flex-row cw-sm:items-end gap-4 cw-sm:gap-6">
           <!-- Photo, overlapping the cover -->
           <div class="relative w-max" :class="isBuyerView ? '-mt-11 sm:-mt-12' : '-mt-14 sm:-mt-16'">
             <div :class="isBuyerView ? 'h-24 w-24 sm:h-[6.5rem] sm:w-[6.5rem]' : 'h-28 w-28 sm:h-32 sm:w-32'" class="rounded-full overflow-hidden ring-[5px] ring-white dark:ring-[#0d2550] shadow-xl bg-gold-metal flex items-center justify-center">
@@ -391,7 +391,7 @@ const memberSince = computed(() =>
             </label>
           </div>
 
-          <div class="min-w-0 flex-1 sm:pb-1">
+          <div class="min-w-0 flex-1 cw-sm:pb-1">
             <component :is="isBuyerView ? 'h2' : 'h1'" class="flex flex-wrap items-center gap-2 font-heading font-semibold tracking-[-0.02em] text-brand-navy dark:text-white leading-tight" :class="isBuyerView ? 'text-2xl' : 'text-3xl'">
               {{ authStore.user?.name }}
               <AppVerifiedTick v-if="authStore.isVerifiedAgent" size="lg" />
@@ -406,7 +406,7 @@ const memberSince = computed(() =>
             v-if="authStore.isVerifiedAgent && authStore.user"
             :to="`/agents/${authStore.user.id}`"
             target="_blank"
-            class="sm:mb-1 inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-brand-navy ring-1 ring-brand-navy/15 dark:text-white dark:ring-white/20 hover:ring-brand-gold transition w-max"
+            class="cw-sm:mb-1 inline-flex items-center gap-2 rounded-full px-5 py-2.5 text-sm font-semibold text-brand-navy ring-1 ring-brand-navy/15 dark:text-white dark:ring-white/20 hover:ring-brand-gold transition w-max"
           >
             View public profile
             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
@@ -425,7 +425,7 @@ const memberSince = computed(() =>
         </p>
 
         <!-- Buyers: completeness + activity, one compact row -->
-        <div v-if="isBuyerView" class="mt-5 grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] gap-3">
+        <div v-if="isBuyerView" class="mt-5 grid grid-cols-1 cw-xl:grid-cols-[minmax(0,1fr)_minmax(0,1.5fr)] gap-3">
           <div class="rounded-2xl px-4 py-3 bg-brand-cream dark:bg-white/[0.04] ring-1 ring-brand-navy/[0.05] dark:ring-white/10">
             <div class="flex items-center justify-between gap-3">
               <p class="text-sm font-semibold text-brand-navy dark:text-white">
@@ -457,7 +457,7 @@ const memberSince = computed(() =>
             </div>
           </div>
 
-          <dl class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+          <dl class="grid grid-cols-2 cw-sm:grid-cols-4 gap-3">
             <component
               :is="t.to ? NuxtLinkCmp : 'div'"
               v-for="t in activity"
@@ -496,18 +496,18 @@ const memberSince = computed(() =>
     </section>
 
     <!-- ════════ Settings (buyers): section menu + one section at a time ════════ -->
-    <div v-if="isBuyerView" class="mt-6 grid grid-cols-1 lg:grid-cols-[15rem_minmax(0,1fr)] gap-6 items-start">
+    <div v-if="isBuyerView" class="mt-6 grid grid-cols-1 cw-lg:grid-cols-[15rem_minmax(0,1fr)] gap-6 items-start">
       <!-- Menu: a sticky list on desktop, a tab strip on phones -->
-      <nav class="lg:sticky lg:top-24" aria-label="Settings">
+      <nav class="cw-lg:sticky cw-lg:top-24" aria-label="Settings">
         <!-- The gold ring is drawn outside each button: on desktop nothing
              clips it; on phones (a scrolling strip) the list keeps 2px of
              breathing room so the ring isn't cut at the edges. -->
-        <div class="-mx-5 px-5 lg:mx-0 lg:px-0 overflow-x-auto lg:overflow-visible no-scrollbar">
-          <ul class="flex lg:flex-col gap-1.5 w-max lg:w-auto p-0.5">
+        <div class="-mx-5 px-5 cw-lg:mx-0 cw-lg:px-0 overflow-x-auto cw-lg:overflow-visible no-scrollbar">
+          <ul class="flex cw-lg:flex-col gap-1.5 w-max cw-lg:w-auto p-0.5">
             <li v-for="s in SECTIONS" :key="s.key">
               <button
                 type="button"
-                class="group w-full flex items-center gap-3 rounded-2xl px-3.5 py-2.5 lg:py-3 text-left transition"
+                class="group w-full flex items-center gap-3 rounded-2xl px-3.5 py-2.5 cw-lg:py-3 text-left transition"
                 :class="section === s.key
                   ? 'bg-white ring-1 ring-brand-gold shadow-[0_10px_24px_-18px_rgba(11,42,92,0.5)] dark:bg-[#0d2550]'
                   : 'hover:bg-white/70 dark:hover:bg-white/[0.04]'"
@@ -518,9 +518,9 @@ const memberSince = computed(() =>
                       :class="section === s.key ? 'bg-brand-gold text-brand-navy' : 'bg-brand-navy/[0.05] text-brand-navy/60 dark:bg-white/[0.06] dark:text-white/60'">
                   <svg class="h-[1.125rem] w-[1.125rem]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" :d="s.icon" /></svg>
                 </span>
-                <span class="min-w-0 whitespace-nowrap lg:whitespace-normal">
+                <span class="min-w-0 whitespace-nowrap cw-lg:whitespace-normal">
                   <span class="block text-sm font-semibold" :class="section === s.key ? 'text-brand-navy dark:text-white' : 'text-brand-navy/75 dark:text-white/70'">{{ s.label }}</span>
-                  <span class="hidden lg:block text-xs text-brand-navy/45 dark:text-white/40">{{ s.hint }}</span>
+                  <span class="hidden cw-lg:block text-xs text-brand-navy/45 dark:text-white/40">{{ s.hint }}</span>
                 </span>
               </button>
             </li>
@@ -539,8 +539,8 @@ const memberSince = computed(() =>
 
           <div v-if="profileError" class="mb-5 rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-400">{{ profileError }}</div>
 
-          <!-- Two columns on desktop so the section fits without scrolling -->
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-5">
+          <!-- Two columns when the card has the room, so the section fits without scrolling -->
+          <div class="grid grid-cols-1 cw-sm:grid-cols-2 gap-x-8 gap-y-5">
             <div class="space-y-5">
             <div>
               <label for="pf-name" :class="labelCls">Full name</label>
@@ -602,7 +602,7 @@ const memberSince = computed(() =>
           <h2 class="font-heading text-xl font-semibold text-brand-navy dark:text-white">Security</h2>
           <p class="mt-1 mb-6 text-sm text-brand-text-secondary dark:text-white/55">Change the password you sign in with.</p>
 
-          <form class="grid grid-cols-1 lg:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] gap-x-8 gap-y-5" @submit.prevent="changePassword">
+          <form class="grid grid-cols-1 cw-xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] gap-x-8 gap-y-5" @submit.prevent="changePassword">
             <div>
             <div v-if="pwSaved" class="mb-5 inline-flex items-center gap-2 rounded-xl bg-emerald-500/10 px-3.5 py-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">
               <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
@@ -618,7 +618,7 @@ const memberSince = computed(() =>
               </button>
             </div>
 
-            <div class="mt-5 grid grid-cols-1 sm:grid-cols-2 gap-4">
+            <div class="mt-5 grid grid-cols-1 cw-sm:grid-cols-2 gap-4">
               <div>
                 <label for="pw-new" :class="labelCls">New password</label>
                 <div class="relative">
@@ -670,21 +670,21 @@ const memberSince = computed(() =>
 
           <!-- Phones: icon + name, then the description and button at full width.
                Wider: icon | name over description | button, in one row. -->
-          <div class="grid grid-cols-[auto_minmax(0,1fr)] sm:grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-4 gap-y-3 sm:gap-y-0.5 rounded-2xl p-4 ring-1 ring-brand-navy/[0.08] dark:ring-white/10">
-            <span class="h-12 w-12 flex-none rounded-xl bg-[#ffffff] ring-1 ring-brand-navy/10 flex items-center justify-center sm:row-span-2">
+          <div class="grid grid-cols-[auto_minmax(0,1fr)] cw-sm:grid-cols-[auto_minmax(0,1fr)_auto] items-center gap-x-4 gap-y-3 cw-sm:gap-y-0.5 rounded-2xl p-4 ring-1 ring-brand-navy/[0.08] dark:ring-white/10">
+            <span class="h-12 w-12 flex-none rounded-xl bg-[#ffffff] ring-1 ring-brand-navy/10 flex items-center justify-center cw-sm:row-span-2">
               <svg class="h-8 w-8" viewBox="0 0 48 48" aria-hidden="true"><rect width="22" height="22" x="13" y="13" fill="#fff"/><polygon fill="#1e88e5" points="25.68,20.92 26.688,22.36 28.272,21.208 28.272,29.56 30,29.56 30,18.616 28.56,18.616"/><path fill="#1e88e5" d="M22.943,23.745c0.625-0.574,1.013-1.37,1.013-2.249c0-1.747-1.533-3.168-3.417-3.168c-1.602,0-2.972,1.009-3.33,2.453l1.657,0.421c0.165-0.664,0.868-1.146,1.673-1.146c0.942,0,1.709,0.646,1.709,1.44c0,0.794-0.767,1.44-1.709,1.44h-0.997v1.728h0.997c1.081,0,1.993,0.751,1.993,1.64c0,0.904-0.866,1.64-1.931,1.64c-0.962,0-1.784-0.61-1.914-1.418l-1.708,0.275c0.262,1.638,1.789,2.873,3.552,2.873c1.981,0,3.593-1.514,3.593-3.371C24.118,25.439,23.671,24.412,22.943,23.745z"/><polygon fill="#fbc02d" points="34,42 14,42 13,38 14,34 34,34 35,38"/><polygon fill="#4caf50" points="38,35 42,34 42,14 38,13 34,14 34,34"/><path fill="#1e88e5" d="M34,14l1-4l-1-4H9C7.343,6,6,7.343,6,9v25l4,1l4-1V14H34z"/><polygon fill="#e53935" points="34,34 34,42 42,34"/><polygon fill="#1565c0" points="39,6 34,6 34,14 42,14 42,9 41,6"/><polygon fill="#2e7d32" points="9,42 14,42 14,34 6,34 6,39 7,42"/></svg>
             </span>
-            <p class="flex flex-wrap items-center gap-x-2 gap-y-1 font-semibold text-brand-navy dark:text-white sm:self-end">
+            <p class="flex flex-wrap items-center gap-x-2 gap-y-1 font-semibold text-brand-navy dark:text-white cw-sm:self-end">
               Google Calendar
               <span class="whitespace-nowrap rounded-full px-2 py-0.5 text-[0.6875rem] font-bold" :class="authStore.user?.has_gcal ? 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400' : 'bg-brand-navy/[0.06] text-brand-navy/55 dark:bg-white/10 dark:text-white/55'">
                 {{ authStore.user?.has_gcal ? 'Connected' : 'Not connected' }}
               </span>
             </p>
-            <p class="col-span-2 sm:col-span-1 sm:col-start-2 sm:self-start text-xs leading-relaxed text-brand-text-secondary dark:text-white/50">Confirmed viewings go into a separate “RealtyLink PH Viewings” calendar. Your other calendars are never touched.</p>
-            <button v-if="!authStore.user?.has_gcal" type="button" :disabled="gcalBusy" class="col-span-2 sm:col-span-1 sm:col-start-3 sm:row-start-1 sm:row-span-2 rounded-full bg-brand-gold px-5 py-2.5 text-sm font-bold text-brand-navy shadow-[0_4px_14px_rgba(212,165,74,0.4)] hover:bg-brand-gold-light disabled:opacity-60 transition" @click="doConnectGcal">
+            <p class="col-span-2 cw-sm:col-span-1 cw-sm:col-start-2 cw-sm:self-start text-xs leading-relaxed text-brand-text-secondary dark:text-white/50">Confirmed viewings go into a separate “RealtyLink PH Viewings” calendar. Your other calendars are never touched.</p>
+            <button v-if="!authStore.user?.has_gcal" type="button" :disabled="gcalBusy" class="col-span-2 cw-sm:col-span-1 cw-sm:col-start-3 cw-sm:row-start-1 cw-sm:row-span-2 rounded-full bg-brand-gold px-5 py-2.5 text-sm font-bold text-brand-navy shadow-[0_4px_14px_rgba(212,165,74,0.4)] hover:bg-brand-gold-light disabled:opacity-60 transition" @click="doConnectGcal">
               {{ gcalBusy ? 'Connecting…' : 'Connect' }}
             </button>
-            <button v-else type="button" :disabled="gcalBusy" class="col-span-2 sm:col-span-1 sm:col-start-3 sm:row-start-1 sm:row-span-2 rounded-full px-5 py-2.5 text-sm font-semibold text-red-600 ring-1 ring-red-300 hover:bg-red-500/10 dark:text-red-400 dark:ring-red-400/40 disabled:opacity-60 transition" @click="doDisconnectGcal">
+            <button v-else type="button" :disabled="gcalBusy" class="col-span-2 cw-sm:col-span-1 cw-sm:col-start-3 cw-sm:row-start-1 cw-sm:row-span-2 rounded-full px-5 py-2.5 text-sm font-semibold text-red-600 ring-1 ring-red-300 hover:bg-red-500/10 dark:text-red-400 dark:ring-red-400/40 disabled:opacity-60 transition" @click="doDisconnectGcal">
               {{ gcalBusy ? 'Disconnecting…' : 'Disconnect' }}
             </button>
           </div>
@@ -696,7 +696,7 @@ const memberSince = computed(() =>
           <p class="mt-1 mb-6 text-sm text-brand-text-secondary dark:text-white/55">How RealtyLinkPH looks, and what we email you about.</p>
 
           <!-- Theme left, email alerts right -->
-          <div class="grid grid-cols-1 lg:grid-cols-2 gap-x-8 gap-y-7">
+          <div class="grid grid-cols-1 cw-xl:grid-cols-2 gap-x-8 gap-y-7">
           <div>
           <p :class="labelCls">Theme</p>
           <div class="grid grid-cols-3 gap-3">
@@ -766,14 +766,14 @@ const memberSince = computed(() =>
           <p class="mt-1 mb-5 text-sm text-brand-text-secondary dark:text-white/55">{{ agentApp.applicant_type === 'broker' ? 'Real Estate Broker' : 'Real Estate Salesperson' }} application</p>
 
           <!-- Status on the left, the application link level with it on the right -->
-          <div class="flex flex-col gap-3 sm:flex-row sm:items-center sm:justify-between">
-            <p v-if="agentApp.status === 'pending'" class="min-w-0 sm:flex-1 text-sm text-brand-navy/75 dark:text-white/70">An admin is reviewing your documents, usually within 24 hours. We’ll notify you of the outcome.</p>
-            <p v-else-if="agentApp.status === 'approved'" class="min-w-0 sm:flex-1 flex items-center gap-2 rounded-xl bg-emerald-500/10 px-3.5 py-2.5 text-sm font-medium text-emerald-700 dark:text-emerald-400">
+          <div class="flex flex-col gap-3 cw-sm:flex-row cw-sm:items-center cw-sm:justify-between">
+            <p v-if="agentApp.status === 'pending'" class="min-w-0 cw-sm:flex-1 text-sm text-brand-navy/75 dark:text-white/70">An admin is reviewing your documents, usually within 24 hours. We’ll notify you of the outcome.</p>
+            <p v-else-if="agentApp.status === 'approved'" class="min-w-0 cw-sm:flex-1 flex items-center gap-2 rounded-xl bg-emerald-500/10 px-3.5 py-2.5 text-sm font-medium text-emerald-700 dark:text-emerald-400">
               <svg class="h-4 w-4 flex-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
               You’re a verified agent. Buyers see the verified tick on your profile and listings.
             </p>
             <span v-else />
-            <NuxtLink to="/dashboard/verify" class="self-end sm:self-auto inline-flex flex-none whitespace-nowrap rounded-full px-5 py-2.5 text-sm font-bold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20 transition">
+            <NuxtLink to="/dashboard/verify" class="self-end cw-sm:self-auto inline-flex flex-none whitespace-nowrap rounded-full px-5 py-2.5 text-sm font-bold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20 transition">
               {{ agentApp.status === 'rejected' && !appInCooldown ? 'Re-apply' : 'View application' }}
             </NuxtLink>
           </div>
