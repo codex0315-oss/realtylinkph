@@ -196,7 +196,7 @@ function statusOf(p: Property) {
 </script>
 
 <template>
-  <div class="max-w-6xl mx-auto">
+  <div class="page-shell">
     <!-- Header -->
     <header class="mb-6 flex flex-wrap items-end justify-between gap-4">
       <div class="min-w-0">
@@ -221,7 +221,7 @@ function statusOf(p: Property) {
     </header>
 
     <!-- Toolbar -->
-    <div v-if="properties.length" class="mb-6 flex flex-col gap-3 lg:flex-row lg:items-center">
+    <div v-if="properties.length" class="mb-6 flex flex-col gap-3 cw-lg:flex-row cw-lg:items-center">
       <div class="flex max-w-full overflow-x-auto rounded-full p-1 bg-white dark:bg-white/[0.05] ring-1 ring-brand-navy/10 dark:ring-white/10 self-start" role="tablist">
         <button
           v-for="t in TABS"
@@ -241,8 +241,8 @@ function statusOf(p: Property) {
         </button>
       </div>
 
-      <div class="flex flex-1 gap-2 lg:justify-end">
-        <div class="relative flex-1 lg:max-w-xs">
+      <div class="flex flex-1 gap-2 cw-lg:justify-end">
+        <div class="relative flex-1 cw-lg:max-w-xs">
           <svg class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-brand-navy/40 dark:text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
           <input v-model="search" type="search" placeholder="Search title or address" aria-label="Search your listings" class="w-full rounded-full border-0 bg-white dark:bg-white/[0.06] pl-10 pr-4 py-2.5 text-sm text-brand-navy dark:text-white placeholder-brand-navy/40 dark:placeholder-white/35 ring-1 ring-brand-navy/10 dark:ring-white/10 focus:ring-2 focus:ring-brand-gold" />
         </div>
@@ -256,7 +256,7 @@ function statusOf(p: Property) {
     </div>
 
     <!-- Loading -->
-    <div v-if="loading && !properties.length" class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+    <div v-if="loading && !properties.length" class="grid grid-cols-[repeat(auto-fill,minmax(16.5rem,1fr))] gap-5">
       <AppSkeleton v-for="i in 6" :key="i" width="100%" height="340px" rounded="lg" />
     </div>
 
@@ -280,7 +280,7 @@ function statusOf(p: Property) {
     </div>
 
     <!-- Cards -->
-    <div v-else class="grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-3 gap-5">
+    <div v-else class="grid grid-cols-[repeat(auto-fill,minmax(16.5rem,1fr))] gap-5">
       <article
         v-for="prop in shown"
         :key="prop.id"

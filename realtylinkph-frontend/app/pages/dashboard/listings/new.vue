@@ -305,6 +305,18 @@ const priceInput = computed({
   get: () => (form.price > 0 ? form.price : ''),
   set: (v: string | number) => { form.price = Number(v) || 0 },
 })
+/* Preview: beside the form when there's room, else in a dialog from the Preview button */
+const previewOpen = ref(false)
+const previewProps = computed(() => ({
+  image: coverUrl.value,
+  offer: form.offer_type,
+  price: priceText.value,
+  hasPrice: form.price > 0,
+  title: form.title,
+  address: form.address,
+  chips: [PROPERTY_TYPES[form.type], form.bedrooms ? `${form.bedrooms} bed` : '', form.bathrooms ? `${form.bathrooms} bath` : '', form.floor_area ? `${form.floor_area} sqm` : ''].filter(Boolean) as string[],
+  tour: panos.value.length > 0,
+}))
 const TYPE_ICONS = PROPERTY_TYPE_ICONS
 const fieldCls = LISTING_FIELD_CLS
 const labelCls = LISTING_LABEL_CLS
@@ -360,9 +372,9 @@ onUnmounted(() => {
 </script>
 
 <template>
-  <div class="max-w-6xl mx-auto pb-24 lg:pb-0">
+  <div class="page-shell pb-24 lg:pb-0">
     <!-- ── Heading ── -->
-    <header class="mb-5 flex flex-col gap-4 lg:flex-row lg:items-end lg:justify-between">
+    <header class="mb-5 flex flex-col gap-4 cw-xl:flex-row cw-xl:items-end cw-xl:justify-between">
       <div class="min-w-0">
         <NuxtLink to="/dashboard/listings" class="inline-flex items-center gap-1 text-[0.6875rem] font-bold uppercase tracking-[0.18em] text-brand-navy/45 hover:text-brand-gold-deep dark:text-white/40 dark:hover:text-brand-gold transition">
           <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
@@ -386,12 +398,12 @@ onUnmounted(() => {
       </div>
 
       <!-- ── Stepper (beside the title on desktop, to keep Continue in view) ── -->
-      <div class="w-full lg:w-auto">
+      <div class="w-full cw-xl:w-auto">
         <!-- Phones: the step's name, since the stepper only has room for numbers -->
-        <p class="sm:hidden mb-2 text-xs font-semibold text-brand-navy/60 dark:text-white/55">
+        <p class="cw-sm:hidden mb-2 text-xs font-semibold text-brand-navy/60 dark:text-white/55">
           Step {{ step }} of 3 · <span class="text-brand-navy dark:text-white">{{ steps[step - 1]!.label }}</span>
         </p>
-        <ol class="grid grid-cols-3 gap-1.5 rounded-3xl p-1.5 bg-white dark:bg-[#0B1A35] ring-1 ring-brand-navy/[0.07] dark:ring-white/[0.08] lg:w-[34rem]">
+        <ol class="grid grid-cols-3 gap-1.5 rounded-3xl p-1.5 bg-white dark:bg-[#0B1A35] ring-1 ring-brand-navy/[0.07] dark:ring-white/[0.08] cw-xl:w-[34rem]">
           <li v-for="s in steps" :key="s.n">
             <button
               type="button"
@@ -408,7 +420,7 @@ onUnmounted(() => {
                 <svg v-if="step > s.n" class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
                 <span v-else>{{ s.n }}</span>
               </span>
-              <span class="hidden sm:block min-w-0 truncate text-sm font-semibold" :class="step === s.n ? '' : 'text-brand-navy dark:text-white'">{{ s.label }}</span>
+              <span class="hidden cw-sm:block min-w-0 truncate text-sm font-semibold" :class="step === s.n ? '' : 'text-brand-navy dark:text-white'">{{ s.label }}</span>
             </button>
           </li>
         </ol>
@@ -422,7 +434,7 @@ onUnmounted(() => {
       <button type="button" class="font-bold text-brand-gold-deep dark:text-brand-gold hover:underline" @click="startFresh">Start a new listing instead</button>
     </div>
 
-    <div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_20rem] items-start">
+    <div class="grid grid-cols-1 gap-6 cw-lg:grid-cols-[minmax(0,1fr)_20rem] cw-2xl:grid-cols-[minmax(0,1fr)_24rem] items-start">
       <!-- ░░ Step content: fills the window on desktop, so Continue is always in view ░░ -->
       <div ref="stepCol" class="min-w-0 lg:flex lg:flex-col" :style="stepColHeight ? { height: stepColHeight } : undefined">
         <p v-if="error" class="mb-4 rounded-2xl bg-red-500/[0.07] ring-1 ring-red-500/20 px-4 py-3 text-sm text-red-700 dark:text-red-300">{{ error }}</p>
@@ -451,7 +463,7 @@ onUnmounted(() => {
               <input type="file" class="sr-only" accept="image/*" multiple @change="addFiles($event, 'photo')" />
             </label>
 
-            <div v-else class="grid grid-cols-2 sm:grid-cols-3 xl:grid-cols-4 gap-3">
+            <div v-else class="grid grid-cols-[repeat(auto-fill,minmax(8.5rem,1fr))] gap-3">
               <div v-for="(shot, i) in gallery" :key="shot.id" class="group relative aspect-[4/3] overflow-hidden rounded-2xl ring-1 ring-brand-navy/[0.07] dark:ring-white/10">
                 <img :src="shot.url" alt="" class="h-full w-full object-cover transition-opacity" :class="shot.uploading ? 'opacity-50' : ''" />
                 <span v-if="shot.uploading" class="absolute inset-0 flex items-center justify-center">
@@ -508,7 +520,7 @@ onUnmounted(() => {
               <input type="file" class="sr-only" accept="image/*" multiple @change="addFiles($event, 'pano')" />
             </label>
 
-            <div v-else class="grid grid-cols-1 sm:grid-cols-2 gap-3">
+            <div v-else class="grid grid-cols-[repeat(auto-fill,minmax(14rem,1fr))] gap-3">
               <div v-for="(shot, i) in panos" :key="shot.id" class="group relative aspect-[2/1] overflow-hidden rounded-2xl ring-1 ring-brand-navy/[0.07] dark:ring-white/10">
                 <img :src="shot.url" alt="" class="h-full w-full object-cover transition-opacity" :class="shot.uploading ? 'opacity-50' : ''" />
                 <span v-if="shot.uploading" class="absolute inset-0 flex items-center justify-center">
@@ -554,7 +566,7 @@ onUnmounted(() => {
             </div>
             <div>
               <p :class="labelCls">Property type <span class="text-red-500">*</span></p>
-              <div class="grid grid-cols-2 sm:grid-cols-5 gap-2">
+              <div class="grid grid-cols-[repeat(auto-fit,minmax(8rem,1fr))] gap-2">
                 <button
                   v-for="(label, key) in PROPERTY_TYPES"
                   :key="key"
@@ -570,7 +582,8 @@ onUnmounted(() => {
             </div>
           </div>
 
-          <!-- Basics -->
+          <!-- Basics, and the size beside it when the card is wide -->
+          <div class="grid grid-cols-1 cw-xl:grid-cols-2 gap-x-8 gap-y-7 items-start">
           <div class="grid grid-cols-1 gap-4">
             <div>
               <label for="nl-title" :class="labelCls">Title <span class="text-red-500">*</span></label>
@@ -593,7 +606,7 @@ onUnmounted(() => {
           <!-- Size -->
           <div>
             <p :class="labelCls">Size and rooms</p>
-            <div class="grid grid-cols-2 sm:grid-cols-4 gap-3">
+            <div class="grid grid-cols-[repeat(auto-fit,minmax(6.5rem,1fr))] gap-3">
               <div v-for="f in [
                 { key: 'bedrooms', label: 'Bedrooms', ph: '3' },
                 { key: 'bathrooms', label: 'Bathrooms', ph: '2' },
@@ -604,6 +617,7 @@ onUnmounted(() => {
                 <input :id="`nl-${f.key}`" v-model.number="form[f.key]" type="number" min="0" :placeholder="f.ph" :class="fieldCls" />
               </div>
             </div>
+          </div>
           </div>
 
           <!-- Description + AI -->
@@ -635,6 +649,12 @@ onUnmounted(() => {
             </button>
             <span v-else class="text-xs text-brand-navy/45 dark:text-white/40">Step {{ step }} of 3</span>
 
+            <!-- Preview: when there's no room beside the form, it opens in a dialog -->
+            <button type="button" class="cw-lg:hidden inline-flex items-center gap-1.5 rounded-full px-4 py-2.5 text-sm font-semibold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20 transition" aria-label="Preview this listing" @click="previewOpen = true">
+              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z M15 12a3 3 0 11-6 0 3 3 0 016 0z" /></svg>
+              <span class="hidden cw-sm:inline">Preview</span>
+            </button>
+
             <button
               v-if="step < 3"
               type="button"
@@ -658,34 +678,20 @@ onUnmounted(() => {
         </div>
       </div>
 
-      <!-- ░░ Live preview ░░ -->
-      <aside class="space-y-4 lg:sticky lg:top-24">
-        <section class="overflow-hidden rounded-3xl bg-white dark:bg-[#0B1A35] border-2 border-brand-navy/80 dark:border-brand-gold/70">
-          <div class="relative aspect-[16/10] bg-brand-navy/5 dark:bg-white/[0.06]">
-            <img v-if="coverUrl" :src="coverUrl" alt="" class="h-full w-full object-cover" />
-            <div v-else class="h-full w-full flex flex-col items-center justify-center gap-1 text-brand-navy/35 dark:text-white/35">
-              <svg class="h-8 w-8" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.4"><path stroke-linecap="round" stroke-linejoin="round" d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" /></svg>
-              <span class="text-xs font-semibold">Your cover photo</span>
-            </div>
-            <span class="absolute top-3 left-3 rounded-full bg-[#ffffff]/95 px-2.5 py-1 text-[0.625rem] font-bold uppercase tracking-wide text-[#0B2A5C] shadow-sm">{{ form.offer_type === 'rent' ? 'For rent' : 'For sale' }}</span>
-            <span v-if="panos.length" class="absolute bottom-3 left-3 rounded-full bg-brand-navy px-2 py-0.5 text-[0.625rem] font-bold text-brand-gold">360° tour</span>
-          </div>
-          <div class="p-4">
-            <p class="text-[0.625rem] font-bold uppercase tracking-[0.16em] text-brand-navy/45 dark:text-white/40">Preview</p>
-            <p class="mt-1 font-display text-lg font-bold tabular-nums" :class="form.price > 0 ? 'text-brand-gold-deep dark:text-brand-gold' : 'text-brand-navy/30 dark:text-white/30'">{{ priceText }}</p>
-            <p class="line-clamp-2 font-semibold" :class="form.title ? 'text-brand-navy dark:text-white' : 'italic text-brand-navy/35 dark:text-white/35'">{{ form.title || 'Your listing title' }}</p>
-            <p class="mt-0.5 truncate text-xs text-brand-navy/50 dark:text-white/45">{{ form.address || 'Address' }}</p>
-            <div class="mt-3 flex flex-wrap gap-1.5 text-[0.6875rem] font-semibold text-brand-navy/70 dark:text-white/65">
-              <span class="rounded-full bg-brand-navy/[0.05] dark:bg-white/[0.07] px-2.5 py-1">{{ PROPERTY_TYPES[form.type] }}</span>
-              <span v-if="form.bedrooms" class="rounded-full bg-brand-navy/[0.05] dark:bg-white/[0.07] px-2.5 py-1">{{ form.bedrooms }} bed</span>
-              <span v-if="form.bathrooms" class="rounded-full bg-brand-navy/[0.05] dark:bg-white/[0.07] px-2.5 py-1">{{ form.bathrooms }} bath</span>
-              <span v-if="form.floor_area" class="rounded-full bg-brand-navy/[0.05] dark:bg-white/[0.07] px-2.5 py-1">{{ form.floor_area }} sqm</span>
-            </div>
-          </div>
-        </section>
+      <!-- ░░ Live preview (beside the form only when there is room) ░░ -->
+      <aside class="hidden cw-lg:block space-y-4 cw-lg:sticky cw-lg:top-24">
+        <ListingPreviewCard v-bind="previewProps" />
         <p class="px-1 text-xs text-brand-navy/50 dark:text-white/45">Saved listings start as drafts. Publish them from My Listings when you're ready.</p>
       </aside>
     </div>
+
+    <!-- Preview in a dialog (shown from the Preview button when there's no room beside the form) -->
+    <AppDialog :open="previewOpen" title="Preview" subtitle="How buyers will see this listing." icon="photo" @close="previewOpen = false">
+      <ListingPreviewCard v-bind="previewProps" />
+      <template #footer>
+        <button type="button" :class="DIALOG_BTN.primary" @click="previewOpen = false">Done</button>
+      </template>
+    </AppDialog>
 
     <!-- Leaving mid-listing. Everything is already saved, so this is a choice,
          not a warning: keep the draft for later, or throw it away. -->
