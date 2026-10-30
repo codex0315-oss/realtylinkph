@@ -291,10 +291,21 @@ const stepColHeight = ref<string | undefined>()
 function fitStepCol() {
   if (!stepCol.value || window.innerWidth < 1024) { stepColHeight.value = undefined; return }
   const top = stepCol.value.getBoundingClientRect().top + window.scrollY
-  stepColHeight.value = `${Math.max(360, Math.floor(window.innerHeight - top - 24))}px`
+  // Never smaller than 36rem: on a short window the heading, stepper and banner
+  // leave almost nothing, and a step squeezed into that is unusable. Better that
+  // the page scrolls a little than that the form or drop box collapses.
+  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
+  stepColHeight.value = `${Math.max(Math.round(36 * rem), Math.floor(window.innerHeight - top - 24))}px`
 }
-onMounted(() => { nextTick(fitStepCol); window.addEventListener('resize', fitStepCol) })
-onUnmounted(() => window.removeEventListener('resize', fitStepCol))
+/* Re-fit when the room changes too (a panel opening narrows <main> and moves the step down). */
+let mainObserver: ResizeObserver | null = null
+onMounted(() => {
+  nextTick(fitStepCol)
+  window.addEventListener('resize', fitStepCol)
+  const main = stepCol.value?.closest('main')
+  if (main) { mainObserver = new ResizeObserver(() => fitStepCol()); mainObserver.observe(main) }
+})
+onUnmounted(() => { window.removeEventListener('resize', fitStepCol); mainObserver?.disconnect() })
 watch(resumed, () => nextTick(fitStepCol))
 
 /* ── Live preview ── */
@@ -448,7 +459,7 @@ onUnmounted(() => {
           <!-- One box: the drop area, and the photos inside it. It scrolls on its own,
                so adding photos never pushes the page (or Continue) down. -->
           <div
-            class="mt-5 rounded-3xl border-2 border-dashed p-3 transition lg:flex-1 lg:min-h-0 overflow-y-auto overscroll-contain dark:[color-scheme:dark]"
+            class="mt-5 rounded-3xl border-2 border-dashed p-3 transition min-h-[12rem] lg:flex-1 lg:min-h-[12rem] overflow-y-auto overscroll-contain dark:[color-scheme:dark]"
             :class="dragOver === 'photo' ? 'border-brand-gold bg-brand-gold/[0.08]' : 'border-brand-navy/15 dark:border-white/15'"
             @dragover.prevent="dragOver = 'photo'"
             @dragleave.prevent="dragOver = null"
@@ -505,7 +516,7 @@ onUnmounted(() => {
           </p>
 
           <div
-            class="mt-5 rounded-3xl border-2 border-dashed p-3 transition lg:flex-1 lg:min-h-0 overflow-y-auto overscroll-contain dark:[color-scheme:dark]"
+            class="mt-5 rounded-3xl border-2 border-dashed p-3 transition min-h-[12rem] lg:flex-1 lg:min-h-[12rem] overflow-y-auto overscroll-contain dark:[color-scheme:dark]"
             :class="dragOver === 'pano' ? 'border-brand-gold bg-brand-gold/[0.08]' : 'border-brand-navy/15 dark:border-white/15'"
             @dragover.prevent="dragOver = 'pano'"
             @dragleave.prevent="dragOver = null"

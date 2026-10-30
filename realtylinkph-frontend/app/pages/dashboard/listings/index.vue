@@ -343,6 +343,8 @@ function statusOf(p: Property) {
           <p v-else-if="prop.status === 'draft' && prop.is_complete === false" class="mt-3 rounded-2xl bg-amber-500/[0.08] ring-1 ring-amber-500/20 px-3.5 py-2.5 text-xs text-amber-800 dark:text-amber-300">
             Half-finished. It needs a title, price, address and a photo before it can go live.
           </p>
+          <!-- Everything else: a short look at the description, so cards in a row fill alike -->
+          <p v-else-if="prop.description" class="mt-3 line-clamp-3 text-xs leading-relaxed text-brand-navy/60 dark:text-white/55">{{ prop.description }}</p>
 
           <!-- Actions -->
           <div class="mt-auto flex items-center gap-2 pt-4">
