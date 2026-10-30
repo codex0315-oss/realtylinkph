@@ -5,8 +5,6 @@ definePageMeta({ layout: 'dashboard' })
 </script>
 
 <template>
-  <!-- Same centred column as Browse and the overview (max-w-6xl) -->
-  <div class="max-w-6xl mx-auto">
-    <PropertyDetailView />
-  </div>
+  <!-- The view sets its own width in the dashboard (page-shell: 72rem, wider on big screens) -->
+  <PropertyDetailView />
 </template>

@@ -296,7 +296,7 @@ function startReapply() {
 </script>
 
 <template>
-  <div class="max-w-6xl mx-auto">
+  <div class="page-shell">
 
     <!-- ░░ Submit overlay: real upload progress ░░ -->
     <Teleport to="body">
@@ -334,8 +334,8 @@ function startReapply() {
     </header>
 
     <!-- ════════ Submitted / under review ════════ -->
-    <div v-if="showStatus" class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_20rem] gap-6 items-start">
-    <section class="vcard lg:sticky lg:top-24">
+    <div v-if="showStatus" class="grid grid-cols-1 cw-lg:grid-cols-[minmax(0,1fr)_20rem] gap-6 items-start">
+    <section class="vcard cw-lg:sticky cw-lg:top-24">
       <div class="flex flex-wrap items-start gap-4">
         <span class="h-14 w-14 flex-none rounded-2xl bg-amber-500/10 text-amber-600 dark:text-amber-400 flex items-center justify-center">
           <svg class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
@@ -353,7 +353,7 @@ function startReapply() {
       </div>
 
       <!-- Tracker -->
-      <ol class="mt-7 grid grid-cols-1 sm:grid-cols-4 gap-3">
+      <ol class="mt-7 grid grid-cols-1 cw-sm:grid-cols-2 cw-md:grid-cols-4 gap-3">
         <li
           v-for="(t, i) in TRACK"
           :key="t.label"
@@ -440,8 +440,8 @@ function startReapply() {
     </div>
 
     <!-- ════════ Not approved ════════ -->
-    <div v-else-if="showRejected" class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_20rem] gap-6 items-start">
-    <section class="vcard lg:sticky lg:top-24">
+    <div v-else-if="showRejected" class="grid grid-cols-1 cw-lg:grid-cols-[minmax(0,1fr)_20rem] gap-6 items-start">
+    <section class="vcard cw-lg:sticky cw-lg:top-24">
       <div class="flex flex-wrap items-start gap-4">
         <span class="h-14 w-14 flex-none rounded-2xl bg-red-500/10 text-red-600 dark:text-red-400 flex items-center justify-center">
           <svg class="h-7 w-7" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m9-.75a9 9 0 11-18 0 9 9 0 0118 0zm-9 3.75h.008v.008H12v-.008z" /></svg>
@@ -458,7 +458,7 @@ function startReapply() {
       </div>
 
       <p class="mt-5 mb-2 text-sm font-semibold text-brand-navy dark:text-white">Before you re-apply</p>
-      <ul class="grid grid-cols-1 sm:grid-cols-2 gap-2 text-sm text-brand-navy/75 dark:text-white/70">
+      <ul class="grid grid-cols-1 cw-sm:grid-cols-2 gap-2 text-sm text-brand-navy/75 dark:text-white/70">
         <li v-for="t in TIPS" :key="t" class="flex items-start gap-2">
           <svg class="mt-0.5 h-4 w-4 flex-none text-brand-gold-deep dark:text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
           {{ t }}
@@ -507,7 +507,7 @@ function startReapply() {
     </div>
 
     <!-- ════════ Wizard ════════ -->
-    <div v-else class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_20rem] gap-6 items-start">
+    <div v-else class="grid grid-cols-1 cw-lg:grid-cols-[minmax(0,1fr)_20rem] gap-6 items-start">
       <div class="min-w-0">
 
         <!-- Step bar -->
@@ -525,7 +525,7 @@ function startReapply() {
                 :class="step > i + 1 ? 'bg-emerald-500' : step === i + 1 ? 'bg-brand-gold' : 'bg-brand-navy/10 dark:bg-white/10'"
               />
               <span
-                class="mt-1.5 hidden sm:block truncate text-[0.6875rem]"
+                class="mt-1.5 hidden cw-sm:block truncate text-[0.6875rem]"
                 :class="step === i + 1 ? 'font-bold text-brand-navy dark:text-white' : step > i + 1 ? 'text-brand-navy/60 dark:text-white/55' : 'text-brand-navy/35 dark:text-white/30'"
               >{{ label }}</span>
             </li>
@@ -541,7 +541,7 @@ function startReapply() {
             <div v-if="step === 0" key="choose">
               <h2 class="font-heading text-xl font-semibold text-brand-navy dark:text-white">What are you applying as?</h2>
               <p class="mt-1 mb-5 text-sm text-brand-text-secondary dark:text-white/55">This decides which documents we ask for.</p>
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-4">
+              <div class="grid grid-cols-1 cw-sm:grid-cols-2 gap-4">
                 <button
                   v-for="p in PATHS"
                   :key="p.type"
@@ -576,7 +576,7 @@ function startReapply() {
             <div v-else-if="stepKey === 'Information'" key="info">
               <h2 class="font-heading text-xl font-semibold text-brand-navy dark:text-white">Your information</h2>
               <p class="mt-1 mb-6 text-sm text-brand-text-secondary dark:text-white/55">Use your name exactly as it appears on your PRC record.</p>
-              <div class="grid grid-cols-1 sm:grid-cols-2 gap-5">
+              <div class="grid grid-cols-1 cw-sm:grid-cols-2 gap-5">
                 <div>
                   <label for="v-name" :class="labelCls">Full name <span class="text-red-500" aria-hidden="true">*</span></label>
                   <input id="v-name" v-model="form.fullName" type="text" autocomplete="name" aria-required="true" :class="fieldCls" />
@@ -604,20 +604,20 @@ function startReapply() {
               <p class="mt-1 mb-5 text-sm text-brand-text-secondary dark:text-white/55">A clear photo or PDF of the front. JPG, PNG, WebP or PDF, up to 5 MB.</p>
 
               <!-- Picked -->
-              <div v-if="files[docKey]" class="flex flex-col sm:flex-row items-center gap-4 rounded-3xl p-4 ring-1 ring-emerald-500/30 bg-emerald-500/[0.05]">
-                <img v-if="previews[docKey]" :src="previews[docKey]" alt="" class="h-36 w-full sm:w-56 flex-none rounded-2xl object-cover ring-1 ring-brand-navy/10" />
-                <span v-else class="h-36 w-full sm:w-56 flex-none rounded-2xl flex flex-col items-center justify-center bg-white dark:bg-white/[0.06] ring-1 ring-brand-navy/10 dark:ring-white/10 text-brand-navy/60 dark:text-white/60">
+              <div v-if="files[docKey]" class="flex flex-col cw-sm:flex-row items-center gap-4 rounded-3xl p-4 ring-1 ring-emerald-500/30 bg-emerald-500/[0.05]">
+                <img v-if="previews[docKey]" :src="previews[docKey]" alt="" class="h-36 w-full cw-sm:w-56 flex-none rounded-2xl object-cover ring-1 ring-brand-navy/10" />
+                <span v-else class="h-36 w-full cw-sm:w-56 flex-none rounded-2xl flex flex-col items-center justify-center bg-white dark:bg-white/[0.06] ring-1 ring-brand-navy/10 dark:ring-white/10 text-brand-navy/60 dark:text-white/60">
                   <svg class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
                   <span class="mt-1 text-xs font-bold">PDF</span>
                 </span>
                 <div class="min-w-0 flex-1 text-center sm:text-left">
-                  <p class="flex items-center justify-center sm:justify-start gap-1.5 text-sm font-semibold text-emerald-700 dark:text-emerald-400">
+                  <p class="flex items-center justify-center cw-sm:justify-start gap-1.5 text-sm font-semibold text-emerald-700 dark:text-emerald-400">
                     <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.6" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
                     Uploaded
                   </p>
                   <p class="mt-0.5 truncate text-sm text-brand-navy dark:text-white">{{ files[docKey]!.name }}</p>
                   <p class="text-xs text-brand-navy/50 dark:text-white/45">{{ (files[docKey]!.size / 1024 / 1024).toFixed(1) }} MB</p>
-                  <div class="mt-3 flex justify-center sm:justify-start gap-2">
+                  <div class="mt-3 flex justify-center cw-sm:justify-start gap-2">
                     <label class="cursor-pointer rounded-full px-4 py-2 text-xs font-bold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20 transition">
                       Replace
                       <input type="file" class="sr-only" accept="image/*,application/pdf" @change="setDoc(docKey, $event)" />
@@ -664,16 +664,16 @@ function startReapply() {
                   <p class="text-xs font-bold uppercase tracking-wide text-brand-navy/55 dark:text-white/50">Your information</p>
                   <button type="button" class="text-xs font-bold text-brand-gold-deep dark:text-brand-gold hover:underline underline-offset-4" @click="goStep('Information')">Edit</button>
                 </div>
-                <dl class="grid grid-cols-1 sm:grid-cols-2 text-sm">
+                <dl class="grid grid-cols-1 cw-sm:grid-cols-2 text-sm">
                   <div class="px-4 py-3 border-t border-brand-navy/[0.06] dark:border-white/10"><dt class="text-xs text-brand-navy/50 dark:text-white/45">Applying as</dt><dd class="font-semibold text-brand-navy dark:text-white capitalize">{{ type }}</dd></div>
                   <div class="px-4 py-3 border-t border-brand-navy/[0.06] dark:border-white/10"><dt class="text-xs text-brand-navy/50 dark:text-white/45">Full name</dt><dd class="font-semibold text-brand-navy dark:text-white">{{ form.fullName }}</dd></div>
                   <div class="px-4 py-3 border-t border-brand-navy/[0.06] dark:border-white/10"><dt class="text-xs text-brand-navy/50 dark:text-white/45">{{ type === 'broker' ? 'PRC license no.' : 'Accreditation no.' }}</dt><dd class="font-semibold text-brand-navy dark:text-white">{{ form.prcNumber || '—' }}</dd></div>
                   <div class="px-4 py-3 border-t border-brand-navy/[0.06] dark:border-white/10"><dt class="text-xs text-brand-navy/50 dark:text-white/45">Mobile</dt><dd class="font-semibold text-brand-navy dark:text-white">{{ form.mobile || '—' }}</dd></div>
-                  <div v-if="type === 'salesperson'" class="px-4 py-3 border-t border-brand-navy/[0.06] dark:border-white/10 sm:col-span-2"><dt class="text-xs text-brand-navy/50 dark:text-white/45">Supervising broker</dt><dd class="font-semibold text-brand-navy dark:text-white">{{ form.supervisingBroker || '—' }}</dd></div>
+                  <div v-if="type === 'salesperson'" class="px-4 py-3 border-t border-brand-navy/[0.06] dark:border-white/10 cw-sm:col-span-2"><dt class="text-xs text-brand-navy/50 dark:text-white/45">Supervising broker</dt><dd class="font-semibold text-brand-navy dark:text-white">{{ form.supervisingBroker || '—' }}</dd></div>
                 </dl>
               </div>
 
-              <div class="mt-4 grid grid-cols-2 sm:grid-cols-3 gap-3">
+              <div class="mt-4 grid grid-cols-2 cw-sm:grid-cols-3 gap-3">
                 <div v-for="d in reviewDocs" :key="d.k" class="rounded-2xl p-3 ring-1 ring-brand-navy/[0.08] dark:ring-white/10">
                   <div class="mb-2 flex items-center justify-between">
                     <p class="text-[0.6875rem] font-bold uppercase tracking-wide text-brand-navy/50 dark:text-white/45">{{ d.label }}</p>
@@ -730,7 +730,7 @@ function startReapply() {
       </div>
 
       <!-- ░░ Side column ░░ -->
-      <aside class="lg:sticky lg:top-24 space-y-4">
+      <aside class="cw-lg:sticky cw-lg:top-24 space-y-4">
         <section class="vside">
           <p class="text-sm font-bold text-brand-navy dark:text-white">What you'll need</p>
           <p v-if="!type" class="mt-2 text-xs leading-relaxed text-brand-text-secondary dark:text-white/55">Pick <span class="font-semibold text-brand-navy dark:text-white">Broker</span> or <span class="font-semibold text-brand-navy dark:text-white">Salesperson</span> to see the exact list.</p>

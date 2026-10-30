@@ -86,6 +86,28 @@ const router = useRouter()
 const inDashboard = computed(() => route.path.startsWith('/dashboard'))
 const browseHref = computed(() => (inDashboard.value ? '/dashboard/browse' : '/properties'))
 
+/*
+ * Layout rules. In the dashboard the page gets less than the screen (sidebar + a
+ * docked panel), so it follows the room it really has (cw-*, see tailwind.config).
+ * Public pages render on the server, where nothing can be measured, so they keep
+ * the screen rules. Written out in full so Tailwind finds every class.
+ */
+const L = computed(() => inDashboard.value
+  ? {
+      shell:  'page-shell',
+      gallery: 'h-[17rem] cw-sm:h-[26rem] cw-lg:h-[32rem]',
+      grid:   'cw-lg:grid-cols-3 gap-6 cw-lg:gap-8',
+      span2:  'cw-lg:col-span-2',
+      aside:  'cw-lg:col-start-3 cw-lg:row-start-1 cw-lg:row-span-3 cw-lg:sticky cw-lg:top-24',
+    }
+  : {
+      shell:  'max-w-content mx-auto',
+      gallery: 'h-[17rem] sm:h-[26rem] lg:h-[32rem]',
+      grid:   'lg:grid-cols-3 gap-6 lg:gap-8',
+      span2:  'lg:col-span-2',
+      aside:  'lg:col-start-3 lg:row-start-1 lg:row-span-3 lg:sticky lg:top-24',
+    })
+
 const ORIGINS: Array<[RegExp, string]> = [
   [/^\/(dashboard\/browse|properties)(\?|$)/, 'browse'],
   [/^\/dashboard\/saved/, 'Saved homes'],
@@ -238,7 +260,7 @@ onMounted(async () => {
 </script>
 
 <template>
-  <div class="max-w-content mx-auto">
+  <div :class="L.shell">
     <div v-if="loading" class="space-y-4">
       <AppSkeleton width="100%" height="460px" rounded="lg" />
       <AppSkeleton width="60%" height="32px" />
@@ -263,7 +285,8 @@ onMounted(async () => {
       <!-- ░░ Gallery: one large slide + thumbnail strip ░░ -->
       <div v-if="galleryPhotos.length" class="mt-5 detail-rise" style="animation-delay: 60ms">
         <div
-          class="relative overflow-hidden rounded-[1.75rem] bg-brand-navy/5 dark:bg-white/5 h-[17rem] sm:h-[26rem] lg:h-[32rem]
+          :class="L.gallery"
+          class="relative overflow-hidden rounded-[1.75rem] bg-brand-navy/5 dark:bg-white/5
                  shadow-[0_30px_60px_-34px_rgba(11,42,92,0.55)] ring-1 ring-brand-navy/[0.06] dark:ring-white/10 group/gal
                  focus:outline-none focus-visible:ring-2 focus-visible:ring-brand-gold"
           tabindex="0"
@@ -400,10 +423,10 @@ onMounted(async () => {
            Grid so the action card can sit second on a phone (right after the
            title, where the price and buttons are needed) yet hold the whole
            right column on desktop. -->
-      <div class="mt-8 grid grid-cols-1 lg:grid-cols-3 gap-6 lg:gap-8 items-start">
+      <div class="mt-8 grid grid-cols-1 items-start" :class="L.grid">
 
         <!-- Title, price, facts -->
-        <section class="lg:col-span-2 detail-card detail-rise" style="animation-delay: 120ms">
+        <section class="detail-card detail-rise" :class="L.span2" style="animation-delay: 120ms">
           <div class="flex flex-wrap items-start justify-between gap-x-6 gap-y-3">
             <div class="min-w-0">
               <div class="flex flex-wrap items-center gap-2">
@@ -444,7 +467,7 @@ onMounted(async () => {
         </section>
 
         <!-- ░░ Action card (2nd on phones; whole right column on desktop) ░░ -->
-        <aside class="lg:col-start-3 lg:row-start-1 lg:row-span-3 lg:sticky lg:top-24 detail-rise" style="animation-delay: 180ms">
+        <aside class="detail-rise" :class="L.aside" style="animation-delay: 180ms">
           <div class="detail-card !p-0 overflow-hidden">
             <!-- Owner -->
             <div v-if="isOwner" class="p-6">
@@ -557,7 +580,7 @@ onMounted(async () => {
         </aside>
 
         <!-- About -->
-        <section v-if="property.description" v-reveal class="lg:col-span-2 detail-card">
+        <section v-if="property.description" v-reveal class="detail-card" :class="L.span2">
           <h2 class="font-heading text-xl font-semibold text-brand-navy dark:text-white">About this property</h2>
           <div class="relative mt-3">
             <p
@@ -579,7 +602,7 @@ onMounted(async () => {
         </section>
 
         <!-- Location -->
-        <section id="location" v-reveal class="lg:col-span-2 detail-card scroll-mt-28">
+        <section id="location" v-reveal class="detail-card scroll-mt-28" :class="L.span2">
           <h2 class="font-heading text-xl font-semibold text-brand-navy dark:text-white">Location</h2>
           <p class="mt-1 mb-4 text-sm text-brand-text-secondary dark:text-white/60">{{ property.address }}</p>
           <div class="overflow-hidden rounded-2xl ring-1 ring-brand-navy/[0.06] dark:ring-white/10">
@@ -588,7 +611,7 @@ onMounted(async () => {
         </section>
 
         <!-- Getting around: from me + nearby essentials -->
-        <section v-if="property.status === 'published' && property.lat && property.lng" id="nearby" v-reveal class="lg:col-span-2 detail-card scroll-mt-28">
+        <section v-if="property.status === 'published' && property.lat && property.lng" id="nearby" v-reveal class="detail-card scroll-mt-28" :class="L.span2">
           <h2 class="font-heading text-xl font-semibold text-brand-navy dark:text-white">Getting around</h2>
           <p class="mt-1 mb-5 text-sm text-brand-text-secondary dark:text-white/60">How close this home is to you and to everyday essentials.</p>
           <ClientOnly>
