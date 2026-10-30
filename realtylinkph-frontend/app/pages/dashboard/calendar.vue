@@ -250,7 +250,7 @@ const fieldClass =
     <header class="mb-6 flex flex-wrap items-end justify-between gap-4">
       <div class="min-w-0">
         <p class="text-[0.6875rem] font-bold uppercase tracking-[0.18em] text-brand-navy/45 dark:text-white/40">Schedule</p>
-        <h1 class="mt-1.5 font-display text-2xl sm:text-[1.875rem] font-bold tracking-[-0.01em] leading-tight text-brand-navy dark:text-white">Calendar</h1>
+        <h1 class="mt-1.5 font-display text-2xl cw-sm:text-[1.875rem] font-bold tracking-[-0.01em] leading-tight text-brand-navy dark:text-white">Calendar</h1>
         <p class="mt-1.5 text-sm text-brand-text-secondary dark:text-white/55">
           <template v-if="upcoming.length">
             <span class="font-semibold text-brand-navy dark:text-white">{{ upcoming.length }}</span> upcoming {{ upcoming.length === 1 ? 'viewing' : 'viewings' }}<template v-if="pendingCount"> · <span class="font-semibold text-amber-700 dark:text-amber-400">{{ pendingCount }}</span> waiting for you to confirm</template>.
@@ -264,7 +264,7 @@ const fieldClass =
       </DashCta>
     </header>
 
-    <div v-if="loading" class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_22rem] gap-6">
+    <div v-if="loading" class="grid grid-cols-1 cw-lg:grid-cols-[minmax(0,1fr)_22rem] gap-6">
       <AppSkeleton width="100%" height="560px" rounded="lg" />
       <AppSkeleton width="100%" height="560px" rounded="lg" />
     </div>
@@ -300,11 +300,11 @@ const fieldClass =
         </div>
       </section>
 
-      <div class="grid grid-cols-1 lg:grid-cols-[minmax(0,1fr)_22rem] gap-6 items-start">
+      <div class="grid grid-cols-1 cw-lg:grid-cols-[minmax(0,1fr)_22rem] gap-6 items-start">
         <!-- ═══════════ Month ═══════════ -->
         <section
           ref="monthEl"
-          class="flex flex-col rounded-3xl bg-white dark:bg-[#0B1A35] ring-1 ring-brand-navy/[0.07] dark:ring-white/[0.08] p-4 sm:p-5"
+          class="flex flex-col rounded-3xl bg-white dark:bg-[#0B1A35] ring-1 ring-brand-navy/[0.07] dark:ring-white/[0.08] p-4 cw-sm:p-5"
           :style="monthHeight ? { height: monthHeight } : undefined"
         >
           <div class="mb-4 flex flex-wrap items-center justify-between gap-3">
@@ -331,12 +331,12 @@ const fieldClass =
           </div>
 
           <!-- Days -->
-          <div class="grid grid-cols-7 gap-1.5 lg:flex-1 lg:min-h-0" :style="{ gridTemplateRows: `repeat(${weeks}, minmax(0, 1fr))` }">
+          <div class="grid grid-cols-7 gap-1.5 cw-lg:flex-1 cw-lg:min-h-0" :style="{ gridTemplateRows: `repeat(${weeks}, minmax(0, 1fr))` }">
             <button
               v-for="c in cells"
               :key="c.iso"
               type="button"
-              class="relative flex min-h-[3.5rem] sm:min-h-[5.75rem] lg:min-h-0 flex-col overflow-hidden rounded-2xl p-1.5 sm:p-2 text-left ring-1 transition"
+              class="relative flex min-h-[3.5rem] cw-sm:min-h-[5.75rem] cw-lg:min-h-0 flex-col overflow-hidden rounded-2xl p-1.5 cw-sm:p-2 text-left ring-1 transition"
               :class="[
                 c.iso === selectedISO
                   ? 'ring-2 ring-brand-navy dark:ring-brand-gold bg-brand-navy/[0.03] dark:bg-white/[0.06]'
@@ -364,7 +364,7 @@ const fieldClass =
               </span>
 
               <!-- Desktop: what's on the day -->
-              <span class="mt-1 hidden sm:flex flex-col gap-1 min-w-0">
+              <span class="mt-1 hidden cw-sm:flex flex-col gap-1 min-w-0">
                 <span v-if="dayFullBlock(c.iso)" class="truncate rounded-md bg-red-500/10 px-1.5 py-0.5 text-[0.625rem] font-semibold text-red-700 dark:text-red-300">Blocked</span>
                 <span
                   v-for="v in (viewingsMap[c.iso] ?? []).slice(0, 2)"
@@ -389,7 +389,7 @@ const fieldClass =
         </section>
 
         <!-- ═══════════ Selected day ═══════════ -->
-        <aside class="space-y-4 lg:sticky lg:top-24">
+        <aside class="space-y-4 cw-lg:sticky cw-lg:top-24">
           <section class="rounded-3xl bg-white dark:bg-[#0B1A35] ring-1 ring-brand-navy/[0.07] dark:ring-white/[0.08] p-5">
             <div class="flex items-center gap-3">
               <!-- bg-[#ffffff]: the dark-mode shim repaints bg-white navy -->

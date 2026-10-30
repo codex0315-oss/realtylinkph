@@ -345,8 +345,8 @@ if (convStore.conversations.length) {
   >
     <!-- ════════ Conversation list ════════ -->
     <div
-      class="w-full lg:w-80 flex-shrink-0 flex flex-col border-r border-gray-100 dark:border-white/10"
-      :class="convStore.activeId ? 'hidden lg:flex' : 'flex'"
+      class="w-full cw-lg:w-80 flex-shrink-0 flex flex-col border-r border-gray-100 dark:border-white/10"
+      :class="convStore.activeId ? 'hidden cw-lg:flex' : 'flex'"
     >
       <!-- List header -->
       <div class="px-5 pt-5 pb-3">
@@ -433,7 +433,7 @@ if (convStore.conversations.length) {
           <NuxtLink
             v-if="profileHref(other(conv))"
             :to="profileHref(other(conv))!"
-            class="flex-shrink-0 p-1.5 rounded-lg text-gray-300 hover:text-brand-gold hover:bg-brand-gold/10 transition-all lg:opacity-0 lg:group-hover:opacity-100"
+            class="flex-shrink-0 p-1.5 rounded-lg text-gray-300 hover:text-brand-gold hover:bg-brand-gold/10 transition-all cw-lg:opacity-0 cw-lg:group-hover:opacity-100"
             title="View profile"
             @click.stop
           >
@@ -443,7 +443,7 @@ if (convStore.conversations.length) {
           <!-- Delete (shown on hover, like the profile action). Confirms first. -->
           <button
             type="button"
-            class="flex-shrink-0 p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all lg:opacity-0 lg:group-hover:opacity-100"
+            class="flex-shrink-0 p-1.5 rounded-lg text-gray-300 hover:text-red-500 hover:bg-red-50 dark:hover:bg-red-500/10 transition-all cw-lg:opacity-0 cw-lg:group-hover:opacity-100"
             title="Delete conversation"
             aria-label="Delete conversation"
             @click.stop="confirmDelete(conv)"
@@ -457,7 +457,7 @@ if (convStore.conversations.length) {
     <!-- ════════ Chat thread ════════ -->
     <div
       class="flex-1 flex-col min-w-0"
-      :class="convStore.activeId ? 'flex' : 'hidden lg:flex'"
+      :class="convStore.activeId ? 'flex' : 'hidden cw-lg:flex'"
     >
       <!-- Empty -->
       <div v-if="!convStore.activeId" class="flex-1 flex flex-col items-center justify-center text-center px-6">
@@ -473,7 +473,7 @@ if (convStore.conversations.length) {
       <template v-else>
         <!-- Thread header -->
         <div class="flex items-center gap-3 px-5 py-3.5 border-b border-gray-100 dark:border-white/10">
-          <button class="lg:hidden p-1.5 -ml-1 text-gray-500 dark:text-white/60 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10" @click="backToList">
+          <button class="cw-lg:hidden p-1.5 -ml-1 text-gray-500 dark:text-white/60 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10" @click="backToList">
             <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
           </button>
           <component
@@ -500,7 +500,7 @@ if (convStore.conversations.length) {
           <NuxtLink
             v-if="convStore.active?.property"
             :to="propertyHref(convStore.active.property.id)"
-            class="ml-auto hidden sm:flex items-center gap-2 text-xs text-gray-500 dark:text-white/50 bg-gray-50 dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg px-3 py-1.5 transition-colors max-w-[40%]"
+            class="ml-auto hidden cw-sm:flex items-center gap-2 text-xs text-gray-500 dark:text-white/50 bg-gray-50 dark:bg-white/5 hover:bg-gray-100 dark:hover:bg-white/10 rounded-lg px-3 py-1.5 transition-colors max-w-[40%]"
           >
             <svg class="h-3.5 w-3.5 text-brand-gold flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M3 12l2-2m0 0l7-7 7 7M5 10v10a1 1 0 001 1h3m10-11l2 2m-2-2v10a1 1 0 01-1 1h-3m-6 0a1 1 0 001-1v-4a1 1 0 011-1h2a1 1 0 011 1v4a1 1 0 001 1m-6 0h6" /></svg>
             <span class="truncate">{{ convStore.active.property.title }}</span>
@@ -664,17 +664,17 @@ if (convStore.conversations.length) {
             <button v-for="e in ['😀','😎','👍','🔥','❤️','🎉','🙏','🏡','✅','😂']" :key="e" class="text-lg hover:scale-125 transition-transform" @click="addEmoji(e)">{{ e }}</button>
           </div>
           <div class="flex items-center gap-2 bg-gray-50 dark:bg-white/5 rounded-full px-2 py-1.5 border border-gray-100 dark:border-white/10 focus-within:border-brand-gold/40 transition-colors">
-            <button class="p-2 text-gray-400 hover:text-brand-gold transition-colors" @click="showEmoji = !showEmoji">
+            <button class="p-2 flex-shrink-0 text-gray-400 hover:text-brand-gold transition-colors" @click="showEmoji = !showEmoji">
               <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
             </button>
-            <button class="p-2 text-gray-400 hover:text-brand-gold transition-colors" title="Attachments coming soon">
+            <button class="p-2 flex-shrink-0 text-gray-400 hover:text-brand-gold transition-colors" title="Attachments coming soon">
               <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
             </button>
             <input
               v-model="newMessage"
               type="text"
               placeholder="Type your message…"
-              class="flex-1 bg-transparent text-sm text-brand-navy dark:text-white placeholder-gray-400 outline-none py-2"
+              class="flex-1 min-w-0 w-full bg-transparent text-sm text-brand-navy dark:text-white placeholder-gray-400 outline-none py-2"
               @input="onType"
               @keydown.enter.prevent="send"
             />

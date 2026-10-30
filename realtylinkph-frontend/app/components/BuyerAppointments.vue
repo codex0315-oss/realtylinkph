@@ -161,7 +161,7 @@ const ICON = {
     <header class="flex flex-wrap items-end justify-between gap-4 mb-6">
       <div class="min-w-0">
         <p class="text-[0.6875rem] font-bold uppercase tracking-[0.18em] text-brand-navy/45 dark:text-white/40">Your viewings</p>
-        <h1 class="mt-1.5 font-display text-2xl sm:text-[1.875rem] font-bold tracking-[-0.01em] leading-tight text-brand-navy dark:text-white">Appointments</h1>
+        <h1 class="mt-1.5 font-display text-2xl cw-sm:text-[1.875rem] font-bold tracking-[-0.01em] leading-tight text-brand-navy dark:text-white">Appointments</h1>
         <p class="mt-1.5 text-sm text-brand-text-secondary dark:text-white/55">
           <template v-if="total">
             <span class="font-semibold text-brand-navy dark:text-white">{{ lists.upcoming.length }}</span> confirmed,
@@ -179,22 +179,22 @@ const ICON = {
 
     <slot name="banners" />
 
-    <div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_19rem]">
+    <div class="grid grid-cols-1 gap-6 cw-lg:grid-cols-[minmax(0,1fr)_19rem]">
       <div class="min-w-0 space-y-6">
         <!-- ── Next viewing ── -->
         <article
           v-if="next"
           class="appt-rise overflow-hidden rounded-3xl bg-white dark:bg-[#0B1A35] ring-1 ring-brand-navy/[0.07] dark:ring-white/[0.08]
-                 shadow-[0_24px_50px_-34px_rgba(11,42,92,0.45)] flex flex-col sm:flex-row"
+                 shadow-[0_24px_50px_-34px_rgba(11,42,92,0.45)] flex flex-col cw-sm:flex-row"
         >
-          <NuxtLink :to="propertyHref(next.property_id)" class="group relative block sm:w-[40%] aspect-[16/10] sm:aspect-auto sm:min-h-[14rem] flex-none overflow-hidden bg-brand-navy/10">
+          <NuxtLink :to="propertyHref(next.property_id)" class="group relative block cw-sm:w-[40%] aspect-[16/10] cw-sm:aspect-auto cw-sm:min-h-[14rem] flex-none overflow-hidden bg-brand-navy/10">
             <img v-if="photoOf(next)" :src="photoOf(next)!" alt="" class="absolute inset-0 h-full w-full object-cover transition-transform duration-700 group-hover:scale-105" />
             <div class="absolute inset-0 bg-gradient-to-t from-black/60 via-black/10 to-transparent" />
             <span class="absolute bottom-3 left-3 rounded-full bg-black/45 backdrop-blur-sm px-3 py-1 text-xs font-bold text-white ring-1 ring-white/20">
               {{ countdown(next) }}
             </span>
           </NuxtLink>
-          <div class="flex-1 min-w-0 p-5 sm:p-6 flex flex-col">
+          <div class="flex-1 min-w-0 p-5 cw-sm:p-6 flex flex-col">
             <div class="flex flex-wrap items-center gap-2">
               <p class="text-[0.6875rem] font-bold uppercase tracking-[0.16em] text-brand-navy/45 dark:text-white/40">Next viewing</p>
               <span
@@ -205,7 +205,7 @@ const ICON = {
                 {{ next.status === 'confirmed' ? 'Confirmed' : 'Waiting for agent' }}
               </span>
             </div>
-            <p class="mt-2 font-display text-xl sm:text-[1.375rem] font-bold leading-snug text-brand-navy dark:text-white">{{ longDate(next) }}</p>
+            <p class="mt-2 font-display text-xl cw-sm:text-[1.375rem] font-bold leading-snug text-brand-navy dark:text-white">{{ longDate(next) }}</p>
             <p class="text-sm font-semibold text-brand-gold-deep dark:text-brand-gold">{{ time(next) }}</p>
             <NuxtLink :to="propertyHref(next.property_id)" class="mt-3 block truncate text-[0.9375rem] font-semibold text-brand-navy dark:text-white hover:text-brand-gold-deep dark:hover:text-brand-gold transition-colors">
               {{ calm(next.property?.title) }}
@@ -269,13 +269,13 @@ const ICON = {
               <span class="h-px flex-1 bg-brand-navy/[0.08] dark:bg-white/10" />
             </h2>
 
-            <ol class="relative space-y-4 pl-[4.5rem] sm:pl-20">
+            <ol class="relative space-y-4 pl-[4.5rem] cw-sm:pl-20">
               <!-- the timeline spine -->
-              <span class="absolute left-[1.75rem] sm:left-8 top-2 bottom-2 w-px bg-gradient-to-b from-brand-gold/60 via-brand-navy/15 to-transparent dark:via-white/15" aria-hidden="true" />
+              <span class="absolute left-[1.75rem] cw-sm:left-8 top-2 bottom-2 w-px bg-gradient-to-b from-brand-gold/60 via-brand-navy/15 to-transparent dark:via-white/15" aria-hidden="true" />
 
               <li v-for="a in d.items" :key="a.id" class="relative">
                 <!-- date leaf on the spine -->
-                <span class="absolute -left-[4.5rem] sm:-left-20 top-0 w-14 overflow-hidden rounded-xl text-center bg-[#ffffff] ring-1 ring-brand-navy/10 shadow-[0_6px_14px_-8px_rgba(11,42,92,0.4)] dark:ring-white/10">
+                <span class="absolute -left-[4.5rem] cw-sm:-left-20 top-0 w-14 overflow-hidden rounded-xl text-center bg-[#ffffff] ring-1 ring-brand-navy/10 shadow-[0_6px_14px_-8px_rgba(11,42,92,0.4)] dark:ring-white/10">
                   <span class="block bg-brand-gold py-0.5 text-[0.625rem] font-bold uppercase tracking-wider text-[#0B2A5C]">{{ month(a) }}</span>
                   <span class="block pt-1 font-display text-lg font-bold leading-none text-[#0B2A5C]">{{ dayNum(a) }}</span>
                   <span class="block pb-1 pt-0.5 text-[0.5625rem] font-semibold text-[#0B2A5C]/55">{{ time(a) }}</span>
@@ -283,7 +283,7 @@ const ICON = {
 
                 <article class="rounded-2xl p-4 bg-white dark:bg-[#0B1A35] ring-1 ring-brand-navy/[0.07] dark:ring-white/[0.08] hover:ring-brand-gold/50 transition">
                   <div class="flex gap-3.5">
-                    <NuxtLink :to="propertyHref(a.property_id)" class="h-16 w-20 sm:h-[4.5rem] sm:w-24 flex-none overflow-hidden rounded-xl bg-brand-navy/5 dark:bg-white/10">
+                    <NuxtLink :to="propertyHref(a.property_id)" class="h-16 w-20 cw-sm:h-[4.5rem] cw-sm:w-24 flex-none overflow-hidden rounded-xl bg-brand-navy/5 dark:bg-white/10">
                       <img v-if="thumbOf(a)" :src="thumbOf(a)!" alt="" loading="lazy" class="h-full w-full object-cover" />
                     </NuxtLink>
                     <div class="min-w-0 flex-1">
@@ -370,7 +370,7 @@ const ICON = {
         </div>
 
         <!-- ── Nothing booked ── -->
-        <div v-if="!total" class="relative overflow-hidden rounded-3xl p-6 sm:p-8 bg-white dark:bg-[#0B1A35] ring-1 ring-brand-navy/[0.07] dark:ring-white/[0.08]">
+        <div v-if="!total" class="relative overflow-hidden rounded-3xl p-6 cw-sm:p-8 bg-white dark:bg-[#0B1A35] ring-1 ring-brand-navy/[0.07] dark:ring-white/[0.08]">
           <div class="absolute -right-10 -top-10 h-44 w-44 rounded-full bg-brand-gold/10 blur-2xl pointer-events-none" />
           <!-- Icon beside the heading, as on the overview's "Next viewing" card -->
           <div class="relative flex items-center gap-4">
@@ -382,7 +382,7 @@ const ICON = {
               <p class="mt-1 max-w-md text-sm text-brand-text-secondary dark:text-white/55">Seeing a place in person takes three steps.</p>
             </div>
           </div>
-          <ol class="relative mt-5 grid grid-cols-1 sm:grid-cols-3 gap-3">
+          <ol class="relative mt-5 grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(11rem,1fr))]">
             <li v-for="(s, i) in [['Pick a time', 'On any listing, choose a slot that suits you.'], ['Agent confirms', 'You get a notification as soon as they do.'], ['Go see it', 'Directions and a calendar reminder are here.']]" :key="i"
                 class="rounded-2xl p-4 bg-brand-cream/70 ring-1 ring-brand-navy/[0.05] dark:bg-white/[0.04] dark:ring-white/[0.06]">
               <span class="h-6 w-6 rounded-full flex items-center justify-center text-[0.6875rem] font-bold bg-brand-navy text-white dark:bg-brand-gold dark:text-brand-navy">{{ i + 1 }}</span>
@@ -398,7 +398,7 @@ const ICON = {
       </div>
 
       <!-- ── Side: tips + policy ── -->
-      <aside class="space-y-4 lg:sticky lg:top-24 lg:self-start">
+      <aside class="space-y-4 cw-lg:sticky cw-lg:top-24 cw-lg:self-start">
         <section class="rounded-3xl p-5 bg-brand-navy text-white ring-1 ring-brand-gold/25 relative overflow-hidden">
           <div class="absolute inset-0 bg-grid-gold opacity-[0.06] pointer-events-none" />
           <p class="relative text-[0.6875rem] font-bold uppercase tracking-[0.16em] text-brand-gold">Before you go</p>
