@@ -418,7 +418,7 @@ onUnmounted(() => {
           <li v-for="s in steps" :key="s.n">
             <button
               type="button"
-              class="w-full flex items-center gap-2.5 rounded-2xl px-2.5 py-2 text-left transition"
+              class="w-full flex items-center justify-center cw-sm:justify-start gap-2 cw-sm:gap-2.5 rounded-2xl px-2 cw-sm:px-2.5 py-2 text-left transition"
               :class="step === s.n ? 'bg-brand-navy text-white dark:bg-brand-gold dark:text-[#0B2A5C]' : 'hover:bg-brand-navy/[0.04] dark:hover:bg-white/[0.05]'"
               :aria-current="step === s.n ? 'step' : undefined"
               :title="s.desc"
@@ -658,7 +658,7 @@ onUnmounted(() => {
               <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>
               Back
             </button>
-            <span v-else class="text-xs text-brand-navy/45 dark:text-white/40">Step {{ step }} of 3</span>
+            <span v-else class="hidden cw-sm:inline text-xs text-brand-navy/45 dark:text-white/40">Step {{ step }} of 3</span>
 
             <!-- Preview: when there's no room beside the form, it opens in a dialog -->
             <button type="button" class="cw-lg:hidden inline-flex items-center gap-1.5 rounded-full px-4 py-2.5 text-sm font-semibold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20 transition" aria-label="Preview this listing" @click="previewOpen = true">
@@ -669,7 +669,7 @@ onUnmounted(() => {
             <button
               v-if="step < 3"
               type="button"
-              class="inline-flex items-center gap-2 rounded-full bg-brand-navy px-6 py-2.5 text-sm font-bold text-white hover:-translate-y-0.5 dark:bg-brand-gold dark:text-[#0B2A5C] transition"
+              class="whitespace-nowrap inline-flex items-center gap-2 rounded-full bg-brand-navy px-6 py-2.5 text-sm font-bold text-white hover:-translate-y-0.5 dark:bg-brand-gold dark:text-[#0B2A5C] transition"
               @click="step++"
             >
               {{ step === 2 && !panos.length ? 'Skip for now' : 'Continue' }}
@@ -679,7 +679,7 @@ onUnmounted(() => {
               v-else
               type="button"
               :disabled="!canSubmit || loading"
-              class="inline-flex items-center gap-2 rounded-full bg-brand-gold px-6 py-2.5 text-sm font-bold text-[#0B2A5C] shadow-[0_6px_20px_rgba(212,165,74,0.4)] hover:-translate-y-0.5 transition disabled:opacity-50 disabled:shadow-none disabled:translate-y-0"
+              class="whitespace-nowrap inline-flex items-center gap-2 rounded-full bg-brand-gold px-6 py-2.5 text-sm font-bold text-[#0B2A5C] shadow-[0_6px_20px_rgba(212,165,74,0.4)] hover:-translate-y-0.5 transition disabled:opacity-50 disabled:shadow-none disabled:translate-y-0"
               @click="submit"
             >
               <svg v-if="loading" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
