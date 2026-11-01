@@ -142,27 +142,6 @@
   .bg-gold-metal {
     background-image: linear-gradient(135deg, #F1D78F 0%, #D4A54A 42%, #A8772A 100%);
   }
-  /*
-   * Gold BUTTONS carry the same champagne sweep as the gold type in the hero
-   * (gold → light champagne → gold), so a button and the word beside it match.
-   * Only interactive elements: badges, dots and tints keep the flat gold. The
-   * colour underneath stays brand-gold, so a button with no gradient support
-   * still reads as gold, and hover brightens instead of swapping the colour.
-   */
-  button.bg-brand-gold,
-  a.bg-brand-gold,
-  [role='button'].bg-brand-gold,
-  .dark button.dark\:bg-brand-gold,
-  .dark a.dark\:bg-brand-gold {
-    background-image: linear-gradient(100deg, #D4A54A 0%, #F4E0A6 50%, #D4A54A 100%);
-  }
-  button.bg-brand-gold:not(:disabled):hover,
-  a.bg-brand-gold:hover,
-  .dark button.dark\:bg-brand-gold:not(:disabled):hover,
-  .dark a.dark\:bg-brand-gold:hover {
-    filter: brightness(1.06) saturate(1.05);
-  }
-
   .text-gold-metal {
     background-image: linear-gradient(100deg, #8E621A 0%, #B98630 50%, #8E621A 100%);
     -webkit-background-clip: text;
@@ -409,4 +388,31 @@
     transform: none !important;
     filter: none !important;
   }
+}
+
+/*
+ * Gold BUTTONS carry the same champagne sweep as the gold type in the hero
+ * (gold → light champagne → gold), so a button and the word beside it match.
+ * Only interactive elements: badges, dots and tints keep the flat gold. The
+ * colour underneath stays brand-gold, so a button with no gradient support
+ * still reads as gold, and hover brightens instead of swapping the colour.
+ *
+ * Plain CSS outside any layer on purpose: in @layer components Tailwind copies
+ * a rule like "button.bg-brand-gold" into every variant of bg-brand-gold
+ * (dark:, hover:) and breaks the selector each time. Buttons that are navy in
+ * light mode and gold in dark (the wizard's Continue) are matched by their
+ * class attribute for the same reason.
+ */
+button.bg-brand-gold,
+a.bg-brand-gold,
+[role='button'].bg-brand-gold,
+.dark button[class~='dark:bg-brand-gold'],
+.dark a[class~='dark:bg-brand-gold'] {
+  background-image: linear-gradient(100deg, #D4A54A 0%, #F4E0A6 50%, #D4A54A 100%);
+}
+button.bg-brand-gold:not(:disabled):hover,
+a.bg-brand-gold:hover,
+.dark button[class~='dark:bg-brand-gold']:not(:disabled):hover,
+.dark a[class~='dark:bg-brand-gold']:hover {
+  filter: brightness(1.06) saturate(1.05);
 }
