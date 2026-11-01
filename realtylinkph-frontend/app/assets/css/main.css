@@ -432,3 +432,25 @@ a.bg-brand-gold:hover,
   background-color: #0B1A35;
   color: #E9ECF3;
 }
+
+/*
+ * A gold outline in the same champagne sweep as the gold buttons. A gradient
+ * can't be a CSS border, so it is painted on a ::before and masked down to just
+ * the edge. --gold-outline-w sets the thickness. Plain CSS outside any layer,
+ * like the other gold rules above.
+ */
+.gold-outline {
+  position: relative;
+}
+.gold-outline::before {
+  content: '';
+  position: absolute;
+  inset: 0;
+  border-radius: inherit;
+  padding: var(--gold-outline-w, 1.5px);
+  background: linear-gradient(100deg, #D4A54A 0%, #F4E0A6 50%, #D4A54A 100%);
+  -webkit-mask: linear-gradient(#000 0 0) content-box, linear-gradient(#000 0 0);
+  -webkit-mask-composite: xor;
+  mask: linear-gradient(#000 0 0) content-box exclude, linear-gradient(#000 0 0);
+  pointer-events: none;
+}

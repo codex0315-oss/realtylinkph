@@ -377,7 +377,7 @@ const memberSince = computed(() =>
         <div class="flex flex-col cw-sm:flex-row cw-sm:items-end gap-4 cw-sm:gap-6">
           <!-- Photo, overlapping the cover -->
           <div class="relative w-max" :class="isBuyerView ? '-mt-11 sm:-mt-12' : '-mt-14 sm:-mt-16'">
-            <div :class="isBuyerView ? 'h-24 w-24 sm:h-[6.5rem] sm:w-[6.5rem]' : 'h-28 w-28 sm:h-32 sm:w-32'" class="rounded-full overflow-hidden ring-[5px] ring-white dark:ring-[#0d2550] shadow-xl bg-gold-metal flex items-center justify-center">
+            <div :class="isBuyerView ? 'h-24 w-24 sm:h-[6.5rem] sm:w-[6.5rem]' : 'h-28 w-28 sm:h-32 sm:w-32'" class="gold-outline [--gold-outline-w:3px] rounded-full overflow-hidden ring-[5px] ring-white dark:ring-[#0d2550] shadow-xl bg-gold-metal flex items-center justify-center">
               <img v-if="currentAvatar && !avatarFailed" :src="currentAvatar" alt="" referrerpolicy="no-referrer" class="w-full h-full object-cover" @error="avatarFailed = true" />
               <span v-else class="font-heading text-4xl font-semibold text-brand-navy">{{ form.name?.charAt(0) || '?' }}</span>
             </div>
@@ -466,7 +466,7 @@ const memberSince = computed(() =>
               v-for="t in activity"
               :key="t.label"
               :to="t.to || undefined"
-              class="pstat !py-2.5 block transition"
+              class="pstat gold-outline !py-2.5 block transition"
               :class="t.to ? 'hover:ring-brand-gold group' : ''"
             >
               <!-- One line, so every tile's number sits at the same height -->
