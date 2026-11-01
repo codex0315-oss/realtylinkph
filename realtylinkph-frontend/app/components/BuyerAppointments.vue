@@ -171,7 +171,8 @@ const ICON = {
           <template v-else>Viewings you book show up here, from request to visit.</template>
         </p>
       </div>
-      <DashCta to="/dashboard/browse">
+      <!-- With nothing booked, the empty card below carries the one call to action -->
+      <DashCta v-if="total" to="/dashboard/browse">
         <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 4.5v15m7.5-7.5h-15" /></svg>
         Book a viewing
       </DashCta>
@@ -179,7 +180,7 @@ const ICON = {
 
     <slot name="banners" />
 
-    <div class="grid grid-cols-1 gap-6 cw-lg:grid-cols-[minmax(0,1fr)_19rem]">
+    <div class="grid grid-cols-1 gap-6" :class="total ? 'cw-lg:grid-cols-[minmax(0,1fr)_19rem]' : ''">
       <div class="min-w-0 space-y-6">
         <!-- ── Next viewing ── -->
         <article
@@ -397,11 +398,13 @@ const ICON = {
         </div>
       </div>
 
-      <!-- ── Side: tips + policy ── -->
-      <aside class="space-y-4 cw-lg:sticky cw-lg:top-24 cw-lg:self-start">
-        <section class="rounded-3xl p-5 bg-brand-navy text-white ring-1 ring-brand-gold/25 relative overflow-hidden">
+      <!-- ── Side: tips + policy. Only once there is something booked; an empty
+           page keeps to the three steps and one way forward. ── -->
+      <aside v-if="total" class="space-y-4 cw-lg:sticky cw-lg:top-24 cw-lg:self-start">
+        <!-- The checklist is for a viewing that is actually happening -->
+        <section v-if="lists.upcoming.length" class="rounded-3xl p-5 bg-brand-navy text-white ring-1 ring-brand-gold/25 relative overflow-hidden">
           <div class="absolute inset-0 bg-grid-gold opacity-[0.06] pointer-events-none" />
-          <p class="relative text-[0.6875rem] font-bold uppercase tracking-[0.16em] text-brand-gold">Before you go</p>
+          <p class="relative text-[0.6875rem] font-bold uppercase tracking-[0.16em] text-brand-gold">Before your viewing</p>
           <ul class="relative mt-3 space-y-2.5 text-sm">
             <li v-for="t in ['Bring a valid ID', 'Arrive 10 minutes early', 'Take photos and notes as you walk through', 'Check water pressure, outlets and signal']" :key="t" class="flex items-start gap-2.5">
               <svg class="mt-0.5 h-4 w-4 flex-none text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
@@ -423,9 +426,15 @@ const ICON = {
             Cancelling
           </p>
           <p class="mt-2 text-xs leading-relaxed text-brand-text-secondary dark:text-white/55">
-            Cancel at least <span class="font-semibold text-brand-navy dark:text-white">24 hours</span> before the viewing and it never counts against you.
-            Five late cancellations in 30 days pause booking for a while.
+            Free up to <span class="font-semibold text-brand-navy dark:text-white">24 hours</span> before.
           </p>
+          <!-- The full rule, for whoever wants it; the booking and cancel dialogs explain it in place -->
+          <details class="group mt-1.5">
+            <summary class="cursor-pointer list-none text-xs font-semibold text-brand-gold-deep dark:text-brand-gold hover:underline underline-offset-4">How cancelling works</summary>
+            <p class="mt-1.5 text-xs leading-relaxed text-brand-text-secondary dark:text-white/55">
+              Cancelling a confirmed viewing less than 24 hours ahead counts as late. Five late cancellations in 30 days pause booking for a while.
+            </p>
+          </details>
           <p v-if="authStore.user?.reliability?.rate != null" class="mt-3 rounded-xl bg-brand-cream/80 dark:bg-white/[0.04] px-3 py-2 text-xs text-brand-navy/70 dark:text-white/60">
             You’ve kept <span class="font-bold text-brand-navy dark:text-white">{{ authStore.user.reliability.rate }}%</span> of your confirmed viewings.
           </p>

@@ -158,7 +158,8 @@ const ICON = {
           <template v-else>Viewings buyers book on your listings show up here, from request to visit.</template>
         </p>
       </div>
-      <DashCta to="/dashboard/calendar">
+      <!-- With nothing booked, the empty card below carries the way forward -->
+      <DashCta v-if="total" to="/dashboard/calendar">
         <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" :d="ICON.cal" /></svg>
         Open calendar
       </DashCta>
@@ -393,7 +394,6 @@ const ICON = {
           <div class="relative mt-6 flex flex-wrap gap-2">
             <NuxtLink to="/dashboard/listings" class="inline-flex items-center rounded-full px-4 py-2 text-xs font-bold bg-brand-navy text-white hover:-translate-y-0.5 dark:bg-brand-gold dark:text-brand-navy transition">Go to my listings</NuxtLink>
             <NuxtLink to="/dashboard/calendar" :class="btnGhost">Set my availability</NuxtLink>
-            <NuxtLink to="/dashboard/history" :class="btnGhost">Past viewings</NuxtLink>
           </div>
         </div>
       </div>
