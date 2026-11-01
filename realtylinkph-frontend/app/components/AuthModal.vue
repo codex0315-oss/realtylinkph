@@ -497,7 +497,7 @@ const fieldClass = `${fieldBase} ${fieldBorder}`
                 :disabled="loading"
                 class="w-full flex items-center justify-center gap-2 font-bold text-[0.9375rem] tracking-[0.01em] py-3.5 rounded-xl mt-6
                        transition-all duration-200 disabled:opacity-50 disabled:cursor-not-allowed"
-                style="background: linear-gradient(135deg, #D4A54A 0%, #D4A54A 100%); color: #0B2A5C; box-shadow: 0 4px 24px rgba(212,165,74,0.4);"
+                style="background: linear-gradient(100deg, #D4A54A 0%, #F4E0A6 50%, #D4A54A 100%); color: #0B2A5C; box-shadow: 0 4px 24px rgba(212,165,74,0.4);"
               >
                 <svg v-if="loading" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24">
                   <circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" />

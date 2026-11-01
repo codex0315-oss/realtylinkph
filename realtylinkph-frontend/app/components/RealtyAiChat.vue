@@ -145,7 +145,7 @@ async function send(text?: string) {
         />
         <button
           class="h-9 w-9 rounded-full flex items-center justify-center transition-all disabled:opacity-40 flex-shrink-0"
-          style="background: linear-gradient(135deg, #D4A54A 0%, #D4A54A 100%)"
+          style="background: linear-gradient(100deg, #D4A54A 0%, #F4E0A6 50%, #D4A54A 100%)"
           :disabled="loading || !input.trim()"
           @click="send()"
         >

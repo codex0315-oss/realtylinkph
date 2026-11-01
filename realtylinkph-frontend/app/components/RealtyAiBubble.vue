@@ -45,7 +45,7 @@ let startX = 0, startY = 0, baseX = 0, baseY = 0, moved = false
 // Steps left while a dashboard side panel is docked (default corner only).
 const dockRight = useDockRightOffset()
 const bubbleStyle = computed(() => {
-  const skin = 'background: linear-gradient(135deg, #D4A54A 0%, #D4A54A 100%); box-shadow: 0 10px 30px rgba(212,165,74,0.45);'
+  const skin = 'background: linear-gradient(100deg, #D4A54A 0%, #F4E0A6 50%, #D4A54A 100%); box-shadow: 0 10px 30px rgba(212,165,74,0.45);'
   return pos.value
     ? `${skin} left:${pos.value.x}px; top:${pos.value.y}px; right:auto; bottom:auto;`
     : `${skin} right:${dockRight.value}; bottom:1.5rem; transition: right 0.3s cubic-bezier(0.22, 1, 0.36, 1);`
