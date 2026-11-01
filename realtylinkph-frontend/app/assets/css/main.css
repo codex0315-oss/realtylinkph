@@ -416,3 +416,19 @@ a.bg-brand-gold:hover,
 .dark a[class~='dark:bg-brand-gold']:hover {
   filter: brightness(1.06) saturate(1.05);
 }
+
+/*
+ * Native dropdowns (<select>) in dark mode. The page forces light text on
+ * them, but the open list is the browser's own popup, white by default, so
+ * the options came out white on white. Tell the browser this is a dark
+ * control and give the options a dark ground with light text. Unlayered, for
+ * the same reason as the gold-button rules above.
+ */
+.dark select {
+  color-scheme: dark;
+}
+.dark select option,
+.dark select optgroup {
+  background-color: #0B1A35;
+  color: #E9ECF3;
+}
