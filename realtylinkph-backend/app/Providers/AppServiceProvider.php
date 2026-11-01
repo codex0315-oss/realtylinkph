@@ -9,6 +9,7 @@ use App\Policies\ReviewPolicy;
 use Illuminate\Database\Eloquent\Model;
 use Illuminate\Support\Facades\Gate;
 use Illuminate\Support\Facades\Mail;
+use Illuminate\Support\Facades\Route;
 use Illuminate\Support\ServiceProvider;
 use Symfony\Component\Mailer\Bridge\Brevo\Transport\BrevoTransportFactory;
 use Symfony\Component\Mailer\Transport\Dsn;
@@ -31,6 +32,14 @@ class AppServiceProvider extends ServiceProvider
         // submit reviews and admins couldn't hide them. Caught by the
         // workflow tests.
         Gate::policy(AgentReview::class, ReviewPolicy::class);
+
+        // Model IDs are numbers. Without this, /properties/abc reached Postgres as
+        // `where id = 'abc'` and failed with a 500; now it is a plain 404.
+        // ({id} is left out: notification IDs are UUIDs.)
+        Route::patterns(array_fill_keys([
+            'property', 'agent', 'appointment', 'conversation', 'review', 'ticket', 'user',
+            'inquiry', 'photo', 'profile', 'agentBlockedDate', 'quickReply',
+        ], '[0-9]+'));
 
         // Laravel has no built-in Brevo driver; Symfony Mailer does. This is
         // the HTTPS (`brevo+api`) variant, not `brevo+smtp` — the whole point

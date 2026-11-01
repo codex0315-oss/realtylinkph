@@ -2,7 +2,7 @@
 import type { Property } from '~/types'
 import { PROPERTY_TYPES } from '~/types'
 
-definePageMeta({ layout: 'dashboard' })
+definePageMeta({ layout: 'dashboard', middleware: 'agent' })
 
 /*
  * My Listings: the agent's active portfolio (sold ones live under History).

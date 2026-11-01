@@ -17,6 +17,16 @@ function initials(name: string): string {
   return name.split(/\s+/).map(s => s[0] ?? '').join('').slice(0, 2).toUpperCase()
 }
 
+// Reviewer photos that will not load (e.g. Google sign-in photos) show initials instead.
+const brokenAvatars = ref(new Set<number>())
+function avatarFailed(id: number): void { brokenAvatars.value = new Set(brokenAvatars.value).add(id) }
+// This section is server-rendered: a photo can fail before @error is attached.
+onMounted(() => {
+  strip.value?.querySelectorAll<HTMLImageElement>('img[data-review]').forEach((img) => {
+    if (img.complete && img.naturalWidth === 0) avatarFailed(Number(img.dataset.review))
+  })
+})
+
 const strip = ref<HTMLElement | null>(null)
 const atStart = ref(true)
 const atEnd = ref(false)
@@ -82,10 +92,13 @@ watch(() => props.reviews.length, () => nextTick(measure))
 
           <figcaption class="mt-6 pt-5 border-t border-brand-navy/[0.08] dark:border-white/10 flex items-center gap-3">
             <img
-              v-if="r.buyer_avatar"
+              v-if="r.buyer_avatar && !brokenAvatars.has(r.id)"
               :src="r.buyer_avatar"
               alt=""
               loading="lazy"
+              referrerpolicy="no-referrer"
+              :data-review="r.id"
+              @error="avatarFailed(r.id)"
               class="h-10 w-10 flex-none rounded-full object-cover"
             />
             <span

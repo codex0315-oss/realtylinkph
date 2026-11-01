@@ -1,7 +1,7 @@
 <script setup lang="ts">
 import type { Appointment, BlockedDate } from '~/types'
 
-definePageMeta({ layout: 'dashboard' })
+definePageMeta({ layout: 'dashboard', middleware: 'agent' })
 
 /*
  * The agent's Calendar, a page they open often:

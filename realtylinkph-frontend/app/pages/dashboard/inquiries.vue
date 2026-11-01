@@ -1,5 +1,5 @@
 <script setup lang="ts">
-definePageMeta({ layout: 'dashboard' })
+definePageMeta({ layout: 'dashboard', middleware: 'agent' })
 
 const { inquiries, loading, unreadCount, fetchInquiries, markRead } = useInquiry()
 const propertyHref = usePropertyHref()

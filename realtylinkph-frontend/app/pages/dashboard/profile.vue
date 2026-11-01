@@ -19,6 +19,9 @@ const profileSaved  = ref(false)
 const profileError  = ref<string | null>(null)
 
 const currentAvatar = computed(() => avatarPreview.value || authStore.user?.avatar || null)
+// A photo that will not load (e.g. a Google sign-in photo) shows the initial instead.
+const avatarFailed = ref(false)
+watch(currentAvatar, () => { avatarFailed.value = false })
 
 function onAvatarChange(e: Event) {
   const file = (e.target as HTMLInputElement).files?.[0]
@@ -375,7 +378,7 @@ const memberSince = computed(() =>
           <!-- Photo, overlapping the cover -->
           <div class="relative w-max" :class="isBuyerView ? '-mt-11 sm:-mt-12' : '-mt-14 sm:-mt-16'">
             <div :class="isBuyerView ? 'h-24 w-24 sm:h-[6.5rem] sm:w-[6.5rem]' : 'h-28 w-28 sm:h-32 sm:w-32'" class="rounded-full overflow-hidden ring-[5px] ring-white dark:ring-[#0d2550] shadow-xl bg-gold-metal flex items-center justify-center">
-              <img v-if="currentAvatar" :src="currentAvatar" alt="" class="w-full h-full object-cover" />
+              <img v-if="currentAvatar && !avatarFailed" :src="currentAvatar" alt="" referrerpolicy="no-referrer" class="w-full h-full object-cover" @error="avatarFailed = true" />
               <span v-else class="font-heading text-4xl font-semibold text-brand-navy">{{ form.name?.charAt(0) || '?' }}</span>
             </div>
             <label

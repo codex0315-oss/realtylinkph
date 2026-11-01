@@ -2,7 +2,7 @@
 import type { PropertyType, OfferType, Property } from '~/types'
 import { PROPERTY_TYPES } from '~/types'
 
-definePageMeta({ layout: 'dashboard' })
+definePageMeta({ layout: 'dashboard', middleware: 'agent' })
 
 const router = useRouter()
 const route  = useRoute()

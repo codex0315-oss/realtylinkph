@@ -161,6 +161,11 @@ const reviewTotal  = computed(() => profile.value?.review_count ?? reviews.value
 const rating       = computed(() => Number(profile.value?.average_rating ?? averageRating.value) || 0)
 
 const initials = computed(() => (profile.value?.name ?? '?').split(/\s+/).map(s => s[0] ?? '').join('').slice(0, 2).toUpperCase())
+// A photo that will not load (e.g. a Google sign-in photo) falls back to the initials.
+const avatarFailed = ref(false)
+const avatarEl = ref<HTMLImageElement | null>(null)
+watch(() => profile.value?.avatar, () => { avatarFailed.value = false })
+onMounted(() => { if (avatarEl.value?.complete && avatarEl.value.naturalWidth === 0) avatarFailed.value = true })
 
 /* Buyers message in-app; guests are asked to sign in; agents/admins see neither. */
 const canMessage = computed(() => authStore.isAuthenticated && authStore.isBuyer)
@@ -260,9 +265,12 @@ function ago(iso: string): string {
             <!-- Avatar, overlapping the cover -->
             <div class="relative -mt-14 sm:-mt-16 w-max">
               <img
-                v-if="profile.avatar"
+                v-if="profile.avatar && !avatarFailed"
+                ref="avatarEl"
                 :src="profile.avatar"
                 :alt="profile.name"
+                referrerpolicy="no-referrer"
+                @error="avatarFailed = true"
                 class="h-28 w-28 sm:h-32 sm:w-32 rounded-full object-cover ring-[5px] ring-white dark:ring-[#0d2550] shadow-xl"
               />
               <span

@@ -2,7 +2,7 @@
 import type { PropertyType, OfferType } from '~/types'
 import { PROPERTY_TYPES } from '~/types'
 
-definePageMeta({ layout: 'dashboard' })
+definePageMeta({ layout: 'dashboard', middleware: 'agent' })
 
 /*
  * Edit listing, in the same shape as New listing: title with the stepper

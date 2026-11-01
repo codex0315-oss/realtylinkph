@@ -36,6 +36,13 @@ const failed = ref(false)
 watch(() => props.src, () => { failed.value = false })
 const showImage = computed(() => !!props.src && !failed.value)
 
+// On server-rendered pages the photo can fail before Vue attaches @error, so
+// the event is never seen. Catch that case once the component is live.
+const imgEl = ref<HTMLImageElement | null>(null)
+onMounted(() => {
+  if (imgEl.value?.complete && imgEl.value.naturalWidth === 0) failed.value = true
+})
+
 const bgColor = computed(() => {
   if (!props.name) return 'bg-brand-silver'
   const colors = [
@@ -52,7 +59,8 @@ const bgColor = computed(() => {
     class="rounded-full overflow-hidden flex items-center justify-center font-semibold text-white flex-shrink-0"
     :class="[sizeClasses[size!], showImage ? '' : bgColor]"
   >
-    <img v-if="showImage" :src="src!" :alt="name" class="h-full w-full object-cover" @error="failed = true" />
+    <!-- no-referrer: Google sign-in photos (lh3.googleusercontent.com) are often refused when a referrer is sent -->
+    <img v-if="showImage" ref="imgEl" :src="src!" :alt="name" referrerpolicy="no-referrer" class="h-full w-full object-cover" @error="failed = true" />
     <span v-else>{{ initials }}</span>
   </div>
 </template>
