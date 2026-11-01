@@ -534,7 +534,8 @@ const CONF_STYLE: Record<string, string> = {
           <ul class="mt-2 space-y-1">
             <li v-for="c in CHECKS" :key="c.key">
               <label class="flex cursor-pointer items-start gap-3 rounded-xl px-2 py-2 hover:bg-white/70 dark:hover:bg-white/[0.04]">
-                <input v-model="checks[c.key]" type="checkbox" class="mt-0.5 h-5 w-5 flex-none rounded border-brand-navy/25 text-brand-navy focus:ring-brand-gold dark:border-white/25 dark:bg-white/10 dark:text-brand-gold" />
+                <input v-model="checks[c.key]" type="checkbox" class="mt-0.5 h-5 w-5 flex-none rounded border-brand-navy/25 focus:ring-brand-gold dark:border-white/25 dark:bg-white/10
+                              checked:!bg-brand-navy dark:checked:!bg-emerald-500 checked:!border-transparent" />
                 <span class="text-sm text-brand-navy/80 dark:text-white/75">
                   {{ c.label }}
                   <a v-if="c.key === 'prc' && selected.verification_links?.[0]" :href="selected.verification_links[0].url" target="_blank" rel="noopener" class="ml-1 font-semibold text-brand-gold-deep dark:text-brand-gold hover:underline underline-offset-4" @click.stop>Open site</a>
