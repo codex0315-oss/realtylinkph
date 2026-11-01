@@ -169,12 +169,24 @@ function thumb(a: Appointment) {
 const monthEl = ref<HTMLElement | null>(null)
 const monthHeight = ref<string | undefined>()
 function fitMonth() {
-  if (!monthEl.value || window.innerWidth < 1024) { monthHeight.value = undefined; return }
+  // Follow the same rule as the layout (cw-lg on <main>), not the window: with
+  // the sidebar and a panel open the month stacks above the day card, and a
+  // fixed height there made the last week spill over it.
+  const main = monthEl.value?.closest('main')
+  if (!monthEl.value || !main?.classList.contains('cw-lg')) { monthHeight.value = undefined; return }
   const top = monthEl.value.getBoundingClientRect().top + window.scrollY
   monthHeight.value = `${Math.max(380, Math.floor(window.innerHeight - top - 24))}px`
 }
-onMounted(() => { nextTick(fitMonth); window.addEventListener('resize', fitMonth) })
-onUnmounted(() => window.removeEventListener('resize', fitMonth))
+/* Re-fit when the room changes too (sidebar or a panel opening resizes <main>). */
+let mainObserver: ResizeObserver | null = null
+onMounted(() => {
+  nextTick(fitMonth)
+  window.addEventListener('resize', fitMonth)
+  const main = monthEl.value?.closest('main')
+  // A frame later, so the layout has updated its cw-* classes for the new size first.
+  if (main) { mainObserver = new ResizeObserver(() => requestAnimationFrame(fitMonth)); mainObserver.observe(main) }
+})
+onUnmounted(() => { window.removeEventListener('resize', fitMonth); mainObserver?.disconnect() })
 /* The "Coming up" row above can appear or go once data changes. */
 watch(() => upcoming.value.length > 0, () => nextTick(fitMonth))
 
