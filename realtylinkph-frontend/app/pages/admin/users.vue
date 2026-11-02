@@ -417,7 +417,7 @@ function since(iso: string): string {
                         text-[0.625rem] font-bold uppercase tracking-[0.16em] text-brand-navy/45 dark:text-white/40">
               <input
                 type="checkbox"
-                class="h-4 w-4 rounded border-brand-navy/25 text-brand-navy focus:ring-brand-gold/40 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
+                class="h-4 w-4 rounded border-brand-navy/25 text-brand-navy checked:!bg-brand-navy dark:checked:!bg-emerald-500 indeterminate:!bg-brand-navy dark:indeterminate:!bg-emerald-500 checked:!border-transparent indeterminate:!border-transparent focus:ring-brand-gold/40 cursor-pointer disabled:cursor-not-allowed disabled:opacity-40"
                 :checked="allSelected"
                 :indeterminate.prop="someSelected"
                 :disabled="!selectable.length"
@@ -441,7 +441,7 @@ function since(iso: string): string {
                   <input
                     v-if="u.id !== me && !isAdminRole(u.role_type)"
                     type="checkbox"
-                    class="h-4 w-4 rounded border-brand-navy/25 text-brand-navy focus:ring-brand-gold/40 cursor-pointer"
+                    class="h-4 w-4 rounded border-brand-navy/25 text-brand-navy checked:!bg-brand-navy dark:checked:!bg-emerald-500 indeterminate:!bg-brand-navy dark:indeterminate:!bg-emerald-500 checked:!border-transparent indeterminate:!border-transparent focus:ring-brand-gold/40 cursor-pointer"
                     :checked="selected.has(u.id)"
                     :aria-label="`Select ${u.name}`"
                     @change="toggleOne(u.id)"
