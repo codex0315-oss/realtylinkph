@@ -179,7 +179,7 @@ function fitStepCol() {
   // leave almost nothing, and a step squeezed into that is unusable. Better that
   // the page scrolls a little than that the form or drop box collapses.
   const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
-  stepColHeight.value = `${Math.max(Math.round(36 * rem), Math.floor(window.innerHeight - top - 24))}px`
+  stepColHeight.value = `${Math.max(Math.round(26 * rem), Math.floor(window.innerHeight - top - 24))}px`
 }
 /* Re-fit when the room changes too (a panel opening narrows <main> and moves the step down). */
 let mainObserver: ResizeObserver | null = null
@@ -443,7 +443,7 @@ const labelCls = LISTING_LABEL_CLS
         </section>
 
         <!-- ── Nav: Save works from any step; a fixed bar on phones ── -->
-        <div class="fixed inset-x-0 bottom-0 z-30 border-t border-brand-navy/[0.08] bg-white/95 backdrop-blur px-4 py-3 dark:border-white/10 dark:bg-[#0B1A35]/95 lg:static lg:mt-5 lg:border-0 lg:bg-transparent lg:p-0 lg:backdrop-blur-none dark:lg:bg-transparent">
+        <div class="fixed inset-x-0 bottom-0 z-30 border-t border-brand-navy/[0.08] bg-white/95 backdrop-blur px-4 py-3 dark:border-white/10 dark:bg-[#0B1A35]/95 lg:sticky lg:bottom-3 lg:mt-5 lg:rounded-2xl lg:border lg:px-3 lg:py-2.5 lg:shadow-[0_8px_24px_rgba(11,26,53,0.08)]">
           <div class="flex items-center justify-between gap-2">
             <button v-if="step > 1" type="button" class="inline-flex items-center gap-1 rounded-full px-4 py-2.5 text-sm font-semibold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20 transition" @click="step--">
               <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>
