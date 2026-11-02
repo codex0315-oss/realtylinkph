@@ -11,7 +11,8 @@ definePageMeta({ layout: 'dashboard' })
  *       who + the decision → RealtyLink AI at a glance (confidence, red flags)
  *       → selfie and ID photo side by side → the admin's checklist
  *       → the full AI report → official links.
- * Approving or rejecting moves straight on to the next in line.
+ * The review is a short walkthrough (Applicant, Photos, AI check, Decision), one step per
+ * screen with Back / Next in view. Approving or rejecting moves straight on to the next in line.
  * Layout follows the room <main> really has (cw-*), not the screen, so it
  * holds up with the sidebar and a panel open.
  */
@@ -296,6 +297,42 @@ const CONF_STYLE: Record<string, string> = {
   Medium: 'bg-amber-500/15 text-amber-800 dark:text-amber-300',
   Low: 'bg-red-500/15 text-red-700 dark:text-red-300',
 }
+
+/* ── The review, one step per screen ──
+ * Applicant → Photos → AI advisory → Decision (pending only). The card is fitted
+ * to the window on desktop so Back / Next never scroll out of view; on a phone it
+ * simply grows. */
+const step = ref(1)
+const STEPS = computed(() => {
+  const s = [
+    { key: 'applicant', label: 'Applicant' },
+    { key: 'photos', label: 'Photos' },
+    { key: 'ai', label: 'AI check' },
+  ]
+  return tab.value === 'pending' ? [...s, { key: 'decision', label: 'Decision' }] : s
+})
+const cur = computed(() => STEPS.value[Math.min(step.value, STEPS.value.length) - 1]!.key)
+watch([selectedId, tab], () => { step.value = 1 })
+
+const reviewHeight = ref<string | undefined>()
+function fitReview() {
+  if (!reviewEl.value || window.innerWidth < 1024) { reviewHeight.value = undefined; return }
+  const top = reviewEl.value.getBoundingClientRect().top + window.scrollY
+  const rem = parseFloat(getComputedStyle(document.documentElement).fontSize) || 16
+  reviewHeight.value = `${Math.max(Math.round(26 * rem), Math.floor(window.innerHeight - top - 24))}px`
+}
+let mainObserver: ResizeObserver | null = null
+onMounted(() => {
+  nextTick(fitReview)
+  window.addEventListener('resize', fitReview)
+  const main = document.querySelector('main')
+  if (main) {
+    mainObserver = new ResizeObserver(() => requestAnimationFrame(fitReview))
+    mainObserver.observe(main)
+  }
+})
+onUnmounted(() => { window.removeEventListener('resize', fitReview); mainObserver?.disconnect() })
+watch([selected, loading], () => nextTick(fitReview))
 </script>
 
 <template>
@@ -388,33 +425,19 @@ const CONF_STYLE: Record<string, string> = {
         </li>
       </ul>
 
-      <!-- ── Review ── -->
-      <section v-if="selected" ref="reviewEl" class="min-w-0 scroll-mt-24 space-y-5 rounded-3xl p-5 cw-md:p-6 bg-white dark:bg-[#0B1A35] ring-1 ring-brand-navy/[0.07] dark:ring-white/[0.08]">
-        <!-- 1. Who, and the decision -->
-        <div class="flex flex-wrap items-start justify-between gap-4">
-          <!-- Wide enough that, when room is short, the buttons move to their own row instead of squeezing the name -->
-          <div class="flex min-w-[min(100%,21rem)] flex-1 items-start gap-3.5">
-            <AppAvatar :name="selected.user?.name" :src="selected.user?.avatar" size="lg" />
+      <!-- ── Review: one step per screen, Back / Next always in view ── -->
+      <section v-if="selected" ref="reviewEl" :style="reviewHeight ? { height: reviewHeight } : undefined" class="min-w-0 flex flex-col rounded-3xl bg-white dark:bg-[#0B1A35] ring-1 ring-brand-navy/[0.07] dark:ring-white/[0.08]">
+        <!-- Who, and the decision: on every step -->
+        <div class="flex flex-wrap items-center justify-between gap-3 p-4 cw-md:px-5">
+          <div class="flex min-w-[min(100%,15rem)] flex-1 items-center gap-3">
+            <AppAvatar :name="selected.user?.name" :src="selected.user?.avatar" size="md" />
             <div class="min-w-0">
               <div class="flex flex-wrap items-center gap-2">
-                <h2 class="font-display text-xl font-bold leading-tight text-brand-navy dark:text-white">{{ selected.user?.name }}</h2>
+                <h2 class="font-display text-lg font-bold leading-tight text-brand-navy dark:text-white">{{ selected.user?.name }}</h2>
                 <span class="rounded-full px-2 py-0.5 text-[0.625rem] font-bold uppercase"
                       :class="isBroker(selected) ? 'bg-brand-navy/[0.08] text-brand-navy dark:bg-white/10 dark:text-white' : 'bg-brand-gold/15 text-brand-gold-deep dark:text-brand-gold'">{{ typeLabel(selected) }}</span>
               </div>
               <p class="truncate text-sm text-brand-navy/60 dark:text-white/55">{{ selected.user?.email }}</p>
-              <div class="mt-2 flex flex-wrap items-center gap-1.5 text-xs">
-                <span class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-brand-cream dark:bg-white/[0.06] pl-3 pr-0.5 py-0.5 ring-1 ring-brand-navy/[0.06] dark:ring-white/10">
-                  <span class="text-brand-navy/55 dark:text-white/50">{{ numberLabel(selected) }}</span>
-                  <span class="font-semibold tabular-nums text-brand-navy dark:text-white">{{ selected.prc_number }}</span>
-                  <button type="button" class="h-7 w-7 rounded-full flex items-center justify-center text-brand-navy/50 hover:text-brand-navy hover:bg-brand-navy/[0.06] dark:text-white/50 dark:hover:text-white dark:hover:bg-white/10" :aria-label="`Copy ${numberLabel(selected)}`" title="Copy" @click="copyNumber(selected)">
-                    <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75" /></svg>
-                  </button>
-                </span>
-                <span class="whitespace-nowrap rounded-full px-2.5 py-1" :class="tab === 'pending' && daysSince(selected.created_at) > 3 ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400 font-semibold' : 'bg-brand-navy/[0.05] text-brand-navy/60 dark:bg-white/[0.06] dark:text-white/55'">
-                  {{ waited(selected.created_at) }} · {{ longDate(selected.created_at) }}
-                </span>
-                <span v-if="selected.supervising_broker" class="rounded-full px-2.5 py-1 bg-brand-navy/[0.05] text-brand-navy/60 dark:bg-white/[0.06] dark:text-white/55">Broker: {{ selected.supervising_broker }}</span>
-              </div>
             </div>
           </div>
 
@@ -438,150 +461,215 @@ const CONF_STYLE: Record<string, string> = {
           </div>
         </div>
 
-        <!-- On hold: the license couldn't be checked yet -->
-        <div v-if="tab === 'pending' && selected.hold_note" class="flex flex-wrap items-start justify-between gap-3 rounded-2xl bg-amber-500/[0.07] ring-1 ring-amber-400/30 px-4 py-3">
-          <div class="min-w-0">
-            <p class="text-xs font-bold uppercase tracking-wide text-amber-700 dark:text-amber-400">
-              On hold<template v-if="selected.held_by"> · {{ selected.held_by }}</template><template v-if="selected.held_at"> · {{ shortDate(selected.held_at) }}</template>
-            </p>
-            <p class="mt-0.5 text-sm text-brand-navy/80 dark:text-white/75">“{{ selected.hold_note }}”</p>
-          </div>
-          <button type="button" class="flex-none rounded-full px-3 py-1.5 text-xs font-semibold text-amber-800 ring-1 ring-amber-400/50 hover:bg-amber-500/10 dark:text-amber-300" @click="releaseHold(selected)">Remove hold</button>
-        </div>
-
-        <!-- How it was decided (history tabs) -->
-        <div v-if="tab !== 'pending'" class="rounded-2xl px-4 py-3 ring-1" :class="tab === 'approved' ? 'bg-emerald-500/[0.06] ring-emerald-500/25' : 'bg-red-500/[0.05] ring-red-400/25'">
-          <p class="text-sm font-semibold" :class="tab === 'approved' ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'">
-            {{ tab === 'approved' ? 'Approved' : 'Rejected' }} on {{ longDate(selected.reviewed_at) }}<template v-if="selected.reviewed_by"> by {{ selected.reviewed_by }}</template>
-          </p>
-          <p v-if="tab === 'rejected' && selected.admin_note" class="mt-1 text-sm text-brand-navy/80 dark:text-white/75">“{{ selected.admin_note }}”</p>
-          <p v-if="tab === 'rejected' && selected.reapply_at" class="mt-1 text-xs text-brand-navy/55 dark:text-white/50">Can apply again from {{ longDate(selected.reapply_at) }}.</p>
-        </div>
-
-        <!-- 2. RealtyLink AI at a glance -->
-        <div class="rounded-2xl ring-1 ring-brand-gold/30 bg-brand-gold/[0.06] dark:bg-brand-gold/10 p-4">
-          <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
-            <img src="/ai/avatar-96.webp" alt="" class="h-8 w-8 flex-none rounded-full object-cover bg-white ring-1 ring-brand-gold/60" />
-            <p class="text-sm font-bold text-brand-navy dark:text-white">RealtyLink AI check</p>
-            <span v-if="confidence" class="rounded-full px-2.5 py-0.5 text-xs font-bold" :class="CONF_STYLE[confidence]">{{ confidence }} confidence</span>
-            <span class="text-xs text-brand-navy/50 dark:text-white/45">Advice only. You decide.</span>
-          </div>
-          <div v-if="!selected.ai_comment" class="mt-3 flex items-center gap-3 text-sm text-brand-navy/70 dark:text-white/70">
-            <span class="relative h-5 w-5 flex-none">
-              <span class="absolute inset-0 rounded-full border-2 border-brand-gold/20" />
-              <span class="absolute inset-0 rounded-full border-t-2 border-brand-gold animate-spin" />
-            </span>
-            {{ selected.ai_pending ? 'Reviewing the documents. Usually under a minute; this updates on its own.' : 'No AI check on file for this application.' }}
-          </div>
-          <ul v-else-if="flags.length" class="mt-3 flex flex-wrap gap-2">
-            <li v-for="f in flags" :key="f.key" class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-sm font-semibold ring-1" :class="FLAG_STYLE[f.state]" :title="f.detail">
-              <svg v-if="f.state === 'ok'" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.6" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
-              <svg v-else-if="f.state === 'bad'" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.6" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-              <svg v-else class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m0 3.75h.008M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
-              {{ f.label }}
-            </li>
-          </ul>
-          <p v-if="redFlags.length" class="mt-2.5 text-sm text-red-700 dark:text-red-300">
-            <span class="font-semibold">Look closely:</span> {{ redFlags[0]!.detail }}
-          </p>
-        </div>
-
-        <!-- 3. Identity: selfie and ID photo side by side -->
-        <div>
-          <div class="mb-2 flex flex-wrap items-center justify-between gap-2">
-            <p class="text-[0.6875rem] font-bold uppercase tracking-[0.16em] text-brand-navy/45 dark:text-white/40">Compare the photos</p>
-            <button v-if="selfie && idDoc" type="button" class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20 transition" @click="openCompare">
-              <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
-              Compare full screen
-            </button>
-          </div>
-          <p v-if="!docs.length" class="rounded-2xl bg-brand-cream/70 dark:bg-white/[0.04] px-4 py-6 text-center text-sm text-brand-navy/55 dark:text-white/50">No documents on file.</p>
-          <div v-else class="grid gap-3 [grid-template-columns:repeat(auto-fit,minmax(13rem,1fr))]">
+        <!-- Steps -->
+        <ol class="grid gap-1.5 border-y border-brand-navy/[0.06] dark:border-white/[0.08] px-3 py-2 cw-md:px-4" :style="{ gridTemplateColumns: `repeat(${STEPS.length}, minmax(0, 1fr))` }">
+          <li v-for="(s, i) in STEPS" :key="s.key">
             <button
-              v-for="doc in pair"
-              :key="doc.key"
               type="button"
-              class="group relative overflow-hidden rounded-2xl ring-1 ring-brand-navy/[0.08] dark:ring-white/10 bg-[#0B1A35] hover:ring-brand-gold transition"
-              :title="`View ${doc.label} full screen`"
-              @click="openDoc(doc)"
+              class="w-full flex items-center justify-center cw-sm:justify-start gap-2 rounded-xl px-2 py-1.5 text-left transition"
+              :class="step === i + 1 ? 'bg-brand-navy text-white dark:bg-brand-gold dark:text-[#0B2A5C]' : 'hover:bg-brand-navy/[0.04] dark:hover:bg-white/[0.05]'"
+              :aria-current="step === i + 1 ? 'step' : undefined"
+              @click="step = i + 1"
             >
-              <div class="relative aspect-[4/3]">
-                <img v-if="!doc.isPdf" :src="doc.url" :alt="doc.label" class="absolute inset-0 h-full w-full object-contain" loading="lazy" />
-                <div v-else class="absolute inset-0 flex flex-col items-center justify-center gap-1.5 text-white/60">
-                  <svg class="h-10 w-10" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.5" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M7 21h10a2 2 0 002-2V9.414a1 1 0 00-.293-.707l-5.414-5.414A1 1 0 0012.586 3H7a2 2 0 00-2 2v14a2 2 0 002 2z" /></svg>
-                  <span class="text-xs font-bold tracking-wide">PDF · tap to open</span>
-                </div>
-              </div>
-              <span class="absolute left-2.5 top-2.5 rounded-full bg-[#06183A]/80 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur-sm">{{ doc.label }}</span>
-              <span class="absolute bottom-2.5 right-2.5 inline-flex items-center gap-1 rounded-full bg-black/55 px-2.5 py-1 text-[0.6875rem] font-semibold text-white opacity-80 group-hover:opacity-100 transition" aria-hidden="true">
-                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-5.197-5.197m0 0A7.5 7.5 0 105.196 5.196a7.5 7.5 0 0010.607 10.607zM10.5 7.5v6m3-3h-6" /></svg>
-                Zoom
+              <span class="relative h-6 w-6 flex-none rounded-full flex items-center justify-center text-xs font-bold"
+                    :class="step === i + 1 ? 'bg-white/15 text-white dark:bg-[#0B2A5C]/15 dark:text-[#0B2A5C]' : step > i + 1 ? 'bg-emerald-500 text-white' : 'bg-brand-navy/[0.06] text-brand-navy/55 dark:bg-white/10 dark:text-white/55'">
+                <svg v-if="step > i + 1" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5 13l4 4L19 7" /></svg>
+                <template v-else>{{ i + 1 }}</template>
+                <span v-if="s.key === 'ai' && redFlags.length && step !== i + 1" class="absolute -right-0.5 -top-0.5 h-2.5 w-2.5 rounded-full bg-red-500 ring-2 ring-white dark:ring-[#0B1A35]" aria-label="AI raised a concern" />
               </span>
+              <span class="hidden cw-sm:block min-w-0 truncate text-sm font-semibold" :class="step === i + 1 ? '' : 'text-brand-navy dark:text-white'">{{ s.label }}</span>
             </button>
-          </div>
-          <!-- Anything else they sent (e.g. a salesperson's accreditation) -->
-          <div v-if="otherDocs.length" class="mt-3 flex flex-wrap gap-2">
-            <button v-for="doc in otherDocs" :key="doc.key" type="button" class="inline-flex items-center gap-2 rounded-xl px-3 py-2 text-sm font-semibold text-brand-navy ring-1 ring-brand-navy/10 hover:ring-brand-gold dark:text-white dark:ring-white/15 transition" @click="openDoc(doc)">
-              <svg class="h-4 w-4 text-brand-gold-deep dark:text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19.5 14.25v-2.625a3.375 3.375 0 00-3.375-3.375h-1.5A1.125 1.125 0 0113.5 7.125v-1.5a3.375 3.375 0 00-3.375-3.375H8.25m2.25 0H5.625c-.621 0-1.125.504-1.125 1.125v17.25c0 .621.504 1.125 1.125 1.125h12.75c.621 0 1.125-.504 1.125-1.125V11.25a9 9 0 00-9-9z" /></svg>
-              {{ doc.label }}<span v-if="doc.isPdf" class="text-xs font-normal text-brand-navy/50 dark:text-white/45">PDF</span>
-            </button>
-          </div>
-        </div>
+          </li>
+        </ol>
 
-        <!-- 4. The admin's own checks (a reminder, not a gate) -->
-        <div v-if="tab === 'pending'" class="rounded-2xl bg-brand-cream/60 dark:bg-white/[0.04] ring-1 ring-brand-navy/[0.06] dark:ring-white/[0.08] p-4">
-          <p class="text-sm font-bold text-brand-navy dark:text-white">Your checks</p>
-          <ul class="mt-2 space-y-1">
-            <li v-for="c in CHECKS" :key="c.key">
-              <label class="flex cursor-pointer items-start gap-3 rounded-xl px-2 py-2 hover:bg-white/70 dark:hover:bg-white/[0.04]">
-                <input v-model="checks[c.key]" type="checkbox" class="mt-0.5 h-5 w-5 flex-none rounded border-brand-navy/25 focus:ring-brand-gold dark:border-white/25 dark:bg-white/10
-                              checked:!bg-brand-navy dark:checked:!bg-emerald-500 checked:!border-transparent" />
-                <span class="text-sm text-brand-navy/80 dark:text-white/75">
-                  {{ c.label }}
-                  <a v-if="c.key === 'prc' && selected.verification_links?.[0]" :href="selected.verification_links[0].url" target="_blank" rel="noopener" class="ml-1 font-semibold text-brand-gold-deep dark:text-brand-gold hover:underline underline-offset-4" @click.stop>Open site</a>
-                </span>
-              </label>
-            </li>
-          </ul>
-        </div>
+        <!-- Step body: fits the room; scrolls inside only if it must -->
+        <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 cw-md:px-5 dark:[color-scheme:dark]">
+          <!-- 1. Applicant -->
+          <div v-if="cur === 'applicant'" class="space-y-4">
+            <div v-if="tab === 'pending' && selected.hold_note" class="flex flex-wrap items-start justify-between gap-3 rounded-2xl bg-amber-500/[0.07] ring-1 ring-amber-400/30 px-4 py-3">
+              <div class="min-w-0">
+                <p class="text-xs font-bold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                  On hold<template v-if="selected.held_by"> · {{ selected.held_by }}</template><template v-if="selected.held_at"> · {{ shortDate(selected.held_at) }}</template>
+                </p>
+                <p class="mt-0.5 text-sm text-brand-navy/80 dark:text-white/75">“{{ selected.hold_note }}”</p>
+              </div>
+              <button type="button" class="flex-none rounded-full px-3 py-1.5 text-xs font-semibold text-amber-800 ring-1 ring-amber-400/50 hover:bg-amber-500/10 dark:text-amber-300" @click="releaseHold(selected)">Remove hold</button>
+            </div>
 
-        <!-- 5. The full AI report, in readable sections -->
-        <details v-if="sections.length" class="group rounded-2xl ring-1 ring-brand-navy/[0.07] dark:ring-white/[0.08]" :open="redFlags.length > 0">
-          <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-3 text-sm font-bold text-brand-navy dark:text-white">
-            Full AI report
-            <svg class="h-4 w-4 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" /></svg>
-          </summary>
-          <div class="grid gap-3 px-4 pb-4 [grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))]">
-            <div
-              v-for="s in sections"
-              :key="s.title"
-              class="rounded-xl p-3.5 text-sm leading-relaxed ring-1"
-              :class="isConcern(s.title) && !/^(none|no concerns?)/i.test(s.lines[0]?.text ?? '') ? 'bg-red-500/[0.05] ring-red-400/25' : 'bg-brand-cream/50 ring-brand-navy/[0.05] dark:bg-white/[0.03] dark:ring-white/[0.06]'"
-            >
-              <p class="font-bold text-brand-navy dark:text-white">{{ s.title }}</p>
-              <template v-for="(l, li) in s.lines" :key="li">
-                <p v-if="l.bullet" class="mt-1 flex gap-2 text-brand-navy/75 dark:text-white/70"><span class="text-brand-gold flex-shrink-0">•</span><span>{{ l.text }}</span></p>
-                <p v-else class="mt-1 text-brand-navy/75 dark:text-white/70">{{ l.text }}</p>
-              </template>
+            <div v-if="tab !== 'pending'" class="rounded-2xl px-4 py-3 ring-1" :class="tab === 'approved' ? 'bg-emerald-500/[0.06] ring-emerald-500/25' : 'bg-red-500/[0.05] ring-red-400/25'">
+              <p class="text-sm font-semibold" :class="tab === 'approved' ? 'text-emerald-700 dark:text-emerald-400' : 'text-red-700 dark:text-red-400'">
+                {{ tab === 'approved' ? 'Approved' : 'Rejected' }} on {{ longDate(selected.reviewed_at) }}<template v-if="selected.reviewed_by"> by {{ selected.reviewed_by }}</template>
+              </p>
+              <p v-if="tab === 'rejected' && selected.admin_note" class="mt-1 text-sm text-brand-navy/80 dark:text-white/75">“{{ selected.admin_note }}”</p>
+              <p v-if="tab === 'rejected' && selected.reapply_at" class="mt-1 text-xs text-brand-navy/55 dark:text-white/50">Can apply again from {{ longDate(selected.reapply_at) }}.</p>
+            </div>
+
+            <dl class="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(11rem,1fr))]">
+              <div class="rounded-2xl bg-brand-cream/60 dark:bg-white/[0.04] px-3.5 py-2.5">
+                <dt class="text-[0.6875rem] font-bold uppercase tracking-[0.14em] text-brand-navy/45 dark:text-white/40">Applying as</dt>
+                <dd class="mt-0.5 text-sm font-semibold text-brand-navy dark:text-white">{{ typeLabel(selected) }}</dd>
+              </div>
+              <div class="rounded-2xl bg-brand-cream/60 dark:bg-white/[0.04] px-3.5 py-2.5">
+                <dt class="text-[0.6875rem] font-bold uppercase tracking-[0.14em] text-brand-navy/45 dark:text-white/40">{{ numberLabel(selected) }}</dt>
+                <dd class="mt-0.5 flex items-center gap-1.5 text-sm font-semibold tabular-nums text-brand-navy dark:text-white">
+                  {{ selected.prc_number }}
+                  <button type="button" class="h-7 w-7 rounded-full flex items-center justify-center text-brand-navy/50 hover:text-brand-navy hover:bg-brand-navy/[0.06] dark:text-white/50 dark:hover:text-white dark:hover:bg-white/10" :aria-label="`Copy ${numberLabel(selected)}`" title="Copy" @click="copyNumber(selected)">
+                    <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 17.25v3.375c0 .621-.504 1.125-1.125 1.125h-9.75a1.125 1.125 0 01-1.125-1.125V7.875c0-.621.504-1.125 1.125-1.125H6.75a9.06 9.06 0 011.5.124m7.5 10.376h3.375c.621 0 1.125-.504 1.125-1.125V11.25c0-4.46-3.243-8.161-7.5-8.876a9.06 9.06 0 00-1.5-.124H9.375c-.621 0-1.125.504-1.125 1.125v3.5m7.5 10.375H9.375a1.125 1.125 0 01-1.125-1.125v-9.25m12 6.625v-1.875a3.375 3.375 0 00-3.375-3.375h-1.5a1.125 1.125 0 01-1.125-1.125v-1.5a3.375 3.375 0 00-3.375-3.375H9.75" /></svg>
+                  </button>
+                </dd>
+              </div>
+              <div class="rounded-2xl px-3.5 py-2.5" :class="tab === 'pending' && daysSince(selected.created_at) > 3 ? 'bg-amber-500/10' : 'bg-brand-cream/60 dark:bg-white/[0.04]'">
+                <dt class="text-[0.6875rem] font-bold uppercase tracking-[0.14em] text-brand-navy/45 dark:text-white/40">Applied</dt>
+                <dd class="mt-0.5 text-sm font-semibold" :class="tab === 'pending' && daysSince(selected.created_at) > 3 ? 'text-amber-700 dark:text-amber-400' : 'text-brand-navy dark:text-white'">{{ waited(selected.created_at).replace('Applied ', '') }} · {{ longDate(selected.created_at) }}</dd>
+              </div>
+              <div v-if="selected.supervising_broker" class="rounded-2xl bg-brand-cream/60 dark:bg-white/[0.04] px-3.5 py-2.5">
+                <dt class="text-[0.6875rem] font-bold uppercase tracking-[0.14em] text-brand-navy/45 dark:text-white/40">Supervising broker</dt>
+                <dd class="mt-0.5 text-sm font-semibold text-brand-navy dark:text-white">{{ selected.supervising_broker }}</dd>
+              </div>
+            </dl>
+
+            <div>
+              <p class="mb-2 text-[0.6875rem] font-bold uppercase tracking-[0.16em] text-brand-navy/45 dark:text-white/40">Attached documents</p>
+              <p v-if="!docs.length" class="rounded-2xl bg-brand-cream/70 dark:bg-white/[0.04] px-4 py-5 text-center text-sm text-brand-navy/55 dark:text-white/50">No documents on file.</p>
+              <div v-else class="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(7.5rem,1fr))]">
+                <button v-for="doc in docs" :key="doc.key" type="button" class="group relative overflow-hidden rounded-xl bg-[#0B1A35] ring-1 ring-brand-navy/[0.08] dark:ring-white/10 hover:ring-brand-gold transition" :title="`View ${doc.label} full screen`" @click="openDoc(doc)">
+                  <div class="relative aspect-[4/3]">
+                    <img v-if="!doc.isPdf" :src="doc.url" :alt="doc.label" class="absolute inset-0 h-full w-full object-cover" loading="lazy" />
+                    <span v-else class="absolute inset-0 flex items-center justify-center text-xs font-bold tracking-wide text-white/60">PDF</span>
+                  </div>
+                  <span class="absolute inset-x-0 bottom-0 bg-[#06183A]/80 px-2 py-1 text-xs font-semibold text-white backdrop-blur-sm">{{ doc.label }}</span>
+                </button>
+              </div>
             </div>
           </div>
-        </details>
 
-        <!-- 6. Official sources, fixed on the server (the AI never makes a link) -->
-        <div v-if="selected.verification_links?.length" class="flex flex-wrap items-center gap-2 border-t border-brand-navy/[0.07] dark:border-white/[0.08] pt-4">
-          <span class="text-[0.6875rem] font-bold uppercase tracking-[0.16em] text-brand-navy/45 dark:text-white/40">Verify against</span>
-          <a
-            v-for="l in selected.verification_links"
-            :key="l.url"
-            :href="l.url"
-            target="_blank"
-            rel="noopener"
-            :title="l.note"
-            class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold text-brand-navy ring-1 ring-brand-navy/10 hover:ring-brand-gold hover:text-brand-gold-deep dark:text-white dark:ring-white/15 dark:hover:text-brand-gold transition"
-          >
-            {{ l.label }}
-            <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
-          </a>
+          <!-- 2. Photos side by side -->
+          <div v-else-if="cur === 'photos'" class="flex h-full flex-col gap-3">
+            <div class="flex flex-wrap items-center justify-between gap-2">
+              <p class="text-sm text-brand-navy/60 dark:text-white/55">Does the selfie look like the photo on the {{ idDoc?.label.toLowerCase() ?? 'ID' }}?</p>
+              <button v-if="selfie && idDoc" type="button" class="inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20 transition" @click="openCompare">
+                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4 8V4m0 0h4M4 4l5 5m11-1V4m0 0h-4m4 0l-5 5M4 16v4m0 0h4m-4 0l5-5m11 5l-5-5m5 5v-4m0 4h-4" /></svg>
+                Zoom and compare
+              </button>
+            </div>
+            <p v-if="!pair.length" class="rounded-2xl bg-brand-cream/70 dark:bg-white/[0.04] px-4 py-8 text-center text-sm text-brand-navy/55 dark:text-white/50">No photos on file.</p>
+            <div v-else class="grid min-h-[16rem] lg:min-h-[9rem] flex-1 grid-cols-2 gap-3">
+              <button
+                v-for="doc in pair"
+                :key="doc.key"
+                type="button"
+                class="group relative min-h-[16rem] lg:min-h-[9rem] overflow-hidden rounded-2xl bg-[#0B1A35] ring-1 ring-brand-navy/[0.08] dark:ring-white/10 hover:ring-brand-gold transition"
+                :title="`View ${doc.label} full screen`"
+                @click="openDoc(doc)"
+              >
+                <img v-if="!doc.isPdf" :src="doc.url" :alt="doc.label" class="absolute inset-0 h-full w-full object-contain" loading="lazy" />
+                <span v-else class="absolute inset-0 flex items-center justify-center text-xs font-bold tracking-wide text-white/60">PDF · tap to open</span>
+                <span class="absolute left-2.5 top-2.5 rounded-full bg-[#06183A]/80 px-2.5 py-1 text-xs font-semibold text-white backdrop-blur-sm">{{ doc.label }}</span>
+              </button>
+            </div>
+            <div v-if="otherDocs.length" class="flex flex-wrap gap-2">
+              <button v-for="doc in otherDocs" :key="doc.key" type="button" class="inline-flex items-center gap-2 rounded-xl px-3 py-1.5 text-sm font-semibold text-brand-navy ring-1 ring-brand-navy/10 hover:ring-brand-gold dark:text-white dark:ring-white/15 transition" @click="openDoc(doc)">
+                {{ doc.label }}<span v-if="doc.isPdf" class="text-xs font-normal text-brand-navy/50 dark:text-white/45">PDF</span>
+              </button>
+            </div>
+          </div>
+
+          <!-- 3. RealtyLink AI advisory -->
+          <div v-else-if="cur === 'ai'" class="space-y-3">
+            <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
+              <img src="/ai/avatar-96.webp" alt="" class="h-8 w-8 flex-none rounded-full object-cover bg-white ring-1 ring-brand-gold/60" />
+              <p class="text-sm font-bold text-brand-navy dark:text-white">RealtyLink AI check</p>
+              <span v-if="confidence" class="rounded-full px-2.5 py-0.5 text-xs font-bold" :class="CONF_STYLE[confidence]">{{ confidence }} confidence</span>
+              <span class="text-xs text-brand-navy/50 dark:text-white/45">Advice only. You decide.</span>
+            </div>
+            <div v-if="!selected.ai_comment" class="flex items-center gap-3 rounded-2xl bg-brand-gold/[0.06] ring-1 ring-brand-gold/30 p-4 text-sm text-brand-navy/70 dark:text-white/70">
+              <span class="relative h-5 w-5 flex-none">
+                <span class="absolute inset-0 rounded-full border-2 border-brand-gold/20" />
+                <span class="absolute inset-0 rounded-full border-t-2 border-brand-gold animate-spin" />
+              </span>
+              {{ selected.ai_pending ? 'Reviewing the documents. Usually under a minute; this updates on its own.' : 'No AI check on file for this application.' }}
+            </div>
+            <ul v-else-if="flags.length" class="space-y-2">
+              <li v-for="f in flags" :key="f.key" class="flex items-start gap-2.5 rounded-xl px-3 py-2.5 ring-1" :class="FLAG_STYLE[f.state]">
+                <svg v-if="f.state === 'ok'" class="mt-0.5 h-4 w-4 flex-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.6" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                <svg v-else-if="f.state === 'bad'" class="mt-0.5 h-4 w-4 flex-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.6" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                <svg v-else class="mt-0.5 h-4 w-4 flex-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m0 3.75h.008M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                <span class="min-w-0">
+                  <span class="block text-sm font-semibold">{{ f.label }}</span>
+                  <span class="mt-0.5 block text-sm font-normal text-brand-navy/70 dark:text-white/65">{{ f.detail }}</span>
+                </span>
+              </li>
+            </ul>
+
+            <details v-if="sections.length" class="group rounded-2xl ring-1 ring-brand-navy/[0.07] dark:ring-white/[0.08]">
+              <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 text-sm font-bold text-brand-navy dark:text-white">
+                Full AI report
+                <svg class="h-4 w-4 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" /></svg>
+              </summary>
+              <div class="grid gap-3 px-4 pb-4 [grid-template-columns:repeat(auto-fit,minmax(15rem,1fr))]">
+                <div
+                  v-for="s in sections"
+                  :key="s.title"
+                  class="rounded-xl p-3.5 text-sm leading-relaxed ring-1"
+                  :class="isConcern(s.title) && !/^(none|no concerns?)/i.test(s.lines[0]?.text ?? '') ? 'bg-red-500/[0.05] ring-red-400/25' : 'bg-brand-cream/50 ring-brand-navy/[0.05] dark:bg-white/[0.03] dark:ring-white/[0.06]'"
+                >
+                  <p class="font-bold text-brand-navy dark:text-white">{{ s.title }}</p>
+                  <template v-for="(l, li) in s.lines" :key="li">
+                    <p v-if="l.bullet" class="mt-1 flex gap-2 text-brand-navy/75 dark:text-white/70"><span class="text-brand-gold flex-shrink-0">•</span><span>{{ l.text }}</span></p>
+                    <p v-else class="mt-1 text-brand-navy/75 dark:text-white/70">{{ l.text }}</p>
+                  </template>
+                </div>
+              </div>
+            </details>
+          </div>
+
+          <!-- 4. Decision: the admin's own checks (a reminder, not a gate) -->
+          <div v-else-if="cur === 'decision'" class="space-y-4">
+            <div class="rounded-2xl bg-brand-cream/60 dark:bg-white/[0.04] ring-1 ring-brand-navy/[0.06] dark:ring-white/[0.08] p-4">
+              <p class="text-sm font-bold text-brand-navy dark:text-white">Your checks</p>
+              <ul class="mt-2 space-y-1">
+                <li v-for="c in CHECKS" :key="c.key">
+                  <label class="flex cursor-pointer items-start gap-3 rounded-xl px-2 py-2 hover:bg-white/70 dark:hover:bg-white/[0.04]">
+                    <input v-model="checks[c.key]" type="checkbox" class="mt-0.5 h-5 w-5 flex-none rounded border-brand-navy/25 focus:ring-brand-gold dark:border-white/25 dark:bg-white/10
+                                  checked:!bg-brand-navy dark:checked:!bg-emerald-500 checked:!border-transparent" />
+                    <span class="text-sm text-brand-navy/80 dark:text-white/75">
+                      {{ c.label }}
+                      <a v-if="c.key === 'prc' && selected.verification_links?.[0]" :href="selected.verification_links[0].url" target="_blank" rel="noopener" class="ml-1 font-semibold text-brand-gold-deep dark:text-brand-gold hover:underline underline-offset-4" @click.stop>Open site</a>
+                    </span>
+                  </label>
+                </li>
+              </ul>
+            </div>
+
+            <div v-if="selected.verification_links?.length" class="flex flex-wrap items-center gap-2">
+              <span class="text-[0.6875rem] font-bold uppercase tracking-[0.16em] text-brand-navy/45 dark:text-white/40">Verify against</span>
+              <a
+                v-for="l in selected.verification_links"
+                :key="l.url"
+                :href="l.url"
+                target="_blank"
+                rel="noopener"
+                :title="l.note"
+                class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold text-brand-navy ring-1 ring-brand-navy/10 hover:ring-brand-gold hover:text-brand-gold-deep dark:text-white dark:ring-white/15 dark:hover:text-brand-gold transition"
+              >
+                {{ l.label }}
+                <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
+              </a>
+            </div>
+          </div>
+        </div>
+
+        <!-- Back / Next -->
+        <div class="sticky bottom-0 z-10 flex items-center justify-between gap-3 rounded-b-3xl bg-white dark:bg-[#0B1A35] border-t border-brand-navy/[0.06] dark:border-white/[0.08] px-4 py-3 cw-md:px-5">
+          <button type="button" class="inline-flex items-center gap-1 rounded-full px-4 py-2 text-sm font-semibold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold disabled:opacity-0 disabled:pointer-events-none dark:text-white dark:ring-white/20 transition" :disabled="step === 1" @click="step--">
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15 19l-7-7 7-7" /></svg>
+            Back
+          </button>
+          <span class="text-xs text-brand-navy/45 dark:text-white/40">Step {{ step }} of {{ STEPS.length }}</span>
+          <button type="button" class="inline-flex items-center gap-2 whitespace-nowrap rounded-full bg-brand-navy px-6 py-2 text-sm font-bold text-white hover:-translate-y-0.5 disabled:opacity-0 disabled:pointer-events-none dark:bg-brand-gold dark:text-[#0B2A5C] transition" :disabled="step === STEPS.length" @click="step++">
+            Next
+            <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 5l7 7-7 7" /></svg>
+          </button>
         </div>
       </section>
     </div>
