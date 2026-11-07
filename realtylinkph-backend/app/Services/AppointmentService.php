@@ -22,6 +22,7 @@ class AppointmentService
         private readonly GoogleCalendarService $googleCalendarService,
         private readonly NotificationService $notificationService,
         private readonly ConversationService $conversationService,
+        private readonly ViewingSanctionService $sanctions,
     ) {}
 
     public function book(User $buyer, Property $property, array $data): Appointment
@@ -236,16 +237,7 @@ class AppointmentService
 
         // Tell the canceller plainly that this one counted, and where they stand.
         if ($isLate && $canceller !== null) {
-            $strikes = $canceller->recentStrikes();
-            $left    = max(0, User::STRIKE_LIMIT - $strikes);
-
-            $this->notificationService->send($canceller, 'late_cancellation_recorded', [
-                'appointment_id' => $appointment->id,
-                'strikes'        => $strikes,
-                'message'        => $left > 0
-                    ? "That viewing was cancelled within " . Appointment::LATE_WINDOW_HOURS . " hours of the slot, so it counts toward your reliability ({$strikes} in the last " . User::STRIKE_WINDOW_DAYS . " days). {$left} more and booking is paused for " . User::LOCKOUT_DAYS . " days."
-                    : "That was your {$strikes}th late cancellation in " . User::STRIKE_WINDOW_DAYS . " days, so booking viewings is paused for " . User::LOCKOUT_DAYS . " days.",
-            ]);
+            $this->sanctions->noteStrike($canceller, $appointment, 'late');
         }
 
         // Email both parties — only when the buyer cancels (queued, outside the transaction).

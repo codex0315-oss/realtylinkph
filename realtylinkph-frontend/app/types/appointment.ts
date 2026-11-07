@@ -29,6 +29,12 @@ export interface Appointment {
   late_cancellation?: boolean
   /** True when cancelling right now would count against the canceller. */
   cancel_is_late?: boolean
+  /** May the current viewer report that the other party didn't turn up? */
+  can_report_no_show?: boolean
+  /** A reported no-show: who didn't come, who reported it, and any note. */
+  no_show?: { user_id: number; reported_by: number | null; reported_at: string | null; note: string | null } | null
+  /** An admin forgave the strike this viewing produced. */
+  strike_waived?: boolean
   created_at: string
   property?: Property
   buyer?: User

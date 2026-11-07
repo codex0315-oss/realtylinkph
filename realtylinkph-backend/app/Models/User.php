@@ -90,52 +90,113 @@ class User extends Authenticatable implements MustVerifyEmail
 
     // ─── Viewing reliability ─────────────────────────────────────────────────
     //
-    // Cancelling a confirmed viewing at short notice wastes the other party's
-    // day. It isn't always bad faith, so a single one costs nothing visible —
-    // what counts is a pattern. Strikes expire after STRIKE_WINDOW_DAYS, so a
-    // bad month doesn't follow someone forever.
+    // Cancelling a confirmed viewing at short notice, or not turning up, wastes
+    // the other party's day. It isn't always bad faith, so a single late
+    // cancellation costs nothing visible — what counts is a pattern. Strikes
+    // expire after STRIKE_WINDOW_DAYS, so a bad month doesn't follow someone
+    // forever. A no-show is heavier than a late cancellation (NO_SHOW_WEIGHT),
+    // and an admin can warn, pause, lift a pause, or waive a strike by hand.
 
-    /** Late cancellations inside the rolling window before a lockout applies. */
+    /** Strikes inside the rolling window before a lockout applies. */
     public const STRIKE_WINDOW_DAYS = 30;
     public const STRIKE_LIMIT       = 5;
     public const LOCKOUT_DAYS       = 7;
 
+    /** A reported no-show counts as this many strikes; a late cancellation is 1. */
+    public const NO_SHOW_WEIGHT = 2;
+
     /** Reliability is only meaningful once there's a sample this size. */
     public const RELIABILITY_MIN_SAMPLE = 3;
 
-    /** Late cancellations by this user in the rolling window (waived ones excluded). */
-    public function recentStrikes(): int
+    public function viewingSanctions(): \Illuminate\Database\Eloquent\Relations\HasMany
     {
-        return Appointment::where('cancelled_by_id', $this->id)
-            ->where('late_cancellation', true)
-            ->whereNull('strike_waived_at')
-            ->where('cancelled_at', '>=', now()->subDays(self::STRIKE_WINDOW_DAYS))
-            ->count();
+        return $this->hasMany(ViewingSanction::class);
     }
 
     /**
-     * When this user may book/accept viewings again, or null if not locked out.
-     * Dated from their most recent strike, so the clock starts at the offence
-     * rather than at the moment they hit the limit.
+     * Strike events inside the rolling window, waived ones excluded.
+     *
+     * @return \Illuminate\Support\Collection<int, array{at: \Illuminate\Support\Carbon, weight: int}>
+     */
+    public function strikeEvents(): \Illuminate\Support\Collection
+    {
+        $from = now()->subDays(self::STRIKE_WINDOW_DAYS);
+
+        $late = Appointment::where('cancelled_by_id', $this->id)
+            ->where('late_cancellation', true)
+            ->whereNull('strike_waived_at')
+            ->where('cancelled_at', '>=', $from)
+            ->pluck('cancelled_at')
+            ->map(fn ($at) => ['at' => \Illuminate\Support\Carbon::parse($at), 'weight' => 1]);
+
+        $noShows = Appointment::where('no_show_user_id', $this->id)
+            ->whereNull('strike_waived_at')
+            ->where('no_show_reported_at', '>=', $from)
+            ->pluck('no_show_reported_at')
+            ->map(fn ($at) => ['at' => \Illuminate\Support\Carbon::parse($at), 'weight' => self::NO_SHOW_WEIGHT]);
+
+        return $late->concat($noShows)->values();
+    }
+
+    /** Strikes this user has in the rolling window (waived ones excluded). */
+    public function recentStrikes(): int
+    {
+        return (int) $this->strikeEvents()->sum('weight');
+    }
+
+    /** When an admin last lifted a pause. Strikes before it no longer count toward the automatic lock. */
+    public function lastPauseLiftedAt(): ?\Illuminate\Support\Carbon
+    {
+        $at = ViewingSanction::where('user_id', $this->id)->where('type', ViewingSanction::LIFT)->max('created_at');
+
+        return $at ? \Illuminate\Support\Carbon::parse($at) : null;
+    }
+
+    /** The end of an admin-set pause that is still running, or null. */
+    public function manualPauseUntil(): ?\Illuminate\Support\Carbon
+    {
+        $until = ViewingSanction::where('user_id', $this->id)
+            ->where('type', ViewingSanction::PAUSE)
+            ->whereNull('lifted_at')
+            ->where('until', '>', now())
+            ->max('until');
+
+        return $until ? \Illuminate\Support\Carbon::parse($until) : null;
+    }
+
+    /** The end of the automatic lock (too many strikes), or null. */
+    public function automaticLockUntil(): ?\Illuminate\Support\Carbon
+    {
+        $liftedAt = $this->lastPauseLiftedAt();
+
+        $events = $this->strikeEvents()
+            ->when($liftedAt, fn ($c) => $c->filter(fn ($e) => $e['at']->gt($liftedAt)));
+
+        if ($events->sum('weight') < self::STRIKE_LIMIT) {
+            return null;
+        }
+
+        // Dated from the most recent strike, so the clock starts at the offence
+        // rather than at the moment they hit the limit.
+        $until = $events->max('at')->copy()->addDays(self::LOCKOUT_DAYS);
+
+        return $until->isFuture() ? $until : null;
+    }
+
+    /**
+     * When this user may book/accept viewings again, or null if not locked out:
+     * the later of the automatic lock and any pause an admin set.
      */
     public function bookingLockedUntil(): ?\Illuminate\Support\Carbon
     {
-        if ($this->recentStrikes() < self::STRIKE_LIMIT) {
-            return null;
+        $auto   = $this->automaticLockUntil();
+        $manual = $this->manualPauseUntil();
+
+        if ($auto && $manual) {
+            return $auto->gt($manual) ? $auto : $manual;
         }
 
-        $last = Appointment::where('cancelled_by_id', $this->id)
-            ->where('late_cancellation', true)
-            ->whereNull('strike_waived_at')
-            ->max('cancelled_at');
-
-        if (! $last) {
-            return null;
-        }
-
-        $until = \Illuminate\Support\Carbon::parse($last)->addDays(self::LOCKOUT_DAYS);
-
-        return $until->isFuture() ? $until : null;
+        return $auto ?? $manual;
     }
 
     public function isBookingLocked(): bool
@@ -146,8 +207,8 @@ class User extends Authenticatable implements MustVerifyEmail
     /**
      * How reliably this user honours confirmed viewings.
      *
-     * kept   — viewings that reached "completed"
-     * missed — confirmed viewings they cancelled late
+     * kept   — viewings that reached "completed" without a no-show report
+     * missed — late cancellations plus reported no-shows (waived ones excluded)
      * rate   — kept / (kept + missed), or null below the minimum sample, so a
      *          first-timer is never shown as "0% reliable" on one data point.
      *
@@ -158,15 +219,23 @@ class User extends Authenticatable implements MustVerifyEmail
         $isAgent = $this->role_type === 'agent';
         $column  = $isAgent ? 'agent_id' : 'buyer_id';
 
-        $kept = Appointment::where($column, $this->id)->where('status', 'completed')->count();
+        $kept = Appointment::where($column, $this->id)
+            ->where('status', 'completed')
+            ->whereNull('no_show_user_id')
+            ->count();
 
-        $missed = Appointment::where($column, $this->id)
+        $late = Appointment::where($column, $this->id)
             ->where('cancelled_by_id', $this->id)
             ->where('late_cancellation', true)
             ->whereNull('strike_waived_at')
             ->count();
 
-        $total = $kept + $missed;
+        $noShows = Appointment::where('no_show_user_id', $this->id)
+            ->whereNull('strike_waived_at')
+            ->count();
+
+        $missed = $late + $noShows;
+        $total  = $kept + $missed;
 
         return [
             'kept'       => $kept,

@@ -185,6 +185,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('/appointments/{appointment}/confirm', [AppointmentController::class, 'confirm']);
     Route::post('/appointments/{appointment}/complete', [AppointmentController::class, 'complete']);
     Route::post('/appointments/{appointment}/cancel', [AppointmentController::class, 'cancel']);
+    Route::post('/appointments/{appointment}/no-show', [AppointmentController::class, 'reportNoShow'])->middleware('throttle:10,60');
 
     // Conversations
     Route::get('/conversations', [ConversationController::class, 'index']);
@@ -246,5 +247,13 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/agent-applications/{profile}/review', [AgentVerificationController::class, 'review']);
         Route::post('/agent-applications/{profile}/hold', [AdminController::class, 'holdApplication']);
         Route::delete('/agent-applications/{profile}/hold', [AdminController::class, 'releaseApplication']);
+
+        // Viewing behaviour: strikes, warnings, pauses
+        Route::get('/viewings', [\App\Http\Controllers\AdminViewingController::class, 'index']);
+        Route::get('/viewings/{user}', [\App\Http\Controllers\AdminViewingController::class, 'show']);
+        Route::post('/viewings/{user}/warn', [\App\Http\Controllers\AdminViewingController::class, 'warn']);
+        Route::post('/viewings/{user}/pause', [\App\Http\Controllers\AdminViewingController::class, 'pause']);
+        Route::post('/viewings/{user}/lift', [\App\Http\Controllers\AdminViewingController::class, 'lift']);
+        Route::post('/viewings/appointments/{appointment}/waive', [\App\Http\Controllers\AdminViewingController::class, 'waive']);
     });
 });

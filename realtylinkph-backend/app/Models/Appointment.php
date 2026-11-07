@@ -18,6 +18,14 @@ class Appointment extends Model
      */
     public const LATE_WINDOW_HOURS = 24;
 
+    /**
+     * A no-show can be reported once the slot is this many hours behind us (so
+     * nobody reports someone who is simply running late), and for this many days
+     * afterwards (so old viewings can't be reopened as a grudge).
+     */
+    public const NO_SHOW_REPORT_AFTER_HOURS = 1;
+    public const NO_SHOW_REPORT_DAYS        = 7;
+
     /** Why a viewing was cancelled. Categories, so patterns are measurable. */
     public const BUYER_REASONS = [
         'schedule_conflict'      => 'Schedule conflict',
@@ -73,6 +81,11 @@ class Appointment extends Model
         'cancelled_at',
         'late_cancellation',
         'strike_waived_at',
+        'strike_waived_by_id',
+        'no_show_user_id',
+        'no_show_reported_by_id',
+        'no_show_reported_at',
+        'no_show_note',
     ];
 
     protected function casts(): array
@@ -82,6 +95,7 @@ class Appointment extends Model
             'reminded_at'        => 'datetime',
             'cancelled_at'       => 'datetime',
             'strike_waived_at'   => 'datetime',
+            'no_show_reported_at' => 'datetime',
             'late_cancellation'  => 'boolean',
         ];
     }
@@ -130,10 +144,67 @@ class Appointment extends Model
         return $hoursUntil >= 0 && $hoursUntil < self::LATE_WINDOW_HOURS;
     }
 
+    /**
+     * May this user report that the other party didn't turn up? Only the buyer
+     * or the agent of a confirmed (or since-completed) viewing, once the slot is
+     * behind us, within the report window, and only once per viewing.
+     */
+    public function canReportNoShow(?User $user): bool
+    {
+        if ($user === null || $this->no_show_user_id !== null || $this->preferred_datetime === null) {
+            return false;
+        }
+
+        if ($user->id !== $this->buyer_id && $user->id !== $this->agent_id) {
+            return false;
+        }
+
+        if (! in_array($this->status, ['confirmed', 'completed'], true)) {
+            return false;
+        }
+
+        $hoursSince = $this->preferred_datetime->diffInHours(now(), false);
+
+        return $hoursSince >= self::NO_SHOW_REPORT_AFTER_HOURS
+            && $hoursSince <= self::NO_SHOW_REPORT_DAYS * 24;
+    }
+
+    /** Has anyone been reported as a no-show for this viewing? */
+    public function hasNoShowReport(): bool
+    {
+        return $this->no_show_user_id !== null;
+    }
+
+    /** A strike from this viewing (late cancellation or no-show) that an admin hasn't forgiven. */
+    public function hasLiveStrike(): bool
+    {
+        return ($this->late_cancellation || $this->hasNoShowReport()) && $this->strike_waived_at === null;
+    }
+
+    /** The user who took the strike for this viewing, if there is one. */
+    public function strikeUserId(): ?int
+    {
+        if ($this->hasNoShowReport()) {
+            return $this->no_show_user_id;
+        }
+
+        return $this->late_cancellation ? $this->cancelled_by_id : null;
+    }
+
     /** A late cancellation that an admin hasn't forgiven. */
     public function countsAsStrike(): bool
     {
         return $this->late_cancellation && $this->strike_waived_at === null;
+    }
+
+    public function noShowReporter(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'no_show_reported_by_id');
+    }
+
+    public function strikeWaivedBy(): BelongsTo
+    {
+        return $this->belongsTo(User::class, 'strike_waived_by_id');
     }
 
     public function cancelledBy(): BelongsTo

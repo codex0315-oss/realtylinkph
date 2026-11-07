@@ -11,12 +11,16 @@ use App\Http\Resources\AppointmentResource;
 use App\Models\Appointment;
 use App\Models\Property;
 use App\Services\AppointmentService;
+use App\Services\ViewingSanctionService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
 class AppointmentController extends Controller
 {
-    public function __construct(private readonly AppointmentService $service) {}
+    public function __construct(
+        private readonly AppointmentService $service,
+        private readonly ViewingSanctionService $sanctions,
+    ) {}
 
     public function index(Request $request): JsonResponse
     {
@@ -76,6 +80,17 @@ class AppointmentController extends Controller
             return ApiResponse::error('Only pending appointments can be confirmed.', [], 422);
         }
 
+        // An agent whose viewings are paused (too many strikes, or an admin pause)
+        // can't take on new ones. Their existing confirmed viewings are untouched.
+        if ($lockedUntil = request()->user()->bookingLockedUntil()) {
+            return ApiResponse::error(
+                'Your viewings are paused until ' . $lockedUntil->setTimezone('Asia/Manila')->format('M j, Y g:i A')
+                . ', so you cannot confirm new requests right now.',
+                ['locked_until' => $lockedUntil->toISOString()],
+                423,
+            );
+        }
+
         $appointment = $this->service->confirm($appointment);
 
         return ApiResponse::success(AppointmentResource::make($appointment), 'Appointment confirmed.', 200);
@@ -118,5 +133,34 @@ class AppointmentController extends Controller
                 : 'Appointment cancelled.',
             200,
         );
+    }
+
+    /**
+     * Report that the other party did not turn up to a viewing. It counts as two
+     * strikes against them, they are told straight away, and an admin can waive
+     * it if the report turns out to be wrong.
+     */
+    public function reportNoShow(Request $request, Appointment $appointment): JsonResponse
+    {
+        $this->authorize('view', $appointment);
+
+        $data = $request->validate(['note' => ['nullable', 'string', 'max:500']]);
+
+        if ($appointment->hasNoShowReport()) {
+            return ApiResponse::error('A no-show has already been reported for this viewing.', [], 422);
+        }
+
+        if (! $appointment->canReportNoShow($request->user())) {
+            return ApiResponse::error(
+                'A no-show can be reported at least ' . Appointment::NO_SHOW_REPORT_AFTER_HOURS
+                . ' hour after a confirmed viewing, and for ' . Appointment::NO_SHOW_REPORT_DAYS . ' days afterwards.',
+                [],
+                422,
+            );
+        }
+
+        $appointment = $this->sanctions->reportNoShow($appointment, $request->user(), $data['note'] ?? null);
+
+        return ApiResponse::success(AppointmentResource::make($appointment), 'No-show reported. They have been told.', 200);
     }
 }

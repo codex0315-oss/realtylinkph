@@ -19,6 +19,26 @@ const reviewByAgent = computed(() => new Map((props.reviews ?? []).map(r => [r.a
 
 const authStore = useAuthStore()
 const propertyHref = usePropertyHref()
+const { fetchMyAppointments } = useAppointment()
+
+/* "The agent didn't turn up": report it, or see that you were reported. */
+const noShowFor = ref<Appointment | null>(null)
+async function noShowDone() {
+  noShowFor.value = null
+  await fetchMyAppointments()
+}
+function noShowNote(a: Appointment): string {
+  const ns = a.no_show
+  if (!ns) return ''
+  if (ns.user_id === authStore.user?.id) {
+    return a.strike_waived
+      ? 'You were reported as not attending this viewing. An admin removed the strike.'
+      : 'The agent reported that you did not attend this viewing. It counts as 2 strikes. If that is wrong, contact support.'
+  }
+  return a.strike_waived
+    ? `You reported that ${a.agent?.name ?? 'the agent'} did not attend. An admin reviewed it and removed the strike.`
+    : `You reported that ${a.agent?.name ?? 'the agent'} did not attend this viewing.`
+}
 
 const at = (a: Appointment) => +new Date(a.preferred_datetime)
 const isPast = (a: Appointment) => at(a) < Date.now()
@@ -226,8 +246,19 @@ const STAR = 'M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h
                 <p v-if="kindOf(a) === 'cancelled'" class="mt-2.5 rounded-xl bg-red-500/[0.06] px-3 py-2 text-xs text-red-700 dark:text-red-300">{{ cancelNote(a) }}</p>
                 <p v-else-if="kindOf(a) === 'past'" class="mt-2.5 rounded-xl bg-brand-navy/[0.04] dark:bg-white/[0.05] px-3 py-2 text-xs text-brand-navy/65 dark:text-white/55">{{ pastNote(a) }}</p>
 
+                <p v-if="a.no_show" class="mt-2.5 rounded-xl bg-red-500/[0.06] px-3 py-2 text-xs text-red-700 dark:text-red-300">{{ noShowNote(a) }}</p>
+
                 <div class="mt-3 flex flex-wrap items-center gap-2">
                   <NuxtLink :to="propertyHref(a.property_id)" :class="btnGhost">View listing</NuxtLink>
+                  <button
+                    v-if="a.can_report_no_show"
+                    type="button"
+                    class="inline-flex items-center gap-1.5 rounded-full px-3.5 py-1.5 text-xs font-bold text-red-600 ring-1 ring-red-300 hover:bg-red-500/10 dark:text-red-400 dark:ring-red-400/40 transition"
+                    @click="noShowFor = a"
+                  >
+                    <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M18.364 5.636l-12.728 12.728M12 21a9 9 0 100-18 9 9 0 000 18z" /></svg>
+                    Agent didn’t show up
+                  </button>
                   <NuxtLink v-if="canBookAgain(a)" :to="`${propertyHref(a.property_id)}?book=1`" :class="btnGhost">
                     <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992v-.001M2.985 19.644v-4.992m0 0h4.992m-4.993 0l3.181 3.183a8.25 8.25 0 0013.803-3.7M4.031 9.865a8.25 8.25 0 0113.803-3.7l3.181 3.182m0-4.991v4.99" /></svg>
                     Book again
@@ -281,6 +312,8 @@ const STAR = 'M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h
         See upcoming viewings
       </NuxtLink>
     </div>
+
+    <NoShowDialog :open="!!noShowFor" :appointment="noShowFor" :is-agent="false" @close="noShowFor = null" @done="noShowDone" />
   </div>
 </template>
 

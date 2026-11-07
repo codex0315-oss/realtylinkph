@@ -79,6 +79,17 @@ export const useAppointment = () => {
     }
   }
 
+  /** Report that the other party did not turn up. The server tells them. */
+  async function reportNoShow(appointmentId: number, note?: string): Promise<boolean> {
+    try {
+      await api.post(`/appointments/${appointmentId}/no-show`, { note: note || undefined })
+      return true
+    } catch (e) {
+      error.value = extractError(e)
+      return false
+    }
+  }
+
   return {
     appointments,
     pagination,
@@ -89,6 +100,7 @@ export const useAppointment = () => {
     confirm,
     complete,
     cancel,
+    reportNoShow,
   }
 }
 

@@ -21,6 +21,10 @@ class AdminAction extends Model
         'review.hidden'       => 'Hid review',
         'review.shown'        => 'Restored review',
         'user.deleted'        => 'Deleted user',
+        'viewing.warned'      => 'Warned a user about viewings',
+        'viewing.paused'      => 'Paused a user’s viewing bookings',
+        'viewing.lifted'      => 'Lifted a viewing pause',
+        'viewing.strike_waived' => 'Waived a viewing strike',
         'user.cover_removed'  => 'Removed cover photo',
         'admin.created'       => 'Created admin account',
         'system.reset'        => 'Reset all data to a single admin',
@@ -31,7 +35,7 @@ class AdminAction extends Model
         'agents'   => ['agent.'],
         'listings' => ['listing.'],
         'reviews'  => ['review.'],
-        'users'    => ['user.', 'admin.'],
+        'users'    => ['user.', 'admin.', 'viewing.'],
     ];
 
     protected $fillable = [

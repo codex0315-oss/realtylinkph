@@ -32,6 +32,15 @@ class AppointmentResource extends JsonResource
             // Would cancelling right now count against me? Drives the warning
             // in the cancel dialog so nobody is surprised after the fact.
             'cancel_is_late'     => $this->wouldBeLateCancellation(),
+            // A reported no-show: who didn't turn up, and whether the viewer may report one.
+            'can_report_no_show' => $this->canReportNoShow($request->user()),
+            'no_show'            => $this->hasNoShowReport() ? [
+                'user_id'     => $this->no_show_user_id,
+                'reported_by' => $this->no_show_reported_by_id,
+                'reported_at' => $this->no_show_reported_at?->toISOString(),
+                'note'        => $this->no_show_note,
+            ] : null,
+            'strike_waived'      => $this->strike_waived_at !== null,
             'created_at'         => $this->created_at?->toISOString(),
             'property'           => PropertyResource::make($this->whenLoaded('property')),
             'buyer'              => UserResource::make($this->whenLoaded('buyer')),

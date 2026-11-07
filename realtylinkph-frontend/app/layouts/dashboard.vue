@@ -154,6 +154,7 @@ const adminLinks = [
   { label: 'Overview', href: '/admin',          icon: 'dashboard' },
   { label: 'Users',    href: '/admin/users',    icon: 'users' },
   { label: 'Agents',   href: '/admin/agents',   icon: 'user' },
+  { label: 'Viewings', href: '/admin/viewings', icon: 'calendar' },
   { label: 'Listings', href: '/admin/listings', icon: 'home' },
   { label: 'Reviews',  href: '/admin/reviews',  icon: 'star' },
   { label: 'Support',  href: '/admin/support',  icon: 'help' },
