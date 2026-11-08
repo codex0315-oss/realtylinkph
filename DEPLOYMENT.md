@@ -174,6 +174,9 @@ APP_DEBUG=false                 # ← critical: true leaks stack traces publicly
 APP_KEY=<php artisan key:generate --show>
 APP_URL=https://realtylinkph-api.onrender.com
 APP_TIMEZONE=Asia/Manila
+ADMIN_TWO_FACTOR=true           # optional, true by default: admins enter a code emailed to
+                                #   them after their password. Set false only if email is
+                                #   down and no admin can sign in, then set it back.
 FRONTEND_URL=https://realtylinkph.vercel.app
 LOG_CHANNEL=stderr              # ← not `stack`: that writes to a file inside the
 LOG_LEVEL=warning               #   container, invisible in Render's log viewer

@@ -114,4 +114,17 @@ return [
 
     'password_timeout' => env('AUTH_PASSWORD_TIMEOUT', 10800),
 
+    /*
+    |--------------------------------------------------------------------------
+    | Admin two-step sign-in
+    |--------------------------------------------------------------------------
+    |
+    | Admins enter a 6-digit code emailed to them after their password (or after
+    | Google). Set ADMIN_TWO_FACTOR=false to switch the step off, for example if
+    | the email provider is down and no admin can get in.
+    |
+    */
+
+    'admin_two_factor' => env('ADMIN_TWO_FACTOR', true),
+
 ];

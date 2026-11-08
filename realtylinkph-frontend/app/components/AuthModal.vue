@@ -1,6 +1,6 @@
 <script setup lang="ts">
 const { isOpen, mode, open, close, setMode } = useAuthModal()
-const { login, register, forgotPassword, loading, error } = useAuth()
+const { login, verifyTwoFactor, resendTwoFactor, cancelTwoFactor, twoFactor, register, forgotPassword, loading, error } = useAuth()
 const { startGoogleSignIn } = useGoogleAuth()
 
 /**
@@ -8,7 +8,7 @@ const { startGoogleSignIn } = useGoogleAuth()
  * `useAuthModal`'s mode so the login/register contract stays as-is —
  * "forgot" is a detour off the login form, not a third top-level mode.
  */
-const view = ref<'form' | 'forgot'>('form')
+const view = ref<'form' | 'forgot' | 'code'>('form')
 
 const forgotEmail = ref('')
 const forgotSent  = ref(false)
@@ -38,6 +38,52 @@ async function submitForgot() {
   forgotSent.value = res.ok
   forgotNote.value = res.message
 }
+
+/* ── Admin code step: after the password (or Google), a 6-digit code from the email ── */
+const code = ref('')
+const trustDevice = ref(false)
+const codeNote = ref('')
+const cooldown = ref(0)
+let cooldownTimer: ReturnType<typeof setInterval> | undefined
+
+function startCooldown(seconds = 30) {
+  cooldown.value = seconds
+  clearInterval(cooldownTimer)
+  cooldownTimer = setInterval(() => {
+    cooldown.value = Math.max(0, cooldown.value - 1)
+    if (!cooldown.value) clearInterval(cooldownTimer)
+  }, 1000)
+}
+
+watch(twoFactor, (t) => {
+  if (t) { view.value = 'code'; code.value = ''; codeNote.value = ''; trustDevice.value = false; startCooldown() }
+  else if (view.value === 'code') view.value = 'form'
+}, { immediate: true })
+
+async function submitCode() {
+  if (!/^[0-9]{6}$/.test(code.value)) { codeNote.value = 'Enter the 6 digits from the email.'; return }
+  codeNote.value = ''
+  if (await verifyTwoFactor(code.value, trustDevice.value)) close()
+  else code.value = ''
+}
+
+async function doResend() {
+  if (cooldown.value) return
+  const msg = await resendTwoFactor()
+  codeNote.value = msg ?? 'A new code is on its way.'
+  if (!msg) startCooldown()
+}
+
+function backFromCode() {
+  cancelTwoFactor()
+  view.value = 'form'
+  code.value = ''
+  codeNote.value = ''
+}
+
+/* Closing the modal abandons a half-finished admin sign-in. */
+watch(isOpen, (o) => { if (!o && twoFactor.value) cancelTwoFactor() })
+onUnmounted(() => clearInterval(cooldownTimer))
 
 const googleLoading = ref(false)
 
@@ -112,6 +158,7 @@ async function submit() {
   if (mode.value === 'login') {
     if (!validateLogin()) return
     await login({ email: form.email, password: form.password })
+    if (twoFactor.value) return          // an admin: the code step is next, keep the modal open
   } else {
     if (!validateRegister()) return
     // Every account registers as a default buyer — no role choice.
@@ -157,10 +204,13 @@ function maybeOpenFromQuery() {
   // The server couldn't reach Google at all. Retrying often just works, so say
   // that rather than implying the account or password is at fault.
   const unreachable  = g === 'unreachable'
+  // An admin who came back from Google still owes the emailed code.
+  const needsCode    = route.query.twofactor === '1' && !!twoFactor.value
 
   if (q !== 'login' && q !== 'register' && !failed && !unregistered && !unreachable) return
 
   open(q === 'register' ? 'register' : 'login')
+  if (needsCode) nextTick(() => { view.value = 'code' })
 
   if (failed || unregistered || unreachable) {
     // Opening resets the form, so set this after the watcher has run.
@@ -177,6 +227,7 @@ function maybeOpenFromQuery() {
   const query = { ...route.query }
   delete query.auth
   delete query.google
+  delete query.twofactor
   router.replace({ path: route.path, query })
 }
 
@@ -266,20 +317,81 @@ const fieldClass = `${fieldBase} ${fieldBorder}`
               <AppLogo size="sm" />
               <div class="border-l border-brand-navy/10 dark:border-white/10 pl-3.5">
                 <h2 class="font-heading text-[1.75rem] sm:text-[2rem] font-semibold tracking-[-0.02em] leading-[1.1] text-brand-navy dark:text-white">
-                  <template v-if="view === 'forgot'">Reset <em class="italic font-medium pr-[0.06em] text-gold-metal">password</em>.</template>
+                  <template v-if="view === 'code'">Check your <em class="italic font-medium pr-[0.06em] text-gold-metal">email</em>.</template>
+                  <template v-else-if="view === 'forgot'">Reset <em class="italic font-medium pr-[0.06em] text-gold-metal">password</em>.</template>
                   <template v-else-if="isLogin">Welcome <em class="italic font-medium pr-[0.06em] text-gold-metal">back</em>.</template>
                   <template v-else>Create <em class="italic font-medium pr-[0.06em] text-gold-metal">account</em>.</template>
                 </h2>
                 <p class="mt-1 text-[0.8125rem] text-brand-navy/55 dark:text-white/50">
-                  {{ view === 'forgot'
+                  {{ view === 'code'
+                    ? `We sent a 6-digit code to ${twoFactor?.email ?? 'your email'}.`
+                    : view === 'forgot'
                     ? 'We\'ll email you a link to choose a new one.'
                     : (isLogin ? 'Sign in to access your account.' : 'Join RealtyLinkPH today.') }}
                 </p>
               </div>
             </div>
 
+            <!-- ═══════════ Admin: emailed code ═══════════ -->
+            <form v-if="view === 'code'" @submit.prevent="submitCode">
+              <div
+                v-if="error || codeNote"
+                class="flex items-start gap-2 text-xs rounded-xl px-4 py-3 mb-4 border"
+                :class="error
+                  ? 'text-red-600 dark:text-red-400 bg-red-500/10 border-red-500/25 dark:border-red-500/20'
+                  : 'text-brand-navy/70 dark:text-white/70 bg-brand-navy/5 dark:bg-white/5 border-brand-navy/10 dark:border-white/10'"
+                role="alert"
+              >
+                <svg class="h-3.5 w-3.5 flex-shrink-0 mt-0.5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
+                </svg>
+                <span>{{ error || codeNote }}</span>
+              </div>
+
+              <label for="am-code" :class="[labelClass, 'mb-2']">Sign-in code</label>
+              <input
+                id="am-code"
+                v-model="code"
+                type="text"
+                inputmode="numeric"
+                autocomplete="one-time-code"
+                maxlength="6"
+                placeholder="000000"
+                autofocus
+                :class="[fieldClass, 'text-center text-xl tracking-[0.5em] font-semibold']"
+                @input="code = code.replace(/[^0-9]/g, '')"
+              />
+              <p class="mt-2 text-xs text-brand-navy/55 dark:text-white/50">The code works once and expires in 10 minutes.</p>
+
+              <label class="mt-4 flex cursor-pointer items-start gap-3 rounded-xl border border-brand-navy/10 dark:border-white/10 px-3.5 py-3 hover:border-brand-gold/50 transition-colors">
+                <input v-model="trustDevice" type="checkbox" class="mt-0.5 h-4 w-4 flex-none rounded border-brand-navy/30 text-brand-navy focus:ring-brand-gold checked:!bg-brand-navy dark:checked:!bg-emerald-500 checked:!border-transparent" />
+                <span class="text-xs leading-relaxed text-brand-navy/75 dark:text-white/70">
+                  <span class="font-semibold text-brand-navy dark:text-white">Trust this device for 30 days.</span>
+                  Don’t ask for a code here again. Only tick this on your own computer.
+                </span>
+              </label>
+
+              <button
+                type="submit"
+                :disabled="loading || code.length !== 6"
+                class="w-full mt-5 bg-brand-gold text-brand-navy font-bold text-sm py-3 rounded-xl
+                       shadow-[0_4px_16px_rgba(212,165,74,0.35)] hover:shadow-[0_6px_24px_rgba(212,165,74,0.5)]
+                       hover:-translate-y-0.5 active:translate-y-0 transition-all duration-200
+                       disabled:opacity-50 disabled:cursor-not-allowed disabled:transform-none"
+              >
+                {{ loading ? 'Checking…' : 'Sign in' }}
+              </button>
+
+              <div class="mt-4 flex items-center justify-between gap-3 text-xs font-semibold">
+                <button type="button" class="text-brand-navy/50 dark:text-white/50 hover:text-brand-gold-deep dark:hover:text-brand-gold transition-colors" @click="backFromCode">← Back</button>
+                <button type="button" class="text-brand-gold-deep dark:text-brand-gold hover:underline disabled:opacity-50 disabled:no-underline" :disabled="cooldown > 0" @click="doResend">
+                  {{ cooldown > 0 ? `Send a new code in ${cooldown}s` : 'Send a new code' }}
+                </button>
+              </div>
+            </form>
+
             <!-- ═══════════ Forgot password ═══════════ -->
-            <form v-if="view === 'forgot'" @submit.prevent="submitForgot">
+            <form v-else-if="view === 'forgot'" @submit.prevent="submitForgot">
               <!-- Sent: confirmation state -->
               <div v-if="forgotSent" class="text-center py-2">
                 <div class="h-12 w-12 rounded-full bg-brand-gold/15 border border-brand-gold/30 flex items-center justify-center mx-auto mb-4">

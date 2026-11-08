@@ -58,6 +58,10 @@ onMounted(async () => {
   }
 
   const res = await completeGoogleSignIn(code, intent)
+  if (res.twoFactor) {
+    await navigateTo('/?auth=login&twofactor=1')
+    return
+  }
   if (!res.ok) {
     // No account for that Google address: send them to the create-account form
     // rather than looping them back through a sign-in they cannot complete.

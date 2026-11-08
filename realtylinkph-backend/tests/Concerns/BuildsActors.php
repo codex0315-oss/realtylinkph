@@ -77,8 +77,11 @@ trait BuildsActors
     /** Next request is unauthenticated, whatever happened before. */
     protected function asGuest(): static
     {
+        // Sanctum::actingAs() rewrites the default guard to `sanctum`, which has
+        // no attempt(); put it back so a /login after an acting-as works.
+        config(['auth.defaults.guard' => 'web']);
         $this->app['auth']->forgetGuards();
-        $this->app['auth']->shouldUse(config('auth.defaults.guard'));
+        $this->app['auth']->shouldUse('web');
         // Auth::attempt() in /login writes to the (array) session, which the
         // test app keeps between requests; a real API request has no session.
         $this->app['session']->flush();

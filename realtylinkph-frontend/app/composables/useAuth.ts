@@ -1,5 +1,8 @@
 import type { ApiResponse, LoginRequest, RegisterRequest } from '~/types'
 
+/** An admin who has entered their password and now owes the emailed code. */
+export interface TwoFactorChallenge { challenge: string; email: string; expires_in: number }
+
 export const useAuth = () => {
   const authStore = useAuthStore()
   const router    = useRouter()
@@ -7,6 +10,8 @@ export const useAuth = () => {
 
   const loading = ref(false)
   const error   = ref<string | null>(null)
+  // Shared with the sign-in modal and the Google callback page.
+  const twoFactor = useState<TwoFactorChallenge | null>('admin-two-factor', () => null)
 
   // Role-aware landing after auth: admins → admin area, agents → their dashboard, buyers → appointments.
   function landingFor(): string {
@@ -19,17 +24,64 @@ export const useAuth = () => {
     loading.value = true
     error.value   = null
     try {
-      const res = await api.post<ApiResponse<{ token: string; user: import('~/types').User }>>(
-        '/login', credentials
+      const res = await api.post<ApiResponse<{ token?: string; user?: import('~/types').User; two_factor?: TwoFactorChallenge }>>(
+        '/login', { ...credentials, device_token: readDeviceKey() }
       )
-      authStore.setToken(res.data.token)
-      authStore.setUser(res.data.user)
+      // Admins: the password was right, now they owe the emailed code.
+      if (res.data.two_factor) {
+        twoFactor.value = res.data.two_factor
+        return
+      }
+      authStore.setToken(res.data.token!)
+      authStore.setUser(res.data.user!)
       await router.push(landingFor())
     } catch (e: unknown) {
       error.value = extractApiError(e)
     } finally {
       loading.value = false
     }
+  }
+
+  /** Second step of an admin sign-in: the 6-digit code from the email. */
+  async function verifyTwoFactor(code: string, remember = false): Promise<boolean> {
+    if (!twoFactor.value) return false
+    loading.value = true
+    error.value   = null
+    try {
+      const res = await api.post<ApiResponse<{ token: string; user: import('~/types').User; device_token?: string | null }>>(
+        '/login/two-factor', { challenge: twoFactor.value.challenge, code, remember }
+      )
+      if (res.data.device_token) saveDeviceKey(res.data.device_token)
+      twoFactor.value = null
+      authStore.setToken(res.data.token)
+      authStore.setUser(res.data.user)
+      await router.push(landingFor())
+      return true
+    } catch (e: unknown) {
+      error.value = extractApiError(e)
+      // An expired or used-up challenge can't be retried: send them back to the password.
+      const code = (e as { data?: { errors?: { code?: string } } })?.data?.errors?.code
+      if (code === 'expired' || code === 'locked') twoFactor.value = null
+      return false
+    } finally {
+      loading.value = false
+    }
+  }
+
+  /** Email a fresh code. Returns an error message, or null when it was sent. */
+  async function resendTwoFactor(): Promise<string | null> {
+    if (!twoFactor.value) return 'Sign in again to get a code.'
+    try {
+      await api.post('/login/two-factor/resend', { challenge: twoFactor.value.challenge })
+      return null
+    } catch (e: unknown) {
+      return extractApiError(e)
+    }
+  }
+
+  function cancelTwoFactor() {
+    twoFactor.value = null
+    error.value = null
   }
 
   async function register(payload: RegisterRequest): Promise<void> {
@@ -118,7 +170,7 @@ export const useAuth = () => {
     }
   }
 
-  return { login, register, logout, fetchMe, forgotPassword, resetPassword, loading, error }
+  return { login, verifyTwoFactor, resendTwoFactor, cancelTwoFactor, twoFactor, register, logout, fetchMe, forgotPassword, resetPassword, loading, error }
 }
 
 /** Pull the HTTP status off an ofetch FetchError (covers its various shapes). */

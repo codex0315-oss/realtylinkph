@@ -16,6 +16,8 @@ export interface GoogleSignInResult {
   unreachable: boolean
   /** Server-supplied explanation, safe to show the user. */
   message: string
+  /** An admin: Google was fine, but the emailed code is still owed. */
+  twoFactor?: boolean
 }
 
 /** Google sign-in / sign-up (separate from Calendar connect). */
@@ -43,11 +45,16 @@ export const useGoogleAuth = () => {
     intent: GoogleIntent = 'login',
   ): Promise<GoogleSignInResult> {
     try {
-      const res = await api.post<ApiResponse<{ token: string; user: User }>>(
-        '/auth/google/callback', { code, intent }
+      const res = await api.post<ApiResponse<{ token?: string; user?: User; two_factor?: import('~/composables/useAuth').TwoFactorChallenge }>>(
+        '/auth/google/callback', { code, intent, device_token: readDeviceKey() }
       )
-      authStore.setToken(res.data.token)
-      authStore.setUser(res.data.user)
+      // Admins finish with the emailed code, same as the password route.
+      if (res.data.two_factor) {
+        useState('admin-two-factor').value = res.data.two_factor
+        return { ok: false, unregistered: false, unreachable: false, message: '', twoFactor: true }
+      }
+      authStore.setToken(res.data.token!)
+      authStore.setUser(res.data.user!)
       return { ok: true, unregistered: false, unreachable: false, message: '' }
     } catch (e: unknown) {
       const data = (e as { data?: { message?: string; errors?: { code?: string } } })?.data

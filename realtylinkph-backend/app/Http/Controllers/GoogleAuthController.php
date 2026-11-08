@@ -7,6 +7,7 @@ namespace App\Http\Controllers;
 use App\Helpers\ApiResponse;
 use App\Http\Resources\UserResource;
 use App\Models\User;
+use App\Services\AdminTwoFactorService;
 use Illuminate\Http\Client\ConnectionException;
 use Illuminate\Http\Client\PendingRequest;
 use Illuminate\Http\JsonResponse;
@@ -160,6 +161,17 @@ class GoogleAuthController extends Controller
         } elseif (! $user->hasVerifiedEmail()) {
             // Google vouches for the email — trust it.
             $user->markEmailAsVerified();
+        }
+
+        // An admin signing in with Google still gets the emailed code, so the
+        // second step cannot be skipped by choosing a different way in.
+        $twoFactor = app(AdminTwoFactorService::class);
+        if ($twoFactor->required($user) && ! $twoFactor->deviceTrusted($user, $request->input('device_token'))) {
+            $challenge = $twoFactor->begin($user);
+
+            return $challenge === null
+                ? ApiResponse::error('We could not email your sign-in code. Please try again in a moment.', [], 503)
+                : ApiResponse::success(['two_factor' => $challenge], 'Enter the code we emailed you.', 200);
         }
 
         $token = $user->createToken('api')->plainTextToken;

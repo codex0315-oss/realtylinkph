@@ -31,6 +31,8 @@ use Illuminate\Support\Facades\Route;
 
 Route::post('/register', [AuthController::class, 'register'])->middleware('throttle:10,1');
 Route::post('/login', [AuthController::class, 'login'])->middleware('throttle:10,1');
+Route::post('/login/two-factor', [AuthController::class, 'verifyTwoFactor'])->middleware('throttle:10,1');
+Route::post('/login/two-factor/resend', [AuthController::class, 'resendTwoFactor'])->middleware('throttle:4,1');
 
 // Google sign-in / sign-up (find-or-create, buyer accounts)
 Route::get('/auth/google/redirect', [GoogleAuthController::class, 'redirect']);

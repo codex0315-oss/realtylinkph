@@ -14,6 +14,7 @@ use App\Http\Requests\Auth\UpdateProfileRequest;
 use App\Http\Resources\UserResource;
 use App\Models\User;
 use App\Notifications\EmailVerificationCode;
+use App\Services\AdminTwoFactorService;
 use Illuminate\Auth\Events\Registered;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
@@ -25,6 +26,10 @@ use Illuminate\Support\Facades\Storage;
 
 class AuthController extends Controller
 {
+    public function __construct(private readonly AdminTwoFactorService $twoFactor)
+    {
+    }
+
     public function register(RegisterRequest $request): JsonResponse
     {
         $user = User::create([
@@ -62,12 +67,72 @@ class AuthController extends Controller
             return ApiResponse::error('Invalid credentials.', [], 401);
         }
 
+        // Admins get a second step: a code by email. The token comes after it.
+        if ($this->twoFactor->required($user) && ! $this->twoFactor->deviceTrusted($user, $request->input('device_token'))) {
+            Auth::logout();
+
+            return $this->twoFactorChallenge($user);
+        }
+
         $token = $user->createToken('api')->plainTextToken;
 
         return ApiResponse::success([
             'user'  => UserResource::make($user->load('agentProfile')),
             'token' => $token,
         ], 'Login successful.', 200);
+    }
+
+    /** Start the admin code step and answer with the challenge (or say the code could not be sent). */
+    private function twoFactorChallenge(User $user): JsonResponse
+    {
+        $challenge = $this->twoFactor->begin($user);
+
+        if ($challenge === null) {
+            return ApiResponse::error('We could not email your sign-in code. Please try again in a moment.', [], 503);
+        }
+
+        return ApiResponse::success(['two_factor' => $challenge], 'Enter the code we emailed you.', 200);
+    }
+
+    /** Finish an admin sign-in with the emailed code. */
+    public function verifyTwoFactor(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'challenge' => ['required', 'string', 'max:100'],
+            'code'      => ['required', 'string', 'regex:/^[0-9]{6}$/'],
+            'remember'  => ['sometimes', 'boolean'],
+        ]);
+
+        $result = $this->twoFactor->verify($data['challenge'], $data['code']);
+
+        if (is_string($result)) {
+            return match ($result) {
+                'expired' => ApiResponse::error('That code has expired. Sign in again to get a new one.', ['code' => 'expired'], 422),
+                'locked'  => ApiResponse::error('Too many wrong codes. Sign in again to get a new one.', ['code' => 'locked'], 422),
+                default   => ApiResponse::error('That code is not right. Check the email and try again.', ['code' => 'wrong'], 422),
+            };
+        }
+
+        return ApiResponse::success([
+            'user'  => UserResource::make($result->load('agentProfile')),
+            'token' => $result->createToken('api')->plainTextToken,
+            // "Trust this device": the browser keeps this key and skips the code for a while.
+            'device_token' => ! empty($data['remember']) ? $this->twoFactor->trustDevice($result, $request->userAgent()) : null,
+            'device_days'  => ! empty($data['remember']) ? AdminTwoFactorService::TRUST_DAYS : null,
+        ], 'Login successful.', 200);
+    }
+
+    /** Email a fresh code for an open challenge. */
+    public function resendTwoFactor(Request $request): JsonResponse
+    {
+        $data = $request->validate(['challenge' => ['required', 'string', 'max:100']]);
+
+        return match ($this->twoFactor->resend($data['challenge'])) {
+            'sent'     => ApiResponse::success(null, 'A new code is on its way.', 200),
+            'too_soon' => ApiResponse::error('Please wait a few seconds before asking for another code.', ['code' => 'too_soon'], 429),
+            'failed'   => ApiResponse::error('We could not email the code. Please try again in a moment.', [], 503),
+            default    => ApiResponse::error('That sign-in has expired. Sign in again to get a new code.', ['code' => 'expired'], 422),
+        };
     }
 
     public function logout(Request $request): JsonResponse
@@ -123,6 +188,7 @@ class AuthController extends Controller
         ]);
 
         $request->user()->update(['password' => Hash::make($validated['password'])]);
+        $this->twoFactor->forgetDevices($request->user());   // a new password means every trusted browser starts over
 
         return ApiResponse::success(null, 'Password changed successfully.', 200);
     }
@@ -161,6 +227,7 @@ class AuthController extends Controller
                 // Also how a Google sign-up gets a password of their own.
                 $user->update(['password' => Hash::make($password), 'password_set' => true]);
                 $user->tokens()->delete();
+                $this->twoFactor->forgetDevices($user);
             }
         );
 
