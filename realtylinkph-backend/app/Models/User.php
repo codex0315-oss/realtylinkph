@@ -77,15 +77,23 @@ class User extends Authenticatable implements MustVerifyEmail
             'property_alerts'         => 'boolean',
             'google_token_expires_at' => 'datetime',
             'last_seen_at'            => 'datetime',
+            'signed_out_at'           => 'datetime',
             'is_system'               => 'boolean',
             'password_set'            => 'boolean',
         ];
     }
 
-    /** Considered "online" if active within the last 2 minutes. */
+    /**
+     * Considered "online" if active within the last 2 minutes, unless they signed
+     * out since their last heartbeat (then they are offline right away).
+     */
     public function isOnline(): bool
     {
-        return $this->last_seen_at !== null && $this->last_seen_at->gt(now()->subMinutes(2));
+        if ($this->last_seen_at === null || ! $this->last_seen_at->gt(now()->subMinutes(2))) {
+            return false;
+        }
+
+        return $this->signed_out_at === null || $this->last_seen_at->gt($this->signed_out_at);
     }
 
     // ─── Viewing reliability ─────────────────────────────────────────────────

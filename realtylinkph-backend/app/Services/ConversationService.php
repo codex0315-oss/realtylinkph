@@ -207,7 +207,9 @@ class ConversationService
     public function listForUser(User $user, int $perPage = 15): LengthAwarePaginator
     {
         return Conversation::with(['property', 'buyer', 'agent', 'messages' => function ($q): void {
-            $q->latest()->limit(1);
+            // The relation already orders oldest-first, so a bare latest() only
+            // appended a second ORDER BY and kept returning the OLDEST message.
+            $q->reorder()->orderByDesc('created_at')->orderByDesc('id')->limit(1);
         }])
             ->where(function ($q) use ($user): void {
                 // Mine, and not removed from my side of the inbox.

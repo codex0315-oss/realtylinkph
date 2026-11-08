@@ -144,6 +144,10 @@ class AuthController extends Controller
             $token->delete();
         }
 
+        // Stop showing as "Active now" at once; "last active" becomes this moment.
+        \Illuminate\Support\Facades\DB::table('users')->where('id', $request->user()->id)
+            ->update(['signed_out_at' => now(), 'last_seen_at' => now()]);
+
         return ApiResponse::success(null, 'Logged out successfully.', 200);
     }
 

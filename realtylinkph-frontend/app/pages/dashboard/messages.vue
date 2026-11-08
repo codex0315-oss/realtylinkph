@@ -195,6 +195,18 @@ const showSeen = computed(() => {
   return last.sender_id === me.value && new Date(last.created_at).getTime() <= otherSeenAt.value
 })
 const seenText = computed(() => showSeen.value ? `Seen ${relAgo(otherSeenAt.value!, presenceNow.value)}` : '')
+// Words under my latest message: Sending… / Sent / Delivered (they're online) / Seen.
+const lastMine = computed(() => {
+  const arr = convStore.activeMessages
+  const last = arr[arr.length - 1]
+  return last && last.sender_id === me.value ? last : null
+})
+const statusText = computed(() => {
+  const m = lastMine.value
+  if (!m || m.local_status === 'failed' || showSeen.value) return ''
+  const t = tickOf(m)
+  return t === 'sending' ? 'Sending…' : t === 'delivered' ? 'Delivered' : t === 'seen' ? '' : 'Sent'
+})
 
 /* ── Conversation open / send ── */
 async function openConv(id: number) {
@@ -622,6 +634,10 @@ if (convStore.conversations.length) {
               <svg class="h-3 w-3 text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M5 13l4 4L19 7" /></svg>
               {{ seenText }}
             </span>
+          </div>
+
+          <div v-if="statusText && !otherTyping" class="flex justify-end pr-1 mt-1">
+            <span class="text-[0.625rem] font-semibold" :class="statusText === 'Delivered' ? 'text-emerald-600 dark:text-emerald-400' : 'text-gray-400 dark:text-white/40'">{{ statusText }}</span>
           </div>
 
           <!-- typing bubble -->

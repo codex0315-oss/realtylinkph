@@ -1,5 +1,6 @@
 <script setup lang="ts">
 import type { Conversation, Message } from '~/types'
+import type { Presence } from '~/composables/usePresence'
 
 /**
  * Messages, as a docked side panel (see layouts/dashboard): the chat list, and
@@ -96,6 +97,32 @@ function fullDate(iso: string) {
 /* ── Thread ──────────────────────────────────────────────────────────── */
 const openId = ref<number | null>(null)
 const thread = computed(() => convStore.conversations.find(c => c.id === openId.value) ?? null)
+
+/* ── Who is around: "Active now" / "Active 5 mins ago" for the person you're talking to ── */
+const { fetchPresence } = usePresence()
+const presence = ref<Presence | null>(null)
+const nowMs = ref(Date.now())
+let presenceTimer: ReturnType<typeof setInterval> | undefined
+async function refreshPresence() {
+  const o = thread.value ? other(thread.value) : null
+  nowMs.value = Date.now()
+  if (!o) { presence.value = null; return }
+  const p = await fetchPresence(o.id)
+  if (p) presence.value = p
+}
+watch(openId, (id) => {
+  clearInterval(presenceTimer)
+  const o = thread.value ? other(thread.value) : null
+  // Show what the list already knew straight away, then ask for the exact answer.
+  presence.value = o ? { is_online: !!o.is_online, last_seen_at: o.last_seen_at ?? null } : null
+  if (id) { refreshPresence(); presenceTimer = setInterval(refreshPresence, 30_000) }
+})
+
+/* The list keeps itself fresh while you're looking at it (new messages, who's online). */
+let listTimer: ReturnType<typeof setInterval> | undefined
+onMounted(() => { listTimer = setInterval(() => { if (!openId.value) fetchConversations() }, 30_000) })
+onUnmounted(() => { clearInterval(presenceTimer); clearInterval(listTimer) })
+function backToList() { closeThread(); fetchConversations() }
 const threadEl = ref<HTMLElement | null>(null)
 const draft = ref('')
 const inputEl = ref<HTMLTextAreaElement | null>(null)
@@ -210,6 +237,15 @@ const feed = computed(() => {
 })
 function clock(iso: string) {
   return new Date(iso).toLocaleTimeString('en-PH', { hour: 'numeric', minute: '2-digit' })
+}
+/* The status under your most recent message, in words. Older messages keep small ticks. */
+const lastOwnId = computed(() => {
+  const mine = convStore.activeMessages.filter(m => m.sender_id === me.value)
+  return mine.length ? mine[mine.length - 1]!.id : null
+})
+function statusWord(m: Message): string {
+  const t = tickOf(m)
+  return t === 'seen' ? `Seen ${clock(m.read_at!)}` : t === 'delivered' ? 'Delivered' : 'Sent'
 }
 type Tick = 'sending' | 'failed' | 'sent' | 'delivered' | 'seen'
 function tickOf(m: Message): Tick {
@@ -400,7 +436,10 @@ async function removeChat(c: Conversation) {
             :class="c.unread_count ? 'bg-brand-gold/[0.07]' : ''"
             @click="openThread(c)"
           >
-            <AppAvatar :name="other(c)?.name" :src="other(c)?.avatar" size="md" />
+            <span class="relative flex-none">
+              <AppAvatar :name="other(c)?.name" :src="other(c)?.avatar" size="md" />
+              <span v-if="other(c)?.is_online" class="absolute -bottom-0.5 -right-0.5 h-3 w-3 rounded-full bg-emerald-500 ring-2 ring-[#ffffff] dark:ring-[#0B1A35]" title="Active now" />
+            </span>
             <span class="min-w-0 flex-1">
               <span class="flex items-center justify-between gap-2">
                 <span class="truncate text-sm text-brand-navy dark:text-white" :class="c.unread_count ? 'font-bold' : 'font-semibold'">{{ other(c)?.name ?? 'Unknown' }}</span>
@@ -508,14 +547,21 @@ async function removeChat(c: Conversation) {
       <!-- ░░ Thread (quick reply) ░░ -->
       <div v-else key="thread" class="flex h-full flex-col">
         <div class="flex items-center gap-2 px-3 py-3 border-b border-brand-navy/[0.06] dark:border-white/10">
-          <button type="button" class="h-9 w-9 flex-none rounded-full flex items-center justify-center text-brand-navy/60 hover:text-brand-navy hover:bg-brand-navy/[0.06] dark:text-white/60 dark:hover:text-white dark:hover:bg-white/10 transition" aria-label="Back to chats" @click="closeThread">
+          <button type="button" class="h-9 w-9 flex-none rounded-full flex items-center justify-center text-brand-navy/60 hover:text-brand-navy hover:bg-brand-navy/[0.06] dark:text-white/60 dark:hover:text-white dark:hover:bg-white/10 transition" aria-label="Back to chats" @click="backToList">
             <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 19.5L8.25 12l7.5-7.5" /></svg>
           </button>
-          <AppAvatar v-if="thread" :name="other(thread)?.name" :src="other(thread)?.avatar" size="sm" />
+          <span v-if="thread" class="relative flex-none">
+            <AppAvatar :name="other(thread)?.name" :src="other(thread)?.avatar" size="sm" />
+            <span v-if="presence?.is_online" class="absolute -bottom-0.5 -right-0.5 h-2.5 w-2.5 rounded-full bg-emerald-500 ring-2 ring-[#ffffff] dark:ring-[#0B1A35]" />
+          </span>
           <div class="min-w-0 flex-1">
             <p class="truncate text-sm font-bold text-brand-navy dark:text-white">{{ thread ? other(thread)?.name : '' }}</p>
             <p class="truncate text-[0.6875rem]" :class="otherTyping || aiTyping ? 'text-emerald-600 dark:text-emerald-400 font-semibold' : 'text-brand-navy/45 dark:text-white/45'">
-              {{ aiTyping ? 'RealtyLink AI is replying…' : otherTyping ? 'typing…' : thread?.property?.title }}
+              <template v-if="aiTyping">RealtyLink AI is replying…</template>
+              <template v-else-if="otherTyping">typing…</template>
+              <template v-else>
+                <span v-if="presence" :class="presence.is_online ? 'font-semibold text-emerald-600 dark:text-emerald-400' : ''">{{ lastSeenLabel(presence, nowMs) }}</span><template v-if="presence && thread?.property?.title"> · </template>{{ thread?.property?.title }}
+              </template>
             </p>
           </div>
           <button
@@ -567,6 +613,7 @@ async function removeChat(c: Conversation) {
                     · Not sent · <button type="button" class="underline" @click="retry(item.m)">Retry</button>
                   </span>
                   <span v-else-if="tickOf(item.m) === 'sending'">· Sending…</span>
+                  <span v-else-if="item.m.id === lastOwnId" class="font-semibold" :class="tickOf(item.m) === 'seen' ? 'text-sky-500' : tickOf(item.m) === 'delivered' ? 'text-emerald-600 dark:text-emerald-400' : ''">· {{ statusWord(item.m) }}</span>
                   <span v-else :class="tickOf(item.m) === 'seen' ? 'text-sky-500' : ''" :title="tickOf(item.m)">
                     {{ tickOf(item.m) === 'sent' ? '✓' : '✓✓' }}
                   </span>
