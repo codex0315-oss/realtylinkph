@@ -23,6 +23,8 @@ export interface User {
   reliability?: ViewingReliability
   /** ISO date until which booking is paused for repeated late cancellations. Own/admin only. */
   booking_locked_until?: string | null
+  /** Strikes in the rolling window (late cancellations and reported no-shows). Own/admin only. */
+  viewing_strikes?: { count: number; limit: number; window_days: number }
   created_at: string
   agent_profile?: import('./agent').AgentProfile | null
 }

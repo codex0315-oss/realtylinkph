@@ -23,6 +23,25 @@ class ViewingSanctionService
         private readonly NotificationService $notifications,
     ) {}
 
+    /**
+     * People who are paused or already at three strikes, for the admin Overview.
+     * Only people with a strike or a sanction on record are looked at.
+     */
+    public function needingAttention(): int
+    {
+        $ids = Appointment::query()->where('late_cancellation', true)->whereNotNull('cancelled_by_id')->pluck('cancelled_by_id')
+            ->merge(Appointment::query()->whereNotNull('no_show_user_id')->pluck('no_show_user_id'))
+            ->merge(ViewingSanction::query()->pluck('user_id'))
+            ->unique();
+
+        return User::query()
+            ->whereIn('id', $ids)
+            ->whereIn('role_type', ['buyer', 'ghost_buyer', 'agent'])
+            ->get()
+            ->filter(fn (User $u) => $u->isBookingLocked() || $u->recentStrikes() >= 3)
+            ->count();
+    }
+
     // ─── Strikes the system hands out ────────────────────────────────────────
 
     /**

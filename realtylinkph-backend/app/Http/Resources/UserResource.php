@@ -4,6 +4,7 @@ declare(strict_types=1);
 
 namespace App\Http\Resources;
 
+use App\Models\User;
 use Illuminate\Http\Request;
 use App\Support\Uploads;
 use Illuminate\Http\Resources\Json\JsonResource;
@@ -43,6 +44,11 @@ class UserResource extends JsonResource
             'booking_locked_until' => $this->when(
                 $request->user('sanctum')?->id === $this->id || $request->user('sanctum')?->isAdmin(),
                 fn () => $this->bookingLockedUntil()?->toISOString(),
+            ),
+            // Their own strike count, so they can see where they stand before it matters.
+            'viewing_strikes'    => $this->when(
+                $request->user('sanctum')?->id === $this->id || $request->user('sanctum')?->isAdmin(),
+                fn () => ['count' => $this->recentStrikes(), 'limit' => User::STRIKE_LIMIT, 'window_days' => User::STRIKE_WINDOW_DAYS],
             ),
             'created_at'         => $this->created_at?->toISOString(),
             /*

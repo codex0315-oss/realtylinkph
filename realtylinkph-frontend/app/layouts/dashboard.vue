@@ -602,6 +602,7 @@ const topIconOn =
       <!-- Content + docked panel -->
       <div class="flex-1 flex min-h-0">
         <main ref="mainEl" class="flex-1 min-w-0 p-5 sm:p-8" :class="cwClasses">
+          <EmailVerifyReminder />
           <slot />
         </main>
 

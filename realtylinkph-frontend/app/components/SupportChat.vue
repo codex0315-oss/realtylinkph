@@ -178,7 +178,7 @@ const day = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString('en
   <div class="flex h-full min-h-0 flex-col">
     <!-- Header -->
     <div class="flex items-center gap-3 px-5 py-3.5 border-b border-gray-100 dark:border-white/10">
-      <button type="button" class="lg:hidden p-1.5 -ml-1 text-gray-500 dark:text-white/60 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10" aria-label="All requests" @click="emit('list')">
+      <button type="button" class="cw-lg:hidden p-1.5 -ml-1 text-gray-500 dark:text-white/60 rounded-lg hover:bg-gray-100 dark:hover:bg-white/10" aria-label="All requests" @click="emit('list')">
         <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
       </button>
       <div class="relative flex-shrink-0">
@@ -201,12 +201,14 @@ const day = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString('en
       <button
         v-else-if="loaded && active?.status === 'ai' && active.messages?.length"
         type="button"
-        class="flex-shrink-0 inline-flex items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-gray-500 dark:text-white/60 bg-gray-50 dark:bg-white/5 hover:bg-brand-gold/10 hover:text-brand-gold-deep dark:hover:text-brand-gold transition-colors disabled:opacity-50"
+        class="flex-shrink-0 inline-flex min-h-9 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-gray-500 dark:text-white/60 bg-gray-50 dark:bg-white/5 hover:bg-brand-gold/10 hover:text-brand-gold-deep dark:hover:text-brand-gold transition-colors disabled:opacity-50"
         :disabled="sending"
+        aria-label="Talk to a person"
+        title="Talk to a person"
         @click="talkToPerson"
       >
         <svg class="h-3.5 w-3.5 text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 6a3.75 3.75 0 11-7.5 0 3.75 3.75 0 017.5 0zM4.501 20.118a7.5 7.5 0 0114.998 0A17.933 17.933 0 0112 21.75c-2.676 0-5.216-.584-7.499-1.632z" /></svg>
-        Talk to a person
+        <span class="hidden cw-sm:inline">Talk to a person</span>
       </button>
     </div>
 

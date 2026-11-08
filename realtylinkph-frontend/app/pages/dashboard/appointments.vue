@@ -7,13 +7,6 @@ const authStore = useAuthStore()
 const { appointments, loading, fetchMyAppointments, confirm, complete, cancel, error: apptError } = useAppointment()
 const { fetchMe: refreshMe } = useAuth()
 
-/** My own standing — shown as a banner when booking is paused. */
-const lockedUntil = computed(() => authStore.user?.booking_locked_until ?? null)
-const myReliability = computed(() => authStore.user?.reliability ?? null)
-function fmtDay(iso: string) {
-  return new Date(iso).toLocaleString('en-PH', { dateStyle: 'medium', timeStyle: 'short' })
-}
-
 await fetchMyAppointments()
 
 const ask   = useConfirm()
@@ -88,13 +81,7 @@ async function doComplete(appt: Appointment) {
     </div>
     <BuyerAppointments v-else :appointments="appointments" @cancel="doCancel">
       <template #banners>
-        <div v-if="lockedUntil" class="mb-6 rounded-2xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 px-5 py-4">
-          <p class="text-sm font-bold text-red-700 dark:text-red-300">Booking is paused</p>
-          <p class="text-xs text-red-700/80 dark:text-red-200/70 mt-1 leading-relaxed">
-            Five or more confirmed viewings were cancelled within 24 hours of the slot in the last
-            30 days. This lifts on <span class="font-semibold">{{ fmtDay(lockedUntil) }}</span>.
-          </p>
-        </div>
+        <ViewingRecordNotice :is-agent="false" />
       </template>
     </BuyerAppointments>
     <CancelViewingModal
@@ -122,21 +109,7 @@ async function doComplete(appt: Appointment) {
       @cancel="doCancel"
     >
       <template #banners>
-        <!-- Booking paused: say it here, not only when a booking is refused -->
-        <div v-if="lockedUntil" class="mb-6 rounded-2xl border border-red-200 dark:border-red-500/30 bg-red-50 dark:bg-red-500/10 px-5 py-4">
-          <p class="text-sm font-bold text-red-700 dark:text-red-300">Your listings are not accepting viewings</p>
-          <p class="text-xs text-red-700/80 dark:text-red-200/70 mt-1 leading-relaxed">
-            Five or more confirmed viewings were cancelled within 24 hours of the slot in the last
-            30 days. This lifts on <span class="font-semibold">{{ fmtDay(lockedUntil) }}</span>.
-          </p>
-        </div>
-        <!-- Quiet nudge once there are strikes but before a lockout -->
-        <div v-else-if="myReliability?.missed" class="mb-6 rounded-2xl border border-amber-200 dark:border-amber-500/25 bg-amber-50 dark:bg-amber-500/10 px-5 py-3">
-          <p class="text-xs text-amber-900 dark:text-amber-200/90 leading-relaxed">
-            <span class="font-bold">{{ myReliability.missed }}</span>
-            late cancellation{{ myReliability.missed === 1 ? '' : 's' }} on record. Cancelling more than 24 hours ahead never counts.
-          </p>
-        </div>
+        <ViewingRecordNotice is-agent />
       </template>
     </AgentAppointments>
 

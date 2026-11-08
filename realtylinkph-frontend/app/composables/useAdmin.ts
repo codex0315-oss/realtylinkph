@@ -11,7 +11,7 @@ export type UserQuickFilter = '' | 'online' | 'unverified' | 'applied'
 
 /** /admin/overview: the admin home page. */
 export interface AdminOverview {
-  attention: { applications: number; hidden_reviews: number; unpublished: number; support: number }
+  attention: { applications: number; hidden_reviews: number; unpublished: number; support: number; viewings: number }
   pending_applications: Array<{ id: number; name: string; email: string; avatar: string | null; applicant_type: 'broker' | 'salesperson'; submitted_at: string }>
   numbers: Record<'users' | 'agents' | 'listings' | 'viewings', { total: number; week: number }>
   online: number

@@ -92,7 +92,7 @@ const STAR = 'M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h
     <header class="flex flex-wrap items-end justify-between gap-4 mb-6">
       <div class="min-w-0">
         <p class="text-[0.6875rem] font-bold uppercase tracking-[0.18em] text-brand-navy/45 dark:text-white/40">Your feedback</p>
-        <h1 class="mt-1.5 font-display text-2xl sm:text-[1.875rem] font-bold tracking-[-0.01em] leading-tight text-brand-navy dark:text-white">Reviews</h1>
+        <h1 class="mt-1.5 font-display text-2xl cw-sm:text-[1.875rem] font-bold tracking-[-0.01em] leading-tight text-brand-navy dark:text-white">Reviews</h1>
         <p class="mt-1.5 text-sm text-brand-text-secondary dark:text-white/55">
           <template v-if="reviews.length">
             <span class="font-semibold text-brand-navy dark:text-white">{{ reviews.length }}</span> {{ reviews.length === 1 ? 'review' : 'reviews' }} written
@@ -108,10 +108,10 @@ const STAR = 'M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h
     </header>
 
     <!-- Main column + side panel, the same split as Appointments -->
-    <div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_19rem]">
+    <div class="grid grid-cols-1 gap-6 cw-lg:grid-cols-[minmax(0,1fr)_19rem]">
       <div class="min-w-0">
         <!-- ── Waiting for your review ── -->
-        <section v-if="toReview.length" class="rev-rise relative mb-7 overflow-hidden rounded-3xl p-5 sm:p-6 bg-brand-navy text-white ring-1 ring-brand-gold/25">
+        <section v-if="toReview.length" class="rev-rise relative mb-7 overflow-hidden rounded-3xl p-5 cw-sm:p-6 bg-brand-navy text-white ring-1 ring-brand-gold/25">
           <div class="absolute inset-0 bg-grid-gold opacity-[0.06] pointer-events-none" />
           <p class="relative text-[0.6875rem] font-bold uppercase tracking-[0.16em] text-brand-gold">Waiting for your review</p>
           <p class="relative mt-1 font-heading text-xl font-semibold">How did {{ toReview.length === 1 ? 'it' : 'they' }} go?</p>
@@ -254,7 +254,7 @@ const STAR = 'M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h
       <!-- Starts level with the first card: below the tabs row (4rem: the
            pill's 2.5rem plus its 1.5rem margin) unless the "Waiting for your
            review" box is first, which already lines up with it. -->
-      <aside class="space-y-4 lg:sticky lg:top-24 lg:self-start" :class="{ 'lg:mt-16': reviews.length && !toReview.length }">
+      <aside class="space-y-4 cw-lg:sticky cw-lg:top-24 cw-lg:self-start" :class="{ 'cw-lg:mt-16': reviews.length && !toReview.length }">
         <section class="relative overflow-hidden rounded-3xl p-5 bg-brand-navy text-white ring-1 ring-brand-gold/25">
           <div class="absolute inset-0 bg-grid-gold opacity-[0.06] pointer-events-none" />
           <p class="relative text-[0.6875rem] font-bold uppercase tracking-[0.16em] text-brand-gold">Your ratings</p>

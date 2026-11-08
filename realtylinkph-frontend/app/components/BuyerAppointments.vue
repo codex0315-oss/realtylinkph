@@ -432,7 +432,7 @@ const ICON = {
           <details class="group mt-1.5">
             <summary class="cursor-pointer list-none text-xs font-semibold text-brand-gold-deep dark:text-brand-gold hover:underline underline-offset-4">How cancelling works</summary>
             <p class="mt-1.5 text-xs leading-relaxed text-brand-text-secondary dark:text-white/55">
-              Cancelling a confirmed viewing less than 24 hours ahead counts as late. Five late cancellations in 30 days pause booking for a while.
+              Cancelling a confirmed viewing less than 24 hours ahead counts as a strike, and a reported no-show counts as two. Five strikes in 30 days pause booking for a week.
             </p>
           </details>
           <p v-if="authStore.user?.reliability?.rate != null" class="mt-3 rounded-xl bg-brand-cream/80 dark:bg-white/[0.04] px-3 py-2 text-xs text-brand-navy/70 dark:text-white/60">

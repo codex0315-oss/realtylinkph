@@ -271,4 +271,26 @@ class ViewingSanctionsWorkflowTest extends TestCase
         // Admins don't have a viewing record to sanction.
         $this->actingAsUser($admin)->postJson("/api/admin/viewings/{$admin->id}/warn", ['message' => 'Warning an admin makes no sense.'])->assertStatus(422);
     }
+
+    public function test_people_can_see_their_own_strikes_and_the_admin_overview_counts_who_needs_attention(): void
+    {
+        Notification::fake();
+        $admin = $this->admin();
+        $buyer = $this->buyer();
+        $agent = $this->agent();
+
+        $this->actingAsUser($buyer)->getJson('/api/me')->assertOk()
+            ->assertJsonPath('data.viewing_strikes.count', 0)
+            ->assertJsonPath('data.viewing_strikes.limit', User::STRIKE_LIMIT);
+
+        $a = $this->viewing($buyer, $agent, now()->subHours(3));
+        $this->actingAsUser($agent)->postJson("/api/appointments/{$a->id}/no-show")->assertOk();   // 2 strikes
+        $b = $this->viewing($buyer, $agent, now()->subHours(4));
+        $this->actingAsUser($agent)->postJson("/api/appointments/{$b->id}/no-show")->assertOk();   // 4 strikes
+
+        $this->actingAsUser($buyer)->getJson('/api/me')->assertJsonPath('data.viewing_strikes.count', 4);
+
+        // 4 strikes is "close to the limit", so the overview counts this person.
+        $this->actingAsUser($admin)->getJson('/api/admin/overview')->assertOk()->assertJsonPath('data.attention.viewings', 1);
+    }
 }

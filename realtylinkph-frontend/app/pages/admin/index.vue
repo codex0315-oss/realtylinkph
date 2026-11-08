@@ -52,13 +52,15 @@ const greeting = computed(() => {
 const today = new Date().toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric' })
 
 /* ── Needs your attention ── */
-const att = computed(() => overview.value?.attention ?? { applications: 0, hidden_reviews: 0, unpublished: 0, support: 0 })
-const toDo = computed(() => att.value.applications + att.value.support + att.value.hidden_reviews + att.value.unpublished)
+const att = computed(() => overview.value?.attention ?? { applications: 0, hidden_reviews: 0, unpublished: 0, support: 0, viewings: 0 })
+const toDo = computed(() => att.value.applications + att.value.support + att.value.hidden_reviews + att.value.unpublished + att.value.viewings)
 const QUEUES = computed(() => [
   { label: 'Support tickets', hint: 'People waiting for a reply', count: att.value.support, href: '/admin/support', loud: true,
     icon: 'M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z' },
   { label: 'Agent applications', hint: 'Waiting for your decision', count: att.value.applications, href: '/admin/agents', loud: true,
     icon: 'M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z' },
+  { label: 'Viewing behaviour', hint: 'Paused or close to the limit', count: att.value.viewings, href: '/admin/viewings', loud: false,
+    icon: 'M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5' },
   { label: 'Hidden reviews', hint: 'Taken off agent profiles', count: att.value.hidden_reviews, href: '/admin/reviews', loud: false,
     icon: 'M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88' },
   { label: 'Unpublished listings', hint: 'Waiting on the agent to fix', count: att.value.unpublished, href: '/admin/listings', loud: false,
@@ -135,7 +137,7 @@ const QUICK = [
         {{ toDo ? 'A few things are waiting on you' : 'All clear for now' }}
       </p>
 
-      <div class="relative mt-4 grid grid-cols-1 sm:grid-cols-2 xl:grid-cols-4 gap-3">
+      <div class="relative mt-4 grid grid-cols-1 cw-sm:grid-cols-2 cw-lg:grid-cols-3 cw-xl:grid-cols-5 gap-3">
         <NuxtLink
           v-for="q in QUEUES"
           :key="q.label"

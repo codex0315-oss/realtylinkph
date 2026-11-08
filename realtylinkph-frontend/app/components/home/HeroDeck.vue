@@ -222,17 +222,23 @@ function priceLabel(price: number, offer: string): string {
     </div>
 
     <!-- Which card is in front -->
-    <div v-if="multiple" class="absolute -bottom-7 left-0 flex gap-1.5 z-[60]">
+    <!-- Each dot sits in a 24px-tall button, so it is easy to tap even though it looks small. -->
+    <div v-if="multiple" class="absolute -bottom-9 -left-1 flex z-[60]">
       <button
         v-for="(c, i) in cards"
         :key="c.id"
-        class="h-1.5 rounded-full transition-all duration-300"
-        :class="depth(i) === 0
-          ? 'w-6 bg-brand-gold'
-          : 'w-1.5 bg-brand-navy/20 dark:bg-white/25 hover:bg-brand-navy/40 dark:hover:bg-white/50'"
+        type="button"
+        class="group flex h-6 items-center justify-center px-1.5"
         :aria-label="`Bring property ${i + 1} to front`"
         @click.prevent="go(i)"
-      />
+      >
+        <span
+          class="block h-1.5 rounded-full transition-all duration-300"
+          :class="depth(i) === 0
+            ? 'w-6 bg-brand-gold'
+            : 'w-1.5 bg-brand-navy/20 dark:bg-white/25 group-hover:bg-brand-navy/40 dark:group-hover:bg-white/50'"
+        />
+      </button>
     </div>
   </div>
 </template>

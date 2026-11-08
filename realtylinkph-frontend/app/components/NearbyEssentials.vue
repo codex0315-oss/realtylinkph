@@ -117,7 +117,7 @@ function hm(min: number): string {
           type="button"
           role="radio"
           :aria-checked="group === g.key"
-          class="whitespace-nowrap rounded-full px-3.5 py-1.5 text-xs font-semibold ring-1 transition"
+          class="whitespace-nowrap rounded-full px-4 py-2.5 text-xs font-semibold ring-1 transition"
           :class="group === g.key
             ? 'bg-brand-navy text-white ring-brand-navy dark:bg-brand-gold dark:text-brand-navy dark:ring-brand-gold'
             : 'text-brand-navy/70 ring-brand-navy/15 hover:ring-brand-gold dark:text-white/70 dark:ring-white/15'"

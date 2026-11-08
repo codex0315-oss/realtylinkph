@@ -289,6 +289,8 @@ class AdminController extends Controller
                 // An admin unpublish sends the listing back to draft with a reason.
                 'unpublished'    => Property::where('status', 'draft')->whereNotNull('unpublish_reason')->count(),
                 'support'        => \App\Models\SupportTicket::where('status', 'open')->count(),
+                // People who are paused for late cancellations / no-shows, or close to it.
+                'viewings'       => app(\App\Services\ViewingSanctionService::class)->needingAttention(),
             ],
             'pending_applications' => $oldestPending->map(fn (AgentProfile $p) => [
                 'id'             => $p->id,

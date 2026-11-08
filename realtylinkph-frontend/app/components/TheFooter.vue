@@ -95,12 +95,12 @@ const columns = [
         <!-- Link columns -->
         <div v-for="(col, ci) in columns" :key="col.title" v-reveal="{ delay: 80 + ci * 80 }">
           <h4 class="text-sm font-bold text-white mb-4 uppercase tracking-wider">{{ col.title }}</h4>
-          <ul class="space-y-2.5">
+          <ul class="space-y-0.5">
             <li v-for="link in col.links" :key="link.label">
               <NuxtLink
                 v-if="link.href.startsWith('/')"
                 :to="link.href"
-                class="group inline-flex items-center gap-1.5 text-sm text-white/50 hover:text-brand-gold transition-colors"
+                class="group inline-flex min-h-8 items-center gap-1.5 py-1 text-sm text-white/50 hover:text-brand-gold transition-colors"
               >
                 <span class="h-px w-0 group-hover:w-3 bg-brand-gold transition-all duration-300" />
                 {{ link.label }}
@@ -108,7 +108,7 @@ const columns = [
               <a
                 v-else
                 :href="link.href"
-                class="group inline-flex items-center gap-1.5 text-sm text-white/50 hover:text-brand-gold transition-colors"
+                class="group inline-flex min-h-8 items-center gap-1.5 py-1 text-sm text-white/50 hover:text-brand-gold transition-colors"
               >
                 <span class="h-px w-0 group-hover:w-3 bg-brand-gold transition-all duration-300" />
                 {{ link.label }}

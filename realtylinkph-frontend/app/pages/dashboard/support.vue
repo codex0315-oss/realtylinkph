@@ -37,7 +37,7 @@ const livePreview = computed(() => {
   <div class="max-w-6xl mx-auto">
   <header class="mb-6">
     <p class="text-[0.6875rem] font-bold uppercase tracking-[0.18em] text-brand-navy/45 dark:text-white/40">We're here to help</p>
-    <h1 class="mt-1.5 font-display text-2xl sm:text-[1.875rem] font-bold tracking-[-0.01em] leading-tight text-brand-navy dark:text-white">Help & support</h1>
+    <h1 class="mt-1.5 font-display text-2xl cw-sm:text-[1.875rem] font-bold tracking-[-0.01em] leading-tight text-brand-navy dark:text-white">Help & support</h1>
     <p class="mt-1.5 text-sm text-brand-text-secondary dark:text-white/55">RealtyLink AI answers right away; our team takes over whenever you need a person.</p>
   </header>
 
@@ -47,8 +47,8 @@ const livePreview = computed(() => {
   >
     <!-- ════════ Requests ════════ -->
     <div
-      class="w-full lg:w-80 flex-shrink-0 flex-col border-r border-gray-100 dark:border-white/10"
-      :class="listOpen ? 'flex' : 'hidden lg:flex'"
+      class="w-full cw-lg:w-80 flex-shrink-0 flex-col border-r border-gray-100 dark:border-white/10"
+      :class="listOpen ? 'flex' : 'hidden cw-lg:flex'"
     >
       <div class="flex-1 overflow-y-auto px-2.5 pt-4 pb-3">
         <p class="px-2.5 pb-2 text-[0.625rem] font-bold uppercase tracking-[0.15em] text-gray-400 dark:text-white/30">Current chat</p>
@@ -102,7 +102,7 @@ const livePreview = computed(() => {
     </div>
 
     <!-- ════════ Chat ════════ -->
-    <div class="flex-1 min-w-0 flex-col" :class="listOpen ? 'hidden lg:flex' : 'flex'">
+    <div class="flex-1 min-w-0 flex-col" :class="listOpen ? 'hidden cw-lg:flex' : 'flex'">
       <SupportChat :viewing="viewing" @loaded="onLoaded" @list="listOpen = true" @close="openLive" />
     </div>
   </div>
