@@ -33,11 +33,12 @@ class SupportService
 
     /**
      * A message from the user. Returns the ticket, with the AI's answer (or
-     * the hand-off) already added when the AI is still handling it.
+     * the hand-off) already added when the AI is still handling it, unless
+     * `$answer` is false (the caller asks for the answer separately).
      *
      * @param  array<int, UploadedFile>  $images
      */
-    public function postFromUser(User $user, ?string $body, array $images = []): SupportTicket
+    public function postFromUser(User $user, ?string $body, array $images = [], bool $answer = true): SupportTicket
     {
         $ticket = $this->activeTicket($user)
             ?? SupportTicket::create(['user_id' => $user->id, 'status' => 'ai']);
@@ -47,6 +48,21 @@ class SupportService
         if ($ticket->isEscalated()) {
             // With the team: let them know there's something new.
             $this->notifyAdmins($ticket, 'support_message', "{$user->name} added to a support ticket");
+        }
+
+        return $answer ? $this->answerLatest($ticket) : $ticket->fresh();
+    }
+
+    /**
+     * The AI's turn, run after the user's message has been saved and shown (so
+     * the chat can show "typing…" meanwhile). Does nothing unless the newest
+     * message is the user's, so a repeated call can't answer twice.
+     */
+    public function answerLatest(SupportTicket $ticket): SupportTicket
+    {
+        $user = $ticket->user;
+        if ($ticket->messages()->latest('id')->value('sender_type') !== 'user') {
+            return $ticket->fresh();
         }
 
         // RealtyLink AI answers until an admin has replied (status ai or open).

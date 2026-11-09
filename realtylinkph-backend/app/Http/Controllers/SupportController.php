@@ -58,10 +58,22 @@ class SupportController extends Controller
             'images.*' => ['image', 'max:5120'],
         ]);
 
-        $ticket = $this->support->postFromUser($request->user(), $data['body'] ?? null, $request->file('images', []));
+        $ticket = $this->support->postFromUser($request->user(), $data['body'] ?? null, $request->file('images', []), answer: false);
         $this->support->markRead($ticket, 'user');
 
         return ApiResponse::success(SupportTicketResource::make($ticket->load('messages.sender')), 'Sent.', 201);
+    }
+
+    /** The AI's answer to the message just sent (a second step, so the message shows at once). */
+    public function reply(Request $request): JsonResponse
+    {
+        $ticket = $this->support->activeTicket($request->user());
+        abort_unless($ticket, 422, 'Send a message first.');
+
+        $ticket = $this->support->answerLatest($ticket);
+        $this->support->markRead($ticket, 'user');
+
+        return ApiResponse::success(SupportTicketResource::make($ticket->load('messages.sender')), 'Replied.');
     }
 
     /** "Talk to a person". */

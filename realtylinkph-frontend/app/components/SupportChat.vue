@@ -19,12 +19,14 @@ const emit = defineEmits<{
 
 const authStore = useAuthStore()
 const toast = useToast()
-const { fetchSupport, send, escalate, rate } = useSupport()
+const { fetchSupport, send, requestReply, escalate, rate } = useSupport()
 
 const active = ref<SupportTicket | null>(null)
 const past = ref<SupportTicket[]>([])
 const loaded = ref(false)
 const sending = ref(false)
+/** The message is saved and shown; RealtyLink AI is working on its answer. */
+const replying = ref(false)
 const draft = ref('')
 const files = ref<File[]>([])
 const previews = ref<string[]>([])
@@ -51,7 +53,7 @@ let poll: ReturnType<typeof setInterval> | null = null
 onMounted(async () => {
   await refresh(true)
   // New replies from the team show up without a reload.
-  poll = setInterval(() => { if (!sending.value && document.visibilityState === 'visible') refresh() }, 6000)
+  poll = setInterval(() => { if (!sending.value && !replying.value && document.visibilityState === 'visible') refresh() }, 6000)
 })
 onUnmounted(() => { if (poll) clearInterval(poll) })
 watch(() => props.viewing, () => scrollToBottom())
@@ -80,7 +82,7 @@ function removeFile(i: number) {
 
 async function submit(text?: string) {
   const body = (text ?? draft.value).trim()
-  if ((!body && !files.value.length) || sending.value) return
+  if ((!body && !files.value.length) || sending.value || replying.value) return
   sending.value = true
   showEmoji.value = false
   const imgs = [...files.value]
@@ -92,8 +94,18 @@ async function submit(text?: string) {
   const ticket = await send(body, imgs)
   sending.value = false
   if (!ticket) { toast.error('Couldn’t send. Please try again.'); draft.value = body; return }
+  // Your message is on screen right away; now the AI's turn, with "typing…" while it thinks.
   active.value = ticket
   emit('loaded', past.value, ticket)
+  scrollToBottom()
+  if (!aiAnswers.value) return   // the team is handling it; nothing to wait for
+  replying.value = true
+  const started = Date.now()
+  const answered = await requestReply()
+  const wait = 900 - (Date.now() - started)   // never pop in instantly
+  if (wait > 0) await new Promise(r => setTimeout(r, wait))
+  replying.value = false
+  if (answered) { active.value = answered; emit('loaded', past.value, answered) } else await refresh()
   scrollToBottom()
 }
 function onKeydown(e: KeyboardEvent) {
@@ -188,7 +200,7 @@ const day = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString('en
       <div class="min-w-0 flex-1">
         <p class="text-sm font-bold text-brand-navy dark:text-white truncate">RealtyLink Support</p>
         <p class="text-xs truncate">
-          <span v-if="sending && aiAnswers && !viewing" class="text-brand-gold font-medium">typing…</span>
+          <span v-if="replying && !viewing" class="text-brand-gold font-medium">typing…</span>
           <span v-else class="text-gray-400 dark:text-white/40">{{ STATUS.label }}</span>
         </p>
       </div>
@@ -202,7 +214,7 @@ const day = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString('en
         v-else-if="loaded && active?.status === 'ai' && active.messages?.length"
         type="button"
         class="flex-shrink-0 inline-flex min-h-9 items-center gap-1.5 rounded-lg px-3 py-1.5 text-xs font-semibold text-gray-500 dark:text-white/60 bg-gray-50 dark:bg-white/5 hover:bg-brand-gold/10 hover:text-brand-gold-deep dark:hover:text-brand-gold transition-colors disabled:opacity-50"
-        :disabled="sending"
+        :disabled="sending || replying"
         aria-label="Talk to a person"
         title="Talk to a person"
         @click="talkToPerson"
@@ -301,7 +313,7 @@ const day = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString('en
         </template>
 
         <!-- RealtyLink AI composing a reply -->
-        <div v-if="sending && aiAnswers && !viewing" class="flex items-end gap-2.5 mt-3" aria-label="RealtyLink AI is replying">
+        <div v-if="replying && !viewing" class="flex items-end gap-2.5 mt-3" aria-label="RealtyLink AI is replying">
           <img src="/ai/avatar-96.webp" alt="" class="h-8 w-8 flex-shrink-0 rounded-full object-cover bg-white ring-1 ring-brand-gold/50 shadow-sm" />
           <div>
             <p class="text-[0.625rem] font-semibold text-brand-gold-deep dark:text-brand-gold mb-1 ml-1">RealtyLink AI is typing…</p>
@@ -360,7 +372,7 @@ const day = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString('en
         <button
           type="submit"
           class="h-9 w-9 rounded-full flex items-center justify-center bg-brand-gold transition-all disabled:opacity-40 flex-shrink-0"
-          :disabled="(!draft.trim() && !files.length) || sending"
+          :disabled="(!draft.trim() && !files.length) || sending || replying"
           aria-label="Send"
         >
           <svg class="h-4 w-4 rotate-90 text-[#0B2A5C]" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 19l9 2-9-18-9 18 9-2zm0 0v-8" /></svg>

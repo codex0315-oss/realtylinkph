@@ -73,6 +73,15 @@ export const useSupport = () => {
     }
   }
 
+  /** The AI's answer to the message just sent. Returns the ticket with it added. */
+  async function requestReply(): Promise<SupportTicket | null> {
+    try {
+      return (await api.post<ApiResponse<SupportTicket>>('/support/reply')).data
+    } catch {
+      return null
+    }
+  }
+
   async function escalate(): Promise<SupportTicket | null> {
     try {
       return (await api.post<ApiResponse<SupportTicket>>('/support/escalate')).data
@@ -98,5 +107,5 @@ export const useSupport = () => {
     }
   }
 
-  return { fetchSupport, fetchTicket, send, escalate, rate, fetchUnread }
+  return { fetchSupport, fetchTicket, send, requestReply, escalate, rate, fetchUnread }
 }

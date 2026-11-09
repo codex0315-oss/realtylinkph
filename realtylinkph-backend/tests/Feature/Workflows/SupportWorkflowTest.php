@@ -49,7 +49,11 @@ class SupportWorkflowTest extends TestCase
         $buyer = $this->buyer();
         $this->actingAsUser($buyer);
 
+        // Sending only saves the message (so it shows at once); the AI answers in a second step.
         $this->postJson('/api/support/messages', ['body' => 'How do I become an agent?'])->assertCreated()
+            ->assertJsonPath('data.status', 'ai')
+            ->assertJsonCount(1, 'data.messages');
+        $this->postJson('/api/support/reply')->assertOk()
             ->assertJsonPath('data.status', 'ai')
             ->assertJsonPath('data.messages.1.sender_type', 'ai')
             ->assertJsonPath('data.messages.1.body', 'Open Profile, then Become an agent.');
@@ -70,6 +74,7 @@ class SupportWorkflowTest extends TestCase
             'body' => 'The Book viewing button does nothing',
             'images' => [UploadedFile::fake()->image('shot.png')],
         ], ['Accept' => 'application/json'])->assertCreated();
+        $res = $this->postJson('/api/support/reply')->assertOk();
         $res->assertJsonPath('data.status', 'open')
             ->assertJsonCount(1, 'data.messages.0.attachments')
             ->assertJsonPath('data.messages.2.sender_type', 'system');
@@ -94,6 +99,7 @@ class SupportWorkflowTest extends TestCase
         $this->actingAsUser($buyer);
         $this->getJson('/api/support/unread')->assertJsonPath('data.unread', 1);
         $this->postJson('/api/support/messages', ['body' => 'Works now, thanks!'])->assertCreated();
+        $this->postJson('/api/support/reply')->assertOk();
         $this->assertSame(1, SupportTicket::find($ticketId)->messages()->where('sender_type', 'ai')->count());   // only the hand-off
 
         // Resolve, then the buyer rates it.
@@ -107,6 +113,7 @@ class SupportWorkflowTest extends TestCase
         // A new message after resolving starts a new conversation.
         $this->answer = ['reply' => 'Sure!', 'needs_human' => false, 'category' => 'other'];
         $this->actingAsUser($buyer)->postJson('/api/support/messages', ['body' => 'One more question'])->assertCreated();
+        $this->postJson('/api/support/reply')->assertOk();
         $this->assertSame(2, SupportTicket::where('user_id', $buyer->id)->count());
     }
 
@@ -117,12 +124,15 @@ class SupportWorkflowTest extends TestCase
 
         $this->postJson('/api/support/escalate')->assertStatus(422);   // nothing to hand over yet
         $this->postJson('/api/support/messages', ['body' => 'Hello'])->assertCreated()->assertJsonPath('data.status', 'ai');
+        $this->postJson('/api/support/reply')->assertOk();
+        $this->postJson('/api/support/reply')->assertOk()->assertJsonCount(3, 'data.messages');   // a repeat can't answer twice
         $this->postJson('/api/support/escalate')->assertOk()->assertJsonPath('data.status', 'open');
 
         // With every AI down, it says so (and stays with the AI) instead of silently handing over.
         $this->answer = null;
         $this->actingAsUser($this->agent());
-        $this->postJson('/api/support/messages', ['body' => 'My listing vanished'])->assertCreated()
+        $this->postJson('/api/support/messages', ['body' => 'My listing vanished'])->assertCreated();
+        $this->postJson('/api/support/reply')->assertOk()
             ->assertJsonPath('data.status', 'ai')
             ->assertJsonPath('data.messages.1.sender_type', 'ai');
         $this->postJson('/api/support/escalate')->assertOk()->assertJsonPath('data.status', 'open');
@@ -136,19 +146,22 @@ class SupportWorkflowTest extends TestCase
         $this->answer = ['reply' => 'Passing this to the team.', 'needs_human' => true, 'category' => 'bug'];
         $this->actingAsUser($buyer);
         $id = $this->postJson('/api/support/messages', ['body' => 'Booking is broken'])->json('data.id');
+        $this->postJson('/api/support/reply')->assertOk();
         $this->actingAsUser($admin)->postJson("/api/admin/support/{$id}/reply", ['body' => 'Looking into it now.'])->assertCreated();
 
         // The admin is online (just active): the AI stays quiet.
         $admin->forceFill(['last_seen_at' => now()])->save();
         $this->answer = ['reply' => 'The team is away; meanwhile, cancelling is under Appointments.', 'needs_human' => false, 'category' => 'viewing'];
         $this->actingAsUser($buyer);
-        $this->postJson('/api/support/messages', ['body' => 'Also how do I cancel?'])->assertCreated()
+        $this->postJson('/api/support/messages', ['body' => 'Also how do I cancel?'])->assertCreated();
+        $this->postJson('/api/support/reply')->assertOk()
             ->assertJsonPath('data.team_online', true);
         $this->assertSame(1, SupportTicket::find($id)->messages()->where('sender_type', 'ai')->count());
 
         // The admin goes offline: the AI stands in, marked as such.
         $admin->forceFill(['last_seen_at' => now()->subMinutes(10)])->save();
-        $res = $this->postJson('/api/support/messages', ['body' => 'Hello?'])->assertCreated()
+        $this->postJson('/api/support/messages', ['body' => 'Hello?'])->assertCreated();
+        $res = $this->postJson('/api/support/reply')->assertOk()
             ->assertJsonPath('data.team_online', false)
             ->assertJsonPath('data.status', 'in_progress');
         $last = collect($res->json('data.messages'))->last();

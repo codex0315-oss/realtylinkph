@@ -132,6 +132,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('/support/unread', [\App\Http\Controllers\SupportController::class, 'unread']);
     Route::get('/support/tickets/{ticket}', [\App\Http\Controllers\SupportController::class, 'show']);
     Route::post('/support/messages', [\App\Http\Controllers\SupportController::class, 'send'])->middleware('throttle:20,1');
+    Route::post('/support/reply', [\App\Http\Controllers\SupportController::class, 'reply'])->middleware('throttle:20,1');
     Route::post('/support/escalate', [\App\Http\Controllers\SupportController::class, 'escalate'])->middleware('throttle:10,1');
     Route::post('/support/tickets/{ticket}/rate', [\App\Http\Controllers\SupportController::class, 'rate']);
 
