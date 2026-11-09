@@ -41,6 +41,8 @@ const I = {
 /* The links that matter for this role. On public pages Dashboard comes first. */
 const links = computed(() => {
   const onDashboard = route.path.startsWith('/dashboard') || route.path.startsWith('/admin')
+  // Inside the dashboard the sidebar already lists every page, so the menu only adds account settings.
+  if (onDashboard) return authStore.isAdmin ? [] : [{ to: '/dashboard/profile', label: 'Account settings', icon: I.user }]
   if (authStore.isAdmin) return [{ to: '/admin', label: 'Admin dashboard', icon: I.shield }]
   const home = { to: '/dashboard', label: 'Dashboard', icon: I.home }
   const items = authStore.isAgent
@@ -117,7 +119,7 @@ const tile = 'h-8 w-8 flex-none rounded-lg flex items-center justify-center bg-b
         </div>
 
         <!-- Where to -->
-        <nav class="p-1.5">
+        <nav v-if="links.length" class="p-1.5">
           <NuxtLink v-for="l in links" :key="l.to" :to="l.to" role="menuitem" :class="item" @click="open = false">
             <span :class="tile"><svg class="h-[1.125rem] w-[1.125rem]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.7" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" :d="l.icon" /></svg></span>
             {{ l.label }}
@@ -125,7 +127,7 @@ const tile = 'h-8 w-8 flex-none rounded-lg flex items-center justify-center bg-b
         </nav>
 
         <!-- Theme -->
-        <div v-if="showTheme" class="px-4 pb-3">
+        <div v-if="showTheme" class="px-4 pb-3" :class="links.length ? '' : 'pt-3'">
           <p class="mb-1.5 text-[0.625rem] font-bold uppercase tracking-[0.14em] text-brand-navy/45 dark:text-white/40">Theme</p>
           <div class="grid grid-cols-3 gap-1 rounded-xl bg-brand-navy/[0.05] dark:bg-white/[0.06] p-1">
             <button
