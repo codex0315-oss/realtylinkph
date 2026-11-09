@@ -26,6 +26,8 @@ class AgentProfile extends Model
         'status',
         'admin_note',
         'ai_comment',
+        'ai_checks',
+        'ai_verdict',
         'ai_assessed_at',
         'reviewed_at',
         'google_access_token',
@@ -43,6 +45,7 @@ class AgentProfile extends Model
         return [
             'google_token_expires_at' => 'datetime',
             'ai_assessed_at'          => 'datetime',
+            'ai_checks'               => 'array',
             'reviewed_at'             => 'datetime',
             'held_at'                 => 'datetime',
         ];

@@ -248,6 +248,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::post('/reviews/{review}/toggle-visibility', [ReviewController::class, 'toggleVisibility']);
         Route::get('/agent-applications', [AgentVerificationController::class, 'pending']);
         Route::post('/agent-applications/{profile}/review', [AgentVerificationController::class, 'review']);
+        Route::post('/agent-applications/{profile}/recheck', [AdminController::class, 'recheckApplication'])->middleware('throttle:10,1');
         Route::post('/agent-applications/{profile}/hold', [AdminController::class, 'holdApplication']);
         Route::delete('/agent-applications/{profile}/hold', [AdminController::class, 'releaseApplication']);
 

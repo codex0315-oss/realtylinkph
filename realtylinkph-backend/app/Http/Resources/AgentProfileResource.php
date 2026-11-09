@@ -28,6 +28,9 @@ class AgentProfileResource extends JsonResource
             // with a pre-check that isn't a decision.
             'ai_comment'         => $this->when($isAdmin, $this->ai_comment),
             'ai_assessed_at'     => $this->when($isAdmin, $this->ai_assessed_at?->toISOString()),
+            // The fixed checklist and the verdict worked out from it (null on older applications).
+            'ai_checks'          => $this->when($isAdmin, $this->ai_checks),
+            'ai_verdict'         => $this->when($isAdmin, $this->ai_verdict),
             // True while the queued assessment hasn't landed yet.
             'ai_pending'         => $this->when($isAdmin, $this->status === 'pending' && $this->ai_assessed_at === null),
             // Official places to verify the credential — fixed and checked, never model-generated.

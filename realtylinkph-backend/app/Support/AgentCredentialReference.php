@@ -50,6 +50,33 @@ final class AgentCredentialReference
     }
 
     /**
+     * The transcription-only brief used by the checklist pre-check. The model
+     * reports what it can read; every judgement (match, expired, concern) is
+     * made in code by AgentApplicationVerdict, so it cannot drift day to day.
+     */
+    public static function extractionMethod(): string
+    {
+        return <<<'TXT'
+        YOUR JOB IS TO READ, NOT TO JUDGE. Look at each labeled image and report only what is actually visible. If something is not clearly legible, use null. Never guess a value, and never infer one from the declared details.
+        Reply with ONE JSON object and nothing else, with exactly these keys:
+        {
+          "name_on_document": string|null,        // full name printed on the license/accreditation card (or ID if there is no card)
+          "number_on_document": string|null,      // registration / license / accreditation number as printed
+          "valid_until": string|null,             // validity (expiry) date as YYYY-MM-DD, only if clearly printed
+          "profession": "broker"|"salesperson"|"other"|null,   // from the profession band or title on the document
+          "supervising_broker": string|null,      // a named supervising broker, if the documents show one
+          "looks_like_prc_document": "yes"|"no"|"unclear",     // a PRC credential: PVC card, photo, profession band, seal. "no" only if it is clearly something else
+          "document_unreadable": boolean,         // true if the photo is too blurry, dark or cropped to read the printed text
+          "signs_of_editing": boolean,            // true only for visible tampering: mismatched fonts, pasted text, cloned areas
+          "selfie_clear": boolean,                // a clear, front-facing, well-lit face in the live selfie
+          "face_match": "similar"|"dissimilar"|"unclear",      // selfie vs the face photo on the card/ID
+          "summary": string                       // at most 2 short sentences describing what you could and could not read; never say approve or reject
+        }
+        A phone photo often hides the hologram, QR code and fine background. Their absence is NOT evidence of forgery, so never set signs_of_editing for that.
+        TXT;
+    }
+
+    /**
      * Official places the admin can check a credential. Shown under every
      * assessment; fixed and verified rather than model-generated, so a link
      * can never be invented.

@@ -859,6 +859,54 @@ TXT;
         return $text ?? 'AI assessment unavailable — please review this application manually.';
     }
 
+    /**
+     * Read an agent application's documents into a fixed set of fields (name,
+     * number, validity date, a few observations). Transcription only, at
+     * temperature 0 in JSON mode: the verdict is then decided in code
+     * (AgentApplicationVerdict), so the same documents give the same advice.
+     *
+     * @param  array<int, array{label:string,path:string}>  $documents
+     * @param  array{name?:string|null,number?:string|null,supervising_broker?:string|null}  $declared
+     * @return array<string, mixed>|null  null when the model could not be reached or answered badly
+     */
+    public function readAgentApplication(string $applicantType, array $documents, array $declared = [], int $timeout = 12): ?array
+    {
+        $role = $applicantType === 'broker' ? 'BROKER' : 'SALESPERSON';
+        $docs = $applicantType === 'broker'
+            ? "You are given the applicant's PRC broker license card and a live selfie."
+            : "You are given the applicant's accreditation document, a valid government ID, and a live selfie.";
+
+        $instruction = "You are RealtyLink AI, reading the documents of a real estate {$role} applicant in the Philippines for a human admin. {$docs}\n\n"
+            . AgentCredentialReference::knowledge() . "\n\n"
+            . AgentCredentialReference::extractionMethod();
+
+        $parts = [['text' => 'Application documents follow, each labeled:']];
+        foreach ($documents as $doc) {
+            if (! $doc['path'] || ! Documents::disk()->exists($doc['path'])) {
+                continue;
+            }
+            $bytes = Documents::disk()->get($doc['path']);
+            if ($bytes === null || $bytes === '') {
+                continue;
+            }
+            $parts[] = ['text' => "Label: {$doc['label']}"];
+            $parts[] = ['inline_data' => ['mime_type' => $this->mimeForPath($doc['path']), 'data' => base64_encode($bytes)]];
+        }
+        if (count($parts) === 1) {
+            return null;
+        }
+
+        $text = $this->call([
+            'systemInstruction' => ['parts' => [['text' => $instruction]]],
+            'contents'          => [['parts' => $parts]],
+            'generationConfig'  => ['responseMimeType' => 'application/json', 'temperature' => 0],
+        ], $timeout);
+
+        $data = $text !== null ? json_decode(self::stripFences($text), true) : null;
+
+        return is_array($data) ? $data : null;
+    }
+
     // ─────────────────────────────────────────────────────────────────────────
     // RealtyLink AI — agent companion (listing assistant, multimodal)
     // ─────────────────────────────────────────────────────────────────────────

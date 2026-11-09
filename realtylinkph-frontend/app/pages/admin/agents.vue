@@ -190,7 +190,9 @@ const flags = computed<Flag[]>(() => {
   const rank = { bad: 0, unknown: 1, ok: 2 }
   return list.sort((a, b) => rank[a.state] - rank[b.state])
 })
-const redFlags = computed(() => flags.value.filter(f => f.state === 'bad'))
+const redFlags = computed<Flag[]>(() => selected.value?.ai_checks?.length
+  ? selected.value.ai_checks.filter(c => c.state === 'bad').map(c => ({ key: c.key, label: `${c.label}: ${c.detail}`, state: 'bad' as const, detail: c.detail }))
+  : flags.value.filter(f => f.state === 'bad'))
 const isConcern = (title: string) => /concern|red flag/i.test(title)
 
 /* ── The admin's own checks ──
@@ -210,7 +212,7 @@ const CHECKS = computed(() => selected.value
 const decision = ref<'approve' | 'reject' | null>(null)
 async function startApprove() {
   const open = CHECKS.value.filter(c => !checks[c.key]).map(c => `Not ticked: ${c.label.charAt(0).toLowerCase()}${c.label.slice(1)}`)
-  const flagged = redFlags.value.map(f => `RealtyLink AI: ${f.label.toLowerCase()}`)
+  const flagged = redFlags.value.map(f => `RealtyLink AI: ${f.label}`)
   if (open.length || flagged.length) {
     const ok = await ask({
       title: 'Approve anyway?',
@@ -277,15 +279,53 @@ function zoomBy(step: number) {
 const toggleZoom = () => { zoom.value = zoom.value === 1 ? 2 : 1 }
 const imgStyle = computed(() => (zoom.value > 1 ? { width: `${zoom.value * 100}%`, maxWidth: 'none', maxHeight: 'none' } : undefined))
 function onViewerKey(e: KeyboardEvent) {
+  if (e.key === 'Escape' && !viewer.value) { prcOpen.value = false; return }
   if (!viewer.value) return
   if (e.key === 'ArrowRight') viewerStep(1)
   if (e.key === 'ArrowLeft')  viewerStep(-1)
   if (e.key === '+' || e.key === '=') zoomBy(1)
   if (e.key === '-') zoomBy(-1)
-  if (e.key === 'Escape')     viewer.value = null
+  if (e.key === 'Escape')     { if (viewer.value) viewer.value = null; else prcOpen.value = false }
 }
 onMounted(() => window.addEventListener('keydown', onViewerKey))
 onUnmounted(() => window.removeEventListener('keydown', onViewerKey))
+
+const VERDICT: Record<string, { title: string; cls: string; icon: string }> = {
+  consistent: { title: 'Documents look consistent with the application', cls: 'bg-emerald-500/10 text-emerald-700 ring-emerald-500/25 dark:text-emerald-300', icon: 'M9 12.75L11.25 15 15 9.75M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
+  needs_attention: { title: 'Something needs your attention', cls: 'bg-red-500/10 text-red-700 ring-red-400/30 dark:text-red-300', icon: 'M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z' },
+  cannot_verify: { title: 'Some things could not be checked from the photos', cls: 'bg-amber-500/10 text-amber-800 ring-amber-400/30 dark:text-amber-300', icon: 'M12 9v3.75m0 3.75h.008M21 12a9 9 0 11-18 0 9 9 0 0118 0z' },
+}
+
+/* Ask RealtyLink AI to read the documents again. The queue picks it up; the list polls until it lands. */
+const rechecking = ref(false)
+async function recheck() {
+  if (!selected.value || rechecking.value) return
+  rechecking.value = true
+  try {
+    await api.post(`/admin/agent-applications/${selected.value.id}/recheck`)
+    await load(true)
+    toast.success('Checking the documents again')
+  } catch {
+    toast.error('Couldn’t start the check. Please try again.')
+  } finally {
+    rechecking.value = false
+  }
+}
+
+/* ── Verify on PRC, inside the dashboard ──
+ * A side panel with PRC's lookup beside the application. The number is copied
+ * on open so it can be pasted straight in. If PRC won't load in a frame, the
+ * panel offers the new-tab route. */
+const prcOpen = ref(false)
+const prcLoaded = ref(false)
+const prcLink = computed(() => selected.value?.verification_links?.[0] ?? null)
+async function openPrc() {
+  if (!selected.value || !prcLink.value) return
+  prcLoaded.value = false
+  prcOpen.value = true
+  try { await navigator.clipboard.writeText(selected.value.prc_number) } catch { /* the number is shown in the panel too */ }
+}
+watch(selectedId, () => { prcOpen.value = false })
 
 const FLAG_STYLE: Record<FlagState, string> = {
   bad: 'bg-red-500/10 text-red-700 ring-red-400/30 dark:text-red-300',
@@ -442,17 +482,16 @@ watch([selected, loading], () => nextTick(fitReview))
           </div>
 
           <div v-if="tab === 'pending'" class="flex flex-wrap items-center gap-2">
-            <a
+            <button
               v-if="selected.verification_links?.[0]"
-              :href="selected.verification_links[0].url"
-              target="_blank"
-              rel="noopener"
+              type="button"
               class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20 dark:hover:ring-brand-gold transition"
               :title="selected.verification_links[0].note"
+              @click="openPrc"
             >
               <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
               Verify on {{ isBroker(selected) ? 'PRC' : 'site' }}
-            </a>
+            </button>
             <button type="button" class="whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold text-red-600 ring-1 ring-red-300 hover:bg-red-500/10 dark:text-red-400 dark:ring-red-400/40 transition" @click="decision = 'reject'">Reject</button>
             <button type="button" class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-brand-gold px-4 py-2 text-sm font-bold text-[#0B2A5C] shadow-[0_4px_14px_rgba(212,165,74,0.45)] transition" @click="startApprove">
               <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
@@ -528,19 +567,9 @@ watch([selected, loading], () => nextTick(fitReview))
               </div>
             </dl>
 
-            <div>
-              <p class="mb-2 text-[0.6875rem] font-bold uppercase tracking-[0.16em] text-brand-navy/45 dark:text-white/40">Attached documents</p>
-              <p v-if="!docs.length" class="rounded-2xl bg-brand-cream/70 dark:bg-white/[0.04] px-4 py-5 text-center text-sm text-brand-navy/55 dark:text-white/50">No documents on file.</p>
-              <div v-else class="grid gap-2.5 [grid-template-columns:repeat(auto-fit,minmax(7.5rem,1fr))]">
-                <button v-for="doc in docs" :key="doc.key" type="button" class="group relative overflow-hidden rounded-xl bg-[#0B1A35] ring-1 ring-brand-navy/[0.08] dark:ring-white/10 hover:ring-brand-gold transition" :title="`View ${doc.label} full screen`" @click="openDoc(doc)">
-                  <div class="relative aspect-[4/3]">
-                    <img v-if="!doc.isPdf" :src="doc.url" :alt="doc.label" class="absolute inset-0 h-full w-full object-cover" loading="lazy" />
-                    <span v-else class="absolute inset-0 flex items-center justify-center text-xs font-bold tracking-wide text-white/60">PDF</span>
-                  </div>
-                  <span class="absolute inset-x-0 bottom-0 bg-[#06183A]/80 px-2 py-1 text-xs font-semibold text-white backdrop-blur-sm">{{ doc.label }}</span>
-                </button>
-              </div>
-            </div>
+            <p class="text-sm text-brand-navy/55 dark:text-white/50">
+              {{ docs.length ? `${docs.length} document${docs.length === 1 ? '' : 's'} attached. They are in the next step.` : 'No documents on file.' }}
+            </p>
           </div>
 
           <!-- 2. Photos side by side -->
@@ -579,8 +608,18 @@ watch([selected, loading], () => nextTick(fitReview))
             <div class="flex flex-wrap items-center gap-x-3 gap-y-2">
               <img src="/ai/avatar-96.webp" alt="" class="h-8 w-8 flex-none rounded-full object-cover bg-white ring-1 ring-brand-gold/60" />
               <p class="text-sm font-bold text-brand-navy dark:text-white">RealtyLink AI check</p>
-              <span v-if="confidence" class="rounded-full px-2.5 py-0.5 text-xs font-bold" :class="CONF_STYLE[confidence]">{{ confidence }} confidence</span>
+              <span v-if="confidence && !selected.ai_checks?.length" class="rounded-full px-2.5 py-0.5 text-xs font-bold" :class="CONF_STYLE[confidence]">{{ confidence }} confidence</span>
               <span class="text-xs text-brand-navy/50 dark:text-white/45">Advice only. You decide.</span>
+              <button
+                v-if="tab === 'pending' && !selected.ai_pending"
+                type="button"
+                class="ml-auto inline-flex items-center gap-1.5 rounded-full px-3 py-1.5 text-xs font-semibold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold disabled:opacity-50 dark:text-white dark:ring-white/20 transition"
+                :disabled="rechecking"
+                @click="recheck"
+              >
+                <svg class="h-3.5 w-3.5" :class="rechecking ? 'animate-spin' : ''" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M16.023 9.348h4.992V4.356M2.985 19.644v-4.992h4.992m10.5-6.304A8.25 8.25 0 005.4 8.6M20.6 15.4a8.25 8.25 0 01-12.077 1.052" /></svg>
+                Re-check
+              </button>
             </div>
             <div v-if="!selected.ai_comment" class="flex items-center gap-3 rounded-2xl bg-brand-gold/[0.06] ring-1 ring-brand-gold/30 p-4 text-sm text-brand-navy/70 dark:text-white/70">
               <span class="relative h-5 w-5 flex-none">
@@ -589,6 +628,27 @@ watch([selected, loading], () => nextTick(fitReview))
               </span>
               {{ selected.ai_pending ? 'Reviewing the documents. Usually under a minute; this updates on its own.' : 'No AI check on file for this application.' }}
             </div>
+            <template v-else-if="selected.ai_checks?.length">
+              <div class="flex items-start gap-2.5 rounded-2xl px-4 py-3 ring-1" :class="VERDICT[selected.ai_verdict ?? 'cannot_verify']!.cls">
+                <svg class="mt-0.5 h-5 w-5 flex-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" :d="VERDICT[selected.ai_verdict ?? 'cannot_verify']!.icon" /></svg>
+                <div class="min-w-0">
+                  <p class="text-sm font-bold">{{ VERDICT[selected.ai_verdict ?? 'cannot_verify']!.title }}</p>
+                  <p v-if="selected.ai_comment" class="mt-0.5 text-sm font-normal text-brand-navy/70 dark:text-white/65">{{ selected.ai_comment }}</p>
+                </div>
+              </div>
+              <ul class="space-y-1.5">
+                <li v-for="c in selected.ai_checks" :key="c.key" class="flex items-start gap-2.5 rounded-xl px-3 py-2 ring-1" :class="FLAG_STYLE[c.state]">
+                  <svg v-if="c.state === 'ok'" class="mt-0.5 h-4 w-4 flex-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.6" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+                  <svg v-else-if="c.state === 'bad'" class="mt-0.5 h-4 w-4 flex-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.6" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                  <svg v-else class="mt-0.5 h-4 w-4 flex-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m0 3.75h.008M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                  <span class="min-w-0 text-sm">
+                    <span class="font-semibold">{{ c.label }}</span>
+                    <span class="font-normal text-brand-navy/70 dark:text-white/65"> · {{ c.detail }}</span>
+                  </span>
+                </li>
+              </ul>
+              <p class="text-xs text-brand-navy/45 dark:text-white/40">The same documents always get the same checklist. Only PRC's own site can confirm a license.</p>
+            </template>
             <ul v-else-if="flags.length" class="space-y-2">
               <li v-for="f in flags" :key="f.key" class="flex items-start gap-2.5 rounded-xl px-3 py-2.5 ring-1" :class="FLAG_STYLE[f.state]">
                 <svg v-if="f.state === 'ok'" class="mt-0.5 h-4 w-4 flex-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.6" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
@@ -601,7 +661,7 @@ watch([selected, loading], () => nextTick(fitReview))
               </li>
             </ul>
 
-            <details v-if="sections.length" class="group rounded-2xl ring-1 ring-brand-navy/[0.07] dark:ring-white/[0.08]">
+            <details v-if="!selected.ai_checks?.length && sections.length" class="group rounded-2xl ring-1 ring-brand-navy/[0.07] dark:ring-white/[0.08]">
               <summary class="flex cursor-pointer list-none items-center justify-between gap-3 px-4 py-2.5 text-sm font-bold text-brand-navy dark:text-white">
                 Full AI report
                 <svg class="h-4 w-4 transition-transform group-open:rotate-180" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M19 9l-7 7-7-7" /></svg>
@@ -634,7 +694,7 @@ watch([selected, loading], () => nextTick(fitReview))
                                   checked:!bg-brand-navy dark:checked:!bg-emerald-500 checked:!border-transparent" />
                     <span class="text-sm text-brand-navy/80 dark:text-white/75">
                       {{ c.label }}
-                      <a v-if="c.key === 'prc' && selected.verification_links?.[0]" :href="selected.verification_links[0].url" target="_blank" rel="noopener" class="ml-1 font-semibold text-brand-gold-deep dark:text-brand-gold hover:underline underline-offset-4" @click.stop>Open site</a>
+                      <button v-if="c.key === 'prc' && selected.verification_links?.[0]" type="button" class="ml-1 font-semibold text-brand-gold-deep dark:text-brand-gold hover:underline underline-offset-4" @click.prevent.stop="openPrc">Open site</button>
                     </span>
                   </label>
                 </li>
@@ -644,9 +704,10 @@ watch([selected, loading], () => nextTick(fitReview))
             <div v-if="selected.verification_links?.length" class="flex flex-wrap items-center gap-2">
               <span class="text-[0.6875rem] font-bold uppercase tracking-[0.16em] text-brand-navy/45 dark:text-white/40">Verify against</span>
               <a
-                v-for="l in selected.verification_links"
+                v-for="(l, li) in selected.verification_links"
                 :key="l.url"
                 :href="l.url"
+                @click="li === 0 && ($event.preventDefault(), openPrc())"
                 target="_blank"
                 rel="noopener"
                 :title="l.note"
@@ -675,6 +736,39 @@ watch([selected, loading], () => nextTick(fitReview))
     </div>
 
     <AgentDecisionDialog :open="!!decision" :mode="decision ?? 'approve'" :application="selected" @close="decision = null" @done="onDecided" />
+
+    <!-- ── Verify on PRC: PRC's lookup beside the application, without leaving the dashboard ── -->
+    <Teleport to="body">
+      <Transition name="fade">
+        <div v-if="prcOpen && selected && prcLink" class="fixed inset-0 z-[55] flex justify-end bg-black/30" @click.self="prcOpen = false">
+          <aside class="flex h-full w-[min(36rem,100vw)] flex-col bg-white dark:bg-[#0B1A35] shadow-2xl ring-1 ring-brand-navy/10 dark:ring-white/10" role="dialog" aria-modal="true" aria-label="Verify on PRC">
+            <div class="flex items-start justify-between gap-3 border-b border-brand-navy/[0.06] dark:border-white/[0.08] px-4 py-3">
+              <div class="min-w-0">
+                <p class="truncate text-sm font-bold text-brand-navy dark:text-white">{{ prcLink.label }}</p>
+                <p class="mt-0.5 truncate text-xs text-brand-navy/55 dark:text-white/50">{{ selected.user?.name }} · {{ numberLabel(selected) }} <span class="font-semibold tabular-nums text-brand-navy dark:text-white">{{ selected.prc_number }}</span></p>
+              </div>
+              <div class="flex flex-none items-center gap-1.5">
+                <button type="button" class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20 transition" @click="copyNumber(selected)">Copy number</button>
+                <a :href="prcLink.url" target="_blank" rel="noopener" class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20 transition">New tab</a>
+                <button type="button" class="h-8 w-8 rounded-full flex items-center justify-center text-brand-navy/60 hover:bg-brand-navy/[0.06] dark:text-white/60 dark:hover:bg-white/10" aria-label="Close" @click="prcOpen = false">
+                  <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+                </button>
+              </div>
+            </div>
+            <div class="relative min-h-0 flex-1 bg-white">
+              <div v-if="!prcLoaded" class="absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center text-sm text-brand-navy/60">
+                <span class="h-5 w-5 rounded-full border-2 border-brand-gold/30 border-t-brand-gold animate-spin" aria-hidden="true" />
+                Opening PRC's lookup…
+              </div>
+              <iframe :src="prcLink.url" title="PRC license verification" class="relative h-full w-full border-0" referrerpolicy="no-referrer" sandbox="allow-scripts allow-forms allow-same-origin allow-popups" @load="prcLoaded = true" />
+            </div>
+            <p class="border-t border-brand-navy/[0.06] dark:border-white/[0.08] px-4 py-2 text-xs text-brand-navy/55 dark:text-white/50">
+              The number is copied: paste it into PRC's search. Page blank? Use "New tab" above.
+            </p>
+          </aside>
+        </div>
+      </Transition>
+    </Teleport>
 
     <!-- ── Document viewer: zoom, and side-by-side compare ── -->
     <Teleport to="body">

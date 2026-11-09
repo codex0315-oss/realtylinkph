@@ -6,6 +6,7 @@ namespace App\Jobs;
 
 use App\Models\AgentProfile;
 use App\Services\GeminiService;
+use App\Support\AgentApplicationVerdict;
 use Illuminate\Bus\Queueable;
 use Illuminate\Contracts\Queue\ShouldQueue;
 use Illuminate\Foundation\Bus\Dispatchable;
@@ -45,18 +46,34 @@ class AssessAgentApplication implements ShouldQueue
 
         $profile->loadMissing('user');
 
-        $comment = $gemini->assessAgentApplication(
-            $profile->applicant_type,
-            $this->documents($profile),
-            declared: [
-                'name'               => $profile->user?->name,
-                'number'             => $profile->prc_number,
-                'supervising_broker' => $profile->supervising_broker,
-            ],
-            timeout: 60,
-        );
+        // The model only READS the documents; the checklist and verdict are
+        // worked out in code, so the same documents always give the same advice.
+        $read = $gemini->readAgentApplication($profile->applicant_type, $this->documents($profile), timeout: 60);
 
-        $profile->update(['ai_comment' => $comment, 'ai_assessed_at' => now()]);
+        if ($read === null) {
+            $profile->update([
+                'ai_comment'     => 'AI assessment unavailable. Please review this application manually, or try Re-check.',
+                'ai_checks'      => null,
+                'ai_verdict'     => null,
+                'ai_assessed_at' => now(),
+            ]);
+
+            return;
+        }
+
+        $result = AgentApplicationVerdict::evaluate($read, [
+            'name'               => $profile->user?->name,
+            'number'             => $profile->prc_number,
+            'supervising_broker' => $profile->supervising_broker,
+            'type'               => $profile->applicant_type,
+        ], now()->timezone('Asia/Manila'));
+
+        $profile->update([
+            'ai_comment'     => $result['summary'] ?? AgentApplicationVerdict::headline($result['verdict']),
+            'ai_checks'      => $result['checks'],
+            'ai_verdict'     => $result['verdict'],
+            'ai_assessed_at' => now(),
+        ]);
     }
 
     /** @return array<int, array{label:string,path:string}> */

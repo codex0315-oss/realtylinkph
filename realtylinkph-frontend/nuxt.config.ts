@@ -37,7 +37,8 @@ const csp = [
   `connect-src 'self' blob: ${apiOrigins} ${storageOrigin} https://api.geoapify.com https://*.pusher.com wss://*.pusher.com https://*.tile.openstreetmap.org${devSockets}`,
   "media-src 'self' blob:",
   "worker-src 'self' blob:",
-  "frame-src 'self'",
+  // PRC's licence lookup, shown inside the admin's "Verify on PRC" panel.
+  "frame-src 'self' https://verification.prc.gov.ph",
   "frame-ancestors 'none'",
   "object-src 'none'",
   "base-uri 'self'",

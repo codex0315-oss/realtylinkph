@@ -6,6 +6,7 @@ namespace App\Http\Controllers;
 
 use App\Helpers\ApiResponse;
 use App\Http\Resources\AdminActionResource;
+use App\Jobs\AssessAgentApplication;
 use App\Http\Resources\AgentProfileResource;
 use App\Http\Resources\PropertyResource;
 use App\Http\Resources\ReviewResource;
@@ -374,6 +375,17 @@ class AdminController extends Controller
         AdminAudit::log('agent.held', $profile, "{$profile->user?->name} ({$profile->user?->email})", ['reason' => $data['note']]);
 
         return ApiResponse::success(AgentProfileResource::make($profile->load('user')), 'Application put on hold.', 200);
+    }
+
+    /** Run RealtyLink AI's document check again (e.g. after it was unavailable, or a clearer photo). */
+    public function recheckApplication(AgentProfile $profile): JsonResponse
+    {
+        abort_unless($profile->status === 'pending', 422, 'Only pending applications can be re-checked.');
+
+        $profile->forceFill(['ai_comment' => null, 'ai_checks' => null, 'ai_verdict' => null, 'ai_assessed_at' => null])->save();
+        AssessAgentApplication::dispatch($profile->id);
+
+        return ApiResponse::success(AgentProfileResource::make($profile->load('user')), 'Re-checking the documents.', 202);
     }
 
     public function releaseApplication(AgentProfile $profile): JsonResponse

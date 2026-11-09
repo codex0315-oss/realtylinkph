@@ -13,6 +13,9 @@ export interface AgentProfile {
   admin_note: string | null
   ai_comment?: string | null
   ai_assessed_at?: string | null
+  /** Admin-only: RealtyLink AI's fixed checklist, and the verdict worked out from it (null on older applications). */
+  ai_checks?: { key: string; label: string; state: 'ok' | 'bad' | 'unknown'; detail: string }[] | null
+  ai_verdict?: 'consistent' | 'needs_attention' | 'cannot_verify' | null
   /** Admin-only: the queued AI pre-check hasn't produced its note yet. */
   ai_pending?: boolean
   /** Admin-only: official places to verify the credential. Fixed list from the backend. */
