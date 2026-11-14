@@ -95,6 +95,24 @@ export const useConversationStore = defineStore('conversation', () => {
     }
   }
 
+  /** A message was unsent for everyone (by us, or the other side live). */
+  function applyUnsent(id: number, conversationId: number): void {
+    for (const m of activeMessages.value) {
+      if (m.id === id) { m.unsent = true; m.body = '' }
+    }
+    const conv = conversations.value.find(c => c.id === conversationId)
+    if (conv?.latest_message?.id === id) conv.latest_message = { ...conv.latest_message, unsent: true, body: '' }
+  }
+
+  /** "Remove for you": drop it from this user's view; the list preview falls back to the previous message. */
+  function hideMessage(id: number, conversationId: number): void {
+    activeMessages.value = activeMessages.value.filter(m => m.id !== id)
+    const conv = conversations.value.find(c => c.id === conversationId)
+    if (conv?.latest_message?.id === id && conversationId === activeId.value) {
+      conv.latest_message = activeMessages.value[activeMessages.value.length - 1] ?? undefined
+    }
+  }
+
   /** Unread messages across every conversation — the Messages icon's badge. */
   const totalUnread = computed(() => conversations.value.reduce((n, c) => n + (c.unread_count ?? 0), 0))
 
@@ -136,6 +154,8 @@ export const useConversationStore = defineStore('conversation', () => {
     failPending,
     removePending,
     applyReceipt,
+    applyUnsent,
+    hideMessage,
     decrementUnread,
     removeConversation,
   }

@@ -64,6 +64,13 @@ export const useEcho = () => {
     })
   }
 
+  /** Server-sent: the other person unsent a message for everyone. */
+  function listenForUnsent(conversationId: number, onUnsent: (e: { id: number; conversation_id: number }) => void): void {
+    $echo?.private(`conversation.${conversationId}`).listen('.message.unsent', (e: { id: number; conversation_id: number }) => {
+      if (e && typeof e.id === 'number') onUnsent(e)
+    })
+  }
+
   /** Server-sent: RealtyLink AI is composing an auto-reply on this thread. */
   function listenForAiTyping(conversationId: number, onTyping: () => void): void {
     $echo?.private(`conversation.${conversationId}`).listen('.ai.typing', () => onTyping())
@@ -130,6 +137,7 @@ export const useEcho = () => {
     listenToConversation,
     listenForAiTyping,
     listenForReceipts,
+    listenForUnsent,
     whisperTyping,
     listenForTyping,
     whisperSeen,

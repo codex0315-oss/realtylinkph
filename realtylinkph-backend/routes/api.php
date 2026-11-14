@@ -199,6 +199,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::post('/conversations/{conversation}/read', [ConversationController::class, 'markRead']);
     Route::post('/conversations/{conversation}/delivered', [ConversationController::class, 'markDelivered']);
     Route::delete('/conversations/{conversation}', [ConversationController::class, 'destroy']);
+    Route::post('/messages/{message}/unsend', [ConversationController::class, 'unsendMessage'])->middleware('throttle:30,1');
+    Route::post('/messages/{message}/hide', [ConversationController::class, 'hideMessage'])->middleware('throttle:60,1');
 
     // Reviews
     Route::post('/reviews', [ReviewController::class, 'submit']);

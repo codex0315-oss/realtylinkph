@@ -9,6 +9,7 @@ use App\Http\Requests\Conversation\SendMessageRequest;
 use App\Http\Resources\ConversationResource;
 use App\Http\Resources\MessageResource;
 use App\Models\Conversation;
+use App\Models\Message;
 use App\Models\Property;
 use App\Services\ConversationService;
 use Illuminate\Http\JsonResponse;
@@ -55,7 +56,7 @@ class ConversationController extends Controller
 
         $this->service->markAsRead($conversation, $request->user());
 
-        $messages = $this->service->getMessages($conversation);
+        $messages = $this->service->getMessages($conversation, $request->user());
 
         return ApiResponse::paginated(MessageResource::collection($messages), 'Messages retrieved.');
     }
@@ -94,6 +95,26 @@ class ConversationController extends Controller
         $this->service->markAsDelivered($conversation, $request->user());
 
         return ApiResponse::success(null, 'Delivery recorded.', 200);
+    }
+
+    /** "Unsend for everyone" on one message. */
+    public function unsendMessage(Request $request, Message $message): JsonResponse
+    {
+        $this->authorize('sendMessage', $message->conversation);
+
+        $message = $this->service->unsend($message, $request->user());
+
+        return ApiResponse::success(MessageResource::make($message), 'Message unsent.', 200);
+    }
+
+    /** "Remove for you" on one message; the other person still sees it. */
+    public function hideMessage(Request $request, Message $message): JsonResponse
+    {
+        $this->authorize('sendMessage', $message->conversation);
+
+        $this->service->hideFor($message, $request->user());
+
+        return ApiResponse::success(null, 'Message removed for you.', 200);
     }
 
     /** Remove the conversation from the caller's inbox (the other side keeps it). */

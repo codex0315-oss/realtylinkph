@@ -58,6 +58,7 @@ class SendAiAutoReply implements ShouldQueue
 
         // Last 12 messages, oldest first, as a chat history. AI turns are "assistant".
         $history = Message::where('conversation_id', $conversation->id)
+            ->whereNull('unsent_at')   // unsent messages are not part of the conversation any more
             ->latest('id')->limit(12)->get()->reverse()->values()
             ->map(fn (Message $m) => [
                 'role'    => $m->is_ai ? 'assistant' : ($m->sender_id === $conversation->buyer_id ? 'user' : 'assistant'),

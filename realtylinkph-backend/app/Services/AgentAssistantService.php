@@ -721,9 +721,9 @@ class AgentAssistantService
             return null;
         }
 
-        $lines = $chat->messages()->latest('id')->limit(8)->get()->reverse()
+        $lines = $chat->messages()->whereNull('unsent_at')->latest('id')->limit(8)->get()->reverse()
             ->map(fn ($m) => ($m->sender_id === $agent->id || $m->is_ai ? 'Agent' : 'Buyer') . ': ' . Str::limit((string) $m->body, 400))->implode("\n");
-        $lastBuyer = $chat->messages()->where('sender_id', '!=', $agent->id)->where('is_ai', false)->latest('id')->value('body');
+        $lastBuyer = $chat->messages()->whereNull('unsent_at')->where('sender_id', '!=', $agent->id)->where('is_ai', false)->latest('id')->value('body');
 
         return [
             'kind'     => 'chat',

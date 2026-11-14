@@ -14,6 +14,8 @@ export interface Message {
   /** The other party had the thread open (✓✓ gold). */
   read_at?: string | null
   created_at: string
+  /** Unsent for everyone: the text is gone (body is null) and the bubble reads "… unsent a message". */
+  unsent?: boolean
   sender?: User
   /**
    * Client-only. Present on messages the user just sent: 'sending' until the

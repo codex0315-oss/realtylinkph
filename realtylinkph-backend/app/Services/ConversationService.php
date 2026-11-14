@@ -5,6 +5,7 @@ declare(strict_types=1);
 namespace App\Services;
 
 use App\Events\MessageSent;
+use App\Events\MessageUnsent;
 use App\Events\MessagesReceipt;
 use App\Jobs\SendAiAutoReply;
 use App\Models\Conversation;
@@ -206,10 +207,11 @@ class ConversationService
 
     public function listForUser(User $user, int $perPage = 15): LengthAwarePaginator
     {
-        return Conversation::with(['property', 'buyer', 'agent', 'messages' => function ($q): void {
+        return Conversation::with(['property', 'buyer', 'agent', 'messages' => function ($q) use ($user): void {
             // The relation already orders oldest-first, so a bare latest() only
             // appended a second ORDER BY and kept returning the OLDEST message.
-            $q->reorder()->orderByDesc('created_at')->orderByDesc('id')->limit(1);
+            // Skip messages this user removed for themselves.
+            $q->visibleTo($user)->reorder()->orderByDesc('created_at')->orderByDesc('id')->limit(1);
         }])
             ->where(function ($q) use ($user): void {
                 // Mine, and not removed from my side of the inbox.
@@ -220,11 +222,46 @@ class ConversationService
             ->paginate($perPage);
     }
 
-    public function getMessages(Conversation $conversation, int $perPage = 30): LengthAwarePaginator
+    public function getMessages(Conversation $conversation, ?User $viewer = null, int $perPage = 30): LengthAwarePaginator
     {
         return Message::with('sender')
             ->where('conversation_id', $conversation->id)
+            ->when($viewer, fn ($q) => $q->visibleTo($viewer))
             ->latest()
             ->paginate($perPage);
+    }
+
+    /**
+     * "Unsend for everyone": allowed for your own messages, and for an agent on
+     * the RealtyLink AI replies sent for them while they were away. Both people
+     * see "… unsent a message"; the text is kept for admins only.
+     */
+    public function unsend(Message $message, User $user): Message
+    {
+        $conversation = $message->conversation;
+        $mine   = $message->sender_id === $user->id;
+        $aiMine = $message->is_ai && $conversation->agent_id === $user->id;
+        abort_unless($mine || $aiMine, 403, 'You can only unsend your own messages.');
+
+        if (! $message->isUnsent()) {
+            $message->forceFill(['unsent_at' => now()])->save();
+            try {
+                broadcast(new MessageUnsent($message))->toOthers();
+            } catch (\Throwable $e) {
+                Log::warning('MessageUnsent broadcast failed', ['message' => $message->id, 'error' => $e->getMessage()]);
+            }
+        }
+
+        return $message;
+    }
+
+    /** "Remove for you": hide the message from this user's view only. */
+    public function hideFor(Message $message, User $user): void
+    {
+        $hidden = $message->hidden_for ?? [];
+        if (! in_array($user->id, $hidden, true)) {
+            $hidden[] = $user->id;
+            $message->forceFill(['hidden_for' => $hidden])->save();
+        }
     }
 }

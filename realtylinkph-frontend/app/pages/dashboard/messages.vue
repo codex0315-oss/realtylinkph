@@ -5,7 +5,7 @@ definePageMeta({ layout: 'dashboard' })
 
 const authStore = useAuthStore()
 const convStore = useConversationStore()
-const { fetchConversations, openConversation, fetchMessages, sendMessage, discardFailed, markDelivered, markRead, deleteConversation, loading } = useConversation()
+const { fetchConversations, openConversation, fetchMessages, sendMessage, discardFailed, markDelivered, markRead, deleteConversation, unsendMessage, removeMessageForMe, loading } = useConversation()
 const ask   = useConfirm()
 const toast = useToast()
 const route  = useRoute()
@@ -15,7 +15,7 @@ const {
   listenToConversation, stopListeningToConversation,
   whisperTyping, listenForTyping,
   whisperSeen, listenForSeen,
-  onNotificationType, listenForAiTyping, listenForReceipts,
+  onNotificationType, listenForAiTyping, listenForReceipts, listenForUnsent,
 } = useEcho()
 
 await fetchConversations()
@@ -68,6 +68,37 @@ const otherTyping = ref(false)
 const aiTyping = ref(false)
 let aiTypingClear: ReturnType<typeof setTimeout>
 function isAi(m: Message) { return !!m.is_ai }
+
+/* ── Unsend, like Messenger ──
+ * Your own messages (and, for an agent, RealtyLink AI replies sent for them):
+ * "Unsend for everyone". Any message: "Remove for you". Always confirmed. */
+function canUnsend(m: Message): boolean {
+  return m.sender_id === me.value || (!!m.is_ai && convStore.active?.agent_id === me.value)
+}
+function unsentLabel(m: Message): string {
+  if (m.is_ai) return convStore.active?.agent_id === me.value ? 'You unsent a RealtyLink AI reply' : 'A RealtyLink AI reply was unsent'
+  return m.sender_id === me.value ? 'You unsent a message' : `${activeOther.value?.name ?? 'They'} unsent a message`
+}
+async function askUnsend(m: Message) {
+  const name = activeOther.value?.name ?? 'The other person'
+  await ask({
+    title: 'Unsend for everyone?',
+    message: 'This message will be removed for both of you.',
+    consequences: [`${name} will see “unsent a message” instead`, 'This can’t be undone'],
+    confirmLabel: 'Unsend', busyLabel: 'Unsending…', tone: 'danger', icon: 'chat',
+    action: async () => (await unsendMessage(m.id, m.conversation_id)) || 'Couldn’t unsend the message. Please try again.',
+  })
+}
+async function askRemove(m: Message) {
+  const name = activeOther.value?.name ?? 'The other person'
+  await ask({
+    title: 'Remove for you?',
+    message: 'This message will be removed from your view only.',
+    consequences: [`${name} will still see it`],
+    confirmLabel: 'Remove', busyLabel: 'Removing…', tone: 'warning', icon: 'hide',
+    action: async () => (await removeMessageForMe(m.id, m.conversation_id)) || 'Couldn’t remove the message. Please try again.',
+  })
+}
 /** Whose name goes in "replying while … is away" — the agent, from either seat. */
 const agentName = computed(() => convStore.active?.agent?.name ?? 'the agent')
 const aiLabel = computed(() =>
@@ -192,7 +223,7 @@ const showSeen = computed(() => {
   const arr = convStore.activeMessages
   if (!arr.length || !otherSeenAt.value) return false
   const last = arr[arr.length - 1]!
-  return last.sender_id === me.value && new Date(last.created_at).getTime() <= otherSeenAt.value
+  return last.sender_id === me.value && !last.unsent && new Date(last.created_at).getTime() <= otherSeenAt.value
 })
 const seenText = computed(() => showSeen.value ? `Seen ${relAgo(otherSeenAt.value!, presenceNow.value)}` : '')
 // Words under my latest message: Sending… / Sent / Delivered (they're online) / Seen.
@@ -203,7 +234,7 @@ const lastMine = computed(() => {
 })
 const statusText = computed(() => {
   const m = lastMine.value
-  if (!m || m.local_status === 'failed' || showSeen.value) return ''
+  if (!m || m.unsent || m.local_status === 'failed' || showSeen.value) return ''
   const t = tickOf(m)
   return t === 'sending' ? 'Sending…' : t === 'delivered' ? 'Delivered' : t === 'seen' ? '' : 'Sent'
 })
@@ -230,6 +261,7 @@ async function openConv(id: number) {
     scrollToBottom()
   })
   // The other party's app received / read our messages → move the ticks.
+  listenForUnsent(id, (e) => convStore.applyUnsent(e.id, e.conversation_id))
   listenForReceipts(id, (e) => {
     if (e.by_user_id === me.value) return
     convStore.applyReceipt(e.kind, e.message_ids, e.at)
@@ -433,7 +465,7 @@ if (convStore.conversations.length) {
             <div class="flex items-center justify-between gap-2 mt-0.5">
               <p class="text-xs truncate" :class="conv.unread_count ? 'text-brand-navy dark:text-white font-medium' : 'text-gray-400 dark:text-white/40'">
                 <span v-if="conv.latest_message?.is_ai" class="text-brand-gold-deep dark:text-brand-gold font-semibold">AI:</span>
-                {{ conv.latest_message?.body ?? 'Start a conversation' }}
+                {{ conv.latest_message?.unsent ? (conv.latest_message.sender_id === me ? 'You unsent a message' : 'Message unsent') : (conv.latest_message?.body ?? 'Start a conversation') }}
               </p>
               <span v-if="conv.unread_count" class="flex-shrink-0 bg-brand-gold text-brand-navy text-[0.625rem] font-bold rounded-full h-4.5 min-w-[18px] px-1 flex items-center justify-center" style="height:18px">
                 {{ conv.unread_count }}
@@ -561,8 +593,21 @@ if (convStore.conversations.length) {
                 <p v-if="isAi(item.message) && item.showMeta" class="text-[0.625rem] font-semibold text-brand-gold-deep dark:text-brand-gold mb-1 ml-1">
                   {{ aiLabel }}
                 </p>
-                <div class="relative group/msg">
+                <MessageActions
+                  :side="isMine(item.message) ? 'right' : 'left'"
+                  :can-unsend="!item.message.unsent && canUnsend(item.message)"
+                  :disabled="item.message.id < 0"
+                  @unsend="askUnsend(item.message)"
+                  @remove="askRemove(item.message)"
+                >
+                <div class="relative group/msg min-w-0">
                   <div
+                    v-if="item.message.unsent"
+                    class="px-4 py-2.5 text-sm italic text-gray-400 dark:text-white/40 rounded-2xl ring-1 ring-gray-200 dark:ring-white/15"
+                    :class="isMine(item.message) ? 'rounded-br-md' : 'rounded-bl-md'"
+                  >{{ unsentLabel(item.message) }}</div>
+                  <div
+                    v-else
                     class="px-4 py-2.5 text-sm leading-relaxed break-words shadow-sm"
                     :class="isMine(item.message)
                       ? 'text-white rounded-2xl rounded-br-md'
@@ -576,9 +621,9 @@ if (convStore.conversations.length) {
 
                   <!-- react button on hover -->
                   <div
-                    v-if="hoveredMsg === item.id"
+                    v-if="hoveredMsg === item.id && !item.message.unsent"
                     class="absolute top-1/2 -translate-y-1/2"
-                    :class="isMine(item.message) ? '-left-9' : '-right-9'"
+                    :class="isMine(item.message) ? '-left-[4.5rem]' : '-right-[4.5rem]'"
                   >
                     <button
                       class="h-7 w-7 rounded-full bg-white dark:bg-[#0d1f3c] border border-gray-200 dark:border-white/10 shadow-sm flex items-center justify-center text-gray-400 hover:text-brand-gold transition-colors"
@@ -597,6 +642,8 @@ if (convStore.conversations.length) {
                   </div>
                 </div>
 
+                </MessageActions>
+
                 <!-- reactions -->
                 <div v-if="reactions[item.id]?.length" class="flex gap-1 mt-1">
                   <span v-for="e in reactions[item.id]" :key="e" class="text-xs bg-white dark:bg-white/10 border border-gray-200 dark:border-white/10 rounded-full px-1.5 py-0.5 shadow-sm">{{ e }}</span>
@@ -605,7 +652,7 @@ if (convStore.conversations.length) {
                 <!-- time + ticks (ticks on my messages only) -->
                 <span class="flex items-center gap-1 text-[0.625rem] text-gray-400 dark:text-white/30 mt-1 px-1">
                   {{ timeOf(item.message.created_at) }}
-                  <template v-if="isMine(item.message)">
+                  <template v-if="isMine(item.message) && !item.message.unsent">
                     <span :title="TICK_TITLE[tickOf(item.message)]" class="inline-flex items-center">
                       <!-- sending: clock -->
                       <svg v-if="tickOf(item.message) === 'sending'" class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2"><path stroke-linecap="round" stroke-linejoin="round" d="M12 8v4l2.5 2.5M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>

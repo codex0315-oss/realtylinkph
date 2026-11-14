@@ -117,6 +117,30 @@ export const useConversation = () => {
     }
   }
 
+  /** "Unsend for everyone": both people then see "… unsent a message". */
+  async function unsendMessage(messageId: number, conversationId: number): Promise<boolean> {
+    try {
+      await api.post(`/messages/${messageId}/unsend`)
+      conversationStore.applyUnsent(messageId, conversationId)
+      return true
+    } catch (e) {
+      error.value = extractError(e)
+      return false
+    }
+  }
+
+  /** "Remove for you": hidden from this user only; the other person still sees it. */
+  async function removeMessageForMe(messageId: number, conversationId: number): Promise<boolean> {
+    try {
+      await api.post(`/messages/${messageId}/hide`)
+      conversationStore.hideMessage(messageId, conversationId)
+      return true
+    } catch (e) {
+      error.value = extractError(e)
+      return false
+    }
+  }
+
   return {
     loading,
     error,
@@ -129,6 +153,8 @@ export const useConversation = () => {
     markDelivered,
     markRead,
     deleteConversation,
+    unsendMessage,
+    removeMessageForMe,
   }
 }
 

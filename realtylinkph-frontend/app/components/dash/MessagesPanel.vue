@@ -20,7 +20,7 @@ const route = useRoute()
 const { fetchConversations, fetchMessages, sendMessage, markRead, loading } = useConversation()
 const {
   listenToConversation, stopListeningToConversation,
-  listenForReceipts, listenForAiTyping, listenForTyping, whisperTyping, whisperSeen,
+  listenForReceipts, listenForUnsent, listenForAiTyping, listenForTyping, whisperTyping, whisperSeen,
 } = useEcho()
 
 const me = computed(() => authStore.user?.id)
@@ -59,6 +59,7 @@ function when(iso?: string | null): string {
 function preview(c: Conversation): string {
   const m = c.latest_message
   if (!m) return 'Say hello 👋'
+  if (m.unsent) return m.sender_id === me.value ? 'You unsent a message' : 'Message unsent'
   return `${m.sender_id === me.value ? 'You: ' : ''}${m.body}`
 }
 
@@ -160,6 +161,7 @@ async function openThread(c: Conversation) {
   listenForReceipts(c.id, (e) => {
     if (e.by_user_id !== me.value) convStore.applyReceipt(e.kind, e.message_ids, e.at)
   })
+  listenForUnsent(c.id, (e) => convStore.applyUnsent(e.id, e.conversation_id))
   listenForAiTyping(c.id, () => {
     aiTyping.value = true
     clearTimeout(aiClear)
@@ -274,6 +276,37 @@ watch(chatTarget, async (id) => {
     nextTick(() => { autosize(); inputEl.value?.focus() })
   }
 }, { immediate: true })
+
+/* ── Unsend, like Messenger ──
+ * Your own messages (and, for an agent, RealtyLink AI replies sent for them):
+ * "Unsend for everyone". Any message: "Remove for you". Always confirmed. */
+const { unsendMessage, removeMessageForMe } = useConversation()
+const otherName = computed(() => (thread.value ? other(thread.value)?.name : null) ?? 'The other person')
+function canUnsend(m: Message): boolean {
+  return m.sender_id === me.value || (!!m.is_ai && thread.value?.agent_id === me.value)
+}
+function unsentLabel(m: Message): string {
+  if (m.is_ai) return thread.value?.agent_id === me.value ? 'You unsent a RealtyLink AI reply' : 'A RealtyLink AI reply was unsent'
+  return m.sender_id === me.value ? 'You unsent a message' : `${otherName.value} unsent a message`
+}
+async function askUnsend(m: Message) {
+  await confirm({
+    title: 'Unsend for everyone?',
+    message: 'This message will be removed for both of you.',
+    consequences: [`${otherName.value} will see “unsent a message” instead`, 'This can’t be undone'],
+    confirmLabel: 'Unsend', busyLabel: 'Unsending…', tone: 'danger', icon: 'chat',
+    action: async () => (await unsendMessage(m.id, m.conversation_id)) || 'Couldn’t unsend the message. Please try again.',
+  })
+}
+async function askRemove(m: Message) {
+  await confirm({
+    title: 'Remove for you?',
+    message: 'This message will be removed from your view only.',
+    consequences: [`${otherName.value} will still see it`],
+    confirmLabel: 'Remove', busyLabel: 'Removing…', tone: 'warning', icon: 'hide',
+    action: async () => (await removeMessageForMe(m.id, m.conversation_id)) || 'Couldn’t remove the message. Please try again.',
+  })
+}
 
 /* ── Delete (from this user's inbox only), always confirmed ─────────── */
 const confirm = useConfirm()
@@ -598,17 +631,32 @@ async function removeChat(c: Conversation) {
             <p v-if="item.kind === 'day'" class="py-3 text-center text-[0.6875rem] font-semibold text-brand-navy/40 dark:text-white/40">{{ item.label }}</p>
             <div v-else class="flex flex-col" :class="[item.m.sender_id === me ? 'items-end' : 'items-start', item.first ? 'mt-2' : '']">
               <p v-if="item.m.is_ai && item.first" class="mb-1 text-[0.625rem] font-bold uppercase tracking-wide text-brand-gold-deep dark:text-brand-gold">RealtyLink AI</p>
-              <div
-                class="max-w-[82%] rounded-2xl px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words"
-                :class="item.m.sender_id === me
-                  ? 'bg-brand-navy text-white rounded-br-md dark:bg-brand-gold dark:text-brand-navy'
-                  : item.m.is_ai
-                    ? 'bg-brand-gold/15 text-brand-navy ring-1 ring-brand-gold/30 rounded-bl-md dark:text-white'
-                    : 'bg-white text-brand-navy ring-1 ring-brand-navy/[0.06] rounded-bl-md dark:bg-white/[0.08] dark:text-white dark:ring-white/10'"
-              >{{ item.m.body }}</div>
+              <MessageActions
+                class="max-w-[88%]"
+                :side="item.m.sender_id === me ? 'right' : 'left'"
+                :can-unsend="!item.m.unsent && canUnsend(item.m)"
+                :disabled="item.m.id < 0"
+                @unsend="askUnsend(item.m)"
+                @remove="askRemove(item.m)"
+              >
+                <div
+                  v-if="item.m.unsent"
+                  class="min-w-0 rounded-2xl px-3.5 py-2 text-sm italic text-brand-navy/50 ring-1 ring-brand-navy/15 dark:text-white/45 dark:ring-white/15"
+                  :class="item.m.sender_id === me ? 'rounded-br-md' : 'rounded-bl-md'"
+                >{{ unsentLabel(item.m) }}</div>
+                <div
+                  v-else
+                  class="min-w-0 rounded-2xl px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words"
+                  :class="item.m.sender_id === me
+                    ? 'bg-brand-navy text-white rounded-br-md dark:bg-brand-gold dark:text-brand-navy'
+                    : item.m.is_ai
+                      ? 'bg-brand-gold/15 text-brand-navy ring-1 ring-brand-gold/30 rounded-bl-md dark:text-white'
+                      : 'bg-white text-brand-navy ring-1 ring-brand-navy/[0.06] rounded-bl-md dark:bg-white/[0.08] dark:text-white dark:ring-white/10'"
+                >{{ item.m.body }}</div>
+              </MessageActions>
               <p class="mt-0.5 flex items-center gap-1 text-[0.625rem] text-brand-navy/40 dark:text-white/40">
                 {{ clock(item.m.created_at) }}
-                <template v-if="item.m.sender_id === me">
+                <template v-if="item.m.sender_id === me && !item.m.unsent">
                   <span v-if="tickOf(item.m) === 'failed'" class="font-semibold text-red-500">
                     · Not sent · <button type="button" class="underline" @click="retry(item.m)">Retry</button>
                   </span>

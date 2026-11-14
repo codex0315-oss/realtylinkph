@@ -68,6 +68,8 @@ class Conversation extends Model
         return $this->messages()
             ->where('sender_id', '!=', $user->id)
             ->where('is_read', false)
+            ->whereNull('unsent_at')
+            ->visibleTo($user)
             ->count();
     }
 }

@@ -17,6 +17,8 @@ class Message extends Model
         'is_read',
         'delivered_at',
         'read_at',
+        'unsent_at',
+        'hidden_for',
     ];
 
     protected function casts(): array
@@ -26,7 +28,23 @@ class Message extends Model
             'is_read' => 'boolean',
             'delivered_at' => 'datetime',
             'read_at' => 'datetime',
+            'unsent_at' => 'datetime',
+            'hidden_for' => 'array',
         ];
+    }
+
+    /** Unsent for everyone: the text is kept for admins but never shown to users. */
+    public function isUnsent(): bool
+    {
+        return $this->unsent_at !== null;
+    }
+
+    /** Messages this user has not removed from their own view ("Remove for you"). */
+    public function scopeVisibleTo($query, User|int $user)
+    {
+        $id = $user instanceof User ? $user->id : $user;
+
+        return $query->where(fn ($q) => $q->whereNull('hidden_for')->orWhereJsonDoesntContain('hidden_for', $id));
     }
 
     public function conversation(): BelongsTo
