@@ -1,6 +1,7 @@
 import type { User } from './user'
 
 export type VerificationStatus = 'pending' | 'approved' | 'rejected'
+export type HoldReason = 'prc_unavailable' | 'documents' | 'other'
 export type ApplicantType = 'salesperson' | 'broker'
 
 export interface AgentProfile {
@@ -24,6 +25,12 @@ export interface AgentProfile {
   /** Admin-only, on the Agents page's Approved/Rejected tabs: who decided. */
   reviewed_by?: string | null
   /** Admin-only "Check later" note (e.g. PRC's lookup was down), cleared by any decision. */
+  /** Paused with a notice to the applicant (e.g. PRC's lookup is down). Still pending. */
+  on_hold?: boolean
+  hold_reason?: HoldReason | null
+  /** The notice the applicant was sent. */
+  hold_message?: string | null
+  /** Admin-only. */
   hold_note?: string | null
   held_by?: string | null
   held_at?: string | null

@@ -18,6 +18,7 @@ use App\Models\AgentReview;
 use App\Models\Property;
 use App\Models\User;
 use App\Support\AdminAudit;
+use App\Services\AgentApplicationHoldService;
 use App\Services\FeaturedScoreService;
 use App\Services\GeminiService;
 use Illuminate\Http\JsonResponse;
@@ -355,26 +356,96 @@ class AdminController extends Controller
                 'pending'  => (int) ($counts['pending'] ?? 0),
                 'approved' => (int) ($counts['approved'] ?? 0),
                 'rejected' => (int) ($counts['rejected'] ?? 0),
+                // Pending ones that are on hold (a subset of pending).
+                'on_hold'  => AgentProfile::whereHas('user')->where('status', 'pending')->whereNotNull('held_at')->count(),
             ],
         ], 'Applications retrieved.');
     }
 
     /**
-     * "Check later": the license couldn't be confirmed yet (typically PRC's
-     * lookup is down), so the application stays pending with an admin-only
-     * note. DELETE takes the hold off. Any decision clears it too.
+     * Put one application on hold (typically PRC's lookup is down), telling the
+     * applicant in-app and by email. It stays pending; any decision clears it.
      */
-    public function holdApplication(Request $request, AgentProfile $profile): JsonResponse
+    public function holdApplication(Request $request, AgentProfile $profile, AgentApplicationHoldService $holds): JsonResponse
     {
         abort_unless($profile->status === 'pending', 422, 'Only pending applications can be put on hold.');
+        abort_if($profile->held_at !== null, 422, 'This application is already on hold.');
 
-        $data = $request->validate(['note' => ['required', 'string', 'min:5', 'max:500']]);
-        $profile->forceFill(['hold_note' => $data['note'], 'held_by' => $request->user()->name, 'held_at' => now()])->save();
+        $data = $this->validateHold($request);
+        $holds->hold(collect([$profile->load('user')]), $data['reason'], $data['message'], $request->user(), $data['note'] ?? null);
 
-        $profile->loadMissing('user');
-        AdminAudit::log('agent.held', $profile, "{$profile->user?->name} ({$profile->user?->email})", ['reason' => $data['note']]);
+        return ApiResponse::success(AgentProfileResource::make($profile->fresh('user')), 'Application put on hold. The applicant has been told.', 200);
+    }
 
-        return ApiResponse::success(AgentProfileResource::make($profile->load('user')), 'Application put on hold.', 200);
+    /**
+     * Hold several pending applications at once — the ones picked (`ids`) or
+     * every pending one (`all`). Ones already on hold are skipped.
+     */
+    public function holdApplications(Request $request, AgentApplicationHoldService $holds): JsonResponse
+    {
+        $data     = $this->validateHold($request, bulk: true);
+        $profiles = $this->pickApplications($data);
+        $result   = $holds->hold($profiles, $data['reason'], $data['message'], $request->user(), $data['note'] ?? null);
+
+        return ApiResponse::success($result, $result['held'] === 1 ? '1 application put on hold.' : "{$result['held']} applications put on hold.", 200);
+    }
+
+    /** Resume the review of one held application, telling the applicant. */
+    public function releaseApplication(Request $request, AgentProfile $profile, AgentApplicationHoldService $holds): JsonResponse
+    {
+        $message = $this->validateResume($request)['message'];
+        $holds->resume(collect([$profile->load('user')]), $message, $request->user());
+
+        return ApiResponse::success(AgentProfileResource::make($profile->fresh('user')), 'Review resumed. The applicant has been told.', 200);
+    }
+
+    /** Resume several held applications at once (`ids`, or `all` held ones). */
+    public function resumeApplications(Request $request, AgentApplicationHoldService $holds): JsonResponse
+    {
+        $data     = $request->validate([
+            'ids'     => ['required_without:all', 'array', 'max:200'],
+            'ids.*'   => ['integer'],
+            'all'     => ['sometimes', 'boolean'],
+            'message' => ['nullable', 'string', 'min:10', 'max:1000'],
+        ]);
+        $profiles = $this->pickApplications($data, held: true);
+        $result   = $holds->resume($profiles, $data['message'] ?? AgentApplicationHoldService::DEFAULT_RESUME_MESSAGE, $request->user());
+
+        return ApiResponse::success($result, $result['resumed'] === 1 ? '1 review resumed.' : "{$result['resumed']} reviews resumed.", 200);
+    }
+
+    /** @return array{reason: string, message: string, note?: ?string} */
+    private function validateHold(Request $request, bool $bulk = false): array
+    {
+        $rules = [
+            'reason'  => ['required', 'in:' . implode(',', AgentApplicationHoldService::REASONS)],
+            'message' => ['required', 'string', 'min:10', 'max:1000'],
+            'note'    => ['nullable', 'string', 'max:500'],
+        ];
+        if ($bulk) {
+            $rules += ['ids' => ['required_without:all', 'array', 'max:200'], 'ids.*' => ['integer'], 'all' => ['sometimes', 'boolean']];
+        }
+
+        return $request->validate($rules);
+    }
+
+    private function validateResume(Request $request): array
+    {
+        $data = $request->validate(['message' => ['nullable', 'string', 'min:10', 'max:1000']]);
+
+        return ['message' => $data['message'] ?? AgentApplicationHoldService::DEFAULT_RESUME_MESSAGE];
+    }
+
+    /** The pending applications a bulk action covers: the ids given, or all of them. */
+    private function pickApplications(array $data, bool $held = false): \Illuminate\Support\Collection
+    {
+        return AgentProfile::with('user')
+            ->where('status', 'pending')
+            ->whereHas('user')
+            ->when(empty($data['all']), fn ($q) => $q->whereIn('id', $data['ids'] ?? []))
+            ->when(! empty($data['all']), fn ($q) => $held ? $q->whereNotNull('held_at') : $q)
+            ->orderBy('id')
+            ->get();
     }
 
     /** Run RealtyLink AI's document check again (e.g. after it was unavailable, or a clearer photo). */
@@ -386,13 +457,6 @@ class AdminController extends Controller
         AssessAgentApplication::dispatch($profile->id);
 
         return ApiResponse::success(AgentProfileResource::make($profile->load('user')), 'Re-checking the documents.', 202);
-    }
-
-    public function releaseApplication(AgentProfile $profile): JsonResponse
-    {
-        $profile->forceFill(['hold_note' => null, 'held_by' => null, 'held_at' => null])->save();
-
-        return ApiResponse::success(AgentProfileResource::make($profile->load('user')), 'Hold removed.', 200);
     }
 
     /** Everything the Users page's details drawer shows about one person. */

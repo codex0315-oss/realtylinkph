@@ -83,6 +83,23 @@ class AgentProfile extends Model
             && ! $this->inReapplyCooldown();
     }
 
+    public function isOnHold(): bool
+    {
+        return $this->status === 'pending' && $this->held_at !== null;
+    }
+
+    /** Take the hold off (resume, or any decision). */
+    public function clearHold(): void
+    {
+        $this->forceFill([
+            'hold_reason'  => null,
+            'hold_message' => null,
+            'hold_note'    => null,
+            'held_by'      => null,
+            'held_at'      => null,
+        ])->save();
+    }
+
     /** Storage paths of the uploaded documents, ignoring any already cleared. */
     public function documentPaths(): array
     {

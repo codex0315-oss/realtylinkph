@@ -61,6 +61,8 @@ const META: Record<string, Meta> = {
   agent_application_submitted:{ cat: 'account',   icon: ICON.shield,   action: () => ({ label: 'View application', to: '/dashboard/profile' }) },
   agent_application_approved: { cat: 'account',   icon: ICON.shield,   action: () => ({ label: 'Create a listing', to: '/dashboard/listings/new' }) },
   agent_application_rejected: { cat: 'account',   icon: ICON.shield,   action: () => ({ label: 'See reason', to: '/dashboard/profile' }) },
+  agent_application_on_hold:  { cat: 'account',   icon: ICON.clock,    action: () => ({ label: 'View application', to: '/dashboard/profile' }) },
+  agent_application_resumed:  { cat: 'account',   icon: ICON.check,    action: () => ({ label: 'View application', to: '/dashboard/profile' }) },
   new_agent_application:      { cat: 'account',   icon: ICON.shield,   action: () => ({ label: 'Review', to: '/admin/agents' }) },
   cover_removed:              { cat: 'account',   icon: ICON.photo,    action: () => ({ label: 'Update cover', to: '/dashboard/profile' }) },
 }

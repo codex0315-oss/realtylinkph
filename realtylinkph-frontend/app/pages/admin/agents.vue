@@ -27,7 +27,7 @@ const ask = useConfirm()
 
 const tab = ref<VerificationStatus>('pending')
 const items = ref<AgentProfile[]>([])
-const counts = ref<Record<VerificationStatus, number>>({ pending: 0, approved: 0, rejected: 0 })
+const counts = ref<Record<VerificationStatus, number> & { on_hold?: number }>({ pending: 0, approved: 0, rejected: 0, on_hold: 0 })
 const loading = ref(false)
 const selectedId = ref<number | null>(null)
 
@@ -235,17 +235,48 @@ async function onDecided() {
   selectedId.value = items.value[Math.min(index, items.value.length - 1)]?.id ?? null
 }
 
-/* "Check later" is set from the approve dialog; taken off here. */
 const api = useApi()
-async function releaseHold(a: AgentProfile) {
-  try {
-    await api.del(`/admin/agent-applications/${a.id}/hold`)
-    toast.success('Hold removed')
-    await load(true)
-  } catch {
-    toast.error('Couldn’t remove the hold. Please try again.')
-  }
+
+/* ── Hold, with a notice to the applicant ──
+ * A pause, not a decision (typically PRC's lookup is down): the application
+ * stays in Pending and can still be approved or rejected. One at a time from
+ * the review, or several / all from the queue. "Resume review" sends the
+ * "good news" notice and takes the hold off. */
+const holdDialog = ref<{ mode: 'hold' | 'resume'; apps: AgentProfile[]; all?: boolean; allCount?: number } | null>(null)
+function openHold(mode: 'hold' | 'resume', apps: AgentProfile[]) {
+  decision.value = null
+  prcOpen.value = false
+  holdDialog.value = { mode, apps }
 }
+async function onHoldDone() {
+  holdDialog.value = null
+  picked.value = new Set()
+  await load(true)
+}
+
+/* Picking several in the queue (Pending tab only). */
+const picked = ref<Set<number>>(new Set())
+watch(tab, () => { picked.value = new Set() })
+watch(items, (list) => {
+  // Forget picks that left the list (decided, or gone).
+  const ids = new Set(list.map(a => a.id))
+  if ([...picked.value].some(id => !ids.has(id))) picked.value = new Set([...picked.value].filter(id => ids.has(id)))
+})
+const pickedApps = computed(() => items.value.filter(a => picked.value.has(a.id)))
+const allPicked = computed(() => items.value.length > 0 && picked.value.size === items.value.length)
+const somePicked = computed(() => picked.value.size > 0 && !allPicked.value)
+function togglePick(a: AgentProfile) {
+  const next = new Set(picked.value)
+  if (next.has(a.id)) next.delete(a.id)
+  else next.add(a.id)
+  picked.value = next
+}
+function toggleAll() {
+  picked.value = allPicked.value ? new Set() : new Set(items.value.map(a => a.id))
+}
+const pickedToHold = computed(() => pickedApps.value.filter(a => !a.on_hold))
+const pickedToResume = computed(() => pickedApps.value.filter(a => a.on_hold))
+const onHoldCount = computed(() => counts.value.on_hold ?? items.value.filter(a => a.on_hold).length)
 
 /* ── Document viewer ──
  * Full screen, with zoom. "Compare" puts the selfie and the ID photo side by
@@ -317,15 +348,37 @@ async function recheck() {
  * on open so it can be pasted straight in. If PRC won't load in a frame, the
  * panel offers the new-tab route. */
 const prcOpen = ref(false)
-const prcLoaded = ref(false)
+/* loading → loaded, or → down if PRC hasn't answered in PRC_TIMEOUT_MS
+ * (its servers have gone unreachable for days; an endless spinner helps nobody). */
+const prcState = ref<'loading' | 'loaded' | 'down'>('loading')
+const prcFrameKey = ref(0)
+const PRC_TIMEOUT_MS = 8000
+let prcTimer: ReturnType<typeof setTimeout> | null = null
 const prcLink = computed(() => selected.value?.verification_links?.[0] ?? null)
+const prcBackup = computed(() => selected.value?.verification_links?.[1] ?? null)
+const dhsudLink = computed(() => selected.value?.verification_links?.find(l => /dhsud/i.test(l.url)) ?? null)
+function startPrcTimer() {
+  if (prcTimer) clearTimeout(prcTimer)
+  prcState.value = 'loading'
+  prcTimer = setTimeout(() => { if (prcState.value === 'loading') prcState.value = 'down' }, PRC_TIMEOUT_MS)
+}
+function onPrcLoad() {
+  if (prcState.value === 'loading') prcState.value = 'loaded'
+}
+function retryPrc() {
+  prcFrameKey.value++
+  startPrcTimer()
+}
 async function openPrc() {
   if (!selected.value || !prcLink.value) return
-  prcLoaded.value = false
   prcOpen.value = true
+  prcFrameKey.value++
+  startPrcTimer()
   try { await navigator.clipboard.writeText(selected.value.prc_number) } catch { /* the number is shown in the panel too */ }
 }
+watch(prcOpen, (o) => { if (!o && prcTimer) { clearTimeout(prcTimer); prcTimer = null } })
 watch(selectedId, () => { prcOpen.value = false })
+onUnmounted(() => { if (prcTimer) clearTimeout(prcTimer) })
 
 const FLAG_STYLE: Record<FlagState, string> = {
   bad: 'bg-red-500/10 text-red-700 ring-red-400/30 dark:text-red-300',
@@ -385,7 +438,8 @@ watch([selected, loading], () => nextTick(fitReview))
         <p class="mt-1.5 text-sm text-brand-text-secondary dark:text-white/55">
           <template v-if="counts.pending">
             <span class="font-semibold text-brand-navy dark:text-white">{{ counts.pending }}</span> waiting for a decision<template v-if="oldestWait > 1">
-              · the oldest has waited <span class="font-semibold text-brand-navy dark:text-white">{{ oldestWait }} days</span></template>.
+              · the oldest has waited <span class="font-semibold text-brand-navy dark:text-white">{{ oldestWait }} days</span></template><template v-if="onHoldCount">
+              · <span class="font-semibold text-amber-700 dark:text-amber-400">{{ onHoldCount }} on hold</span></template>.
           </template>
           <template v-else>No applications waiting. You're all caught up.</template>
         </p>
@@ -430,11 +484,51 @@ watch([selected, loading], () => nextTick(fitReview))
 
     <div v-else class="grid grid-cols-1 items-start gap-6 cw-lg:grid-cols-[17rem_minmax(0,1fr)]">
       <!-- ── Queue: stays in view beside the review on wide layouts ── -->
-      <ul class="space-y-2 cw-lg:sticky cw-lg:top-24 cw-lg:max-h-[calc(100vh-8rem)] cw-lg:overflow-y-auto cw-lg:p-0.5" :aria-label="`${tab} applications`">
-        <li v-for="a in items" :key="a.id">
+      <div class="min-w-0 space-y-2 cw-lg:sticky cw-lg:top-24">
+      <!-- Pick several: hold them (PRC down) or resume their review, with a notice to each -->
+      <div v-if="tab === 'pending'" class="rounded-2xl bg-white dark:bg-[#0B1A35] ring-1 ring-brand-navy/[0.07] dark:ring-white/[0.08] px-3 py-2">
+        <div class="flex items-center justify-between gap-2">
+          <label class="flex items-center gap-2 text-sm font-semibold text-brand-navy dark:text-white cursor-pointer select-none">
+            <input type="checkbox" class="h-4 w-4 rounded border-brand-navy/30 text-brand-gold focus:ring-brand-gold" :checked="allPicked" :indeterminate.prop="somePicked" @change="toggleAll" />
+            {{ picked.size ? `${picked.size} selected` : 'Select all' }}
+          </label>
+          <button v-if="picked.size" type="button" class="text-xs font-semibold text-brand-navy/55 hover:text-brand-navy dark:text-white/50 dark:hover:text-white" @click="picked = new Set()">Clear</button>
+        </div>
+        <div v-if="picked.size" class="mt-2 flex flex-wrap gap-1.5">
+          <button
+            v-if="pickedToHold.length"
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-full bg-amber-500 px-3 py-1.5 text-xs font-bold text-white hover:bg-amber-600 transition"
+            @click="openHold('hold', pickedToHold)"
+          >
+            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" /></svg>
+            Put on hold ({{ pickedToHold.length }})
+          </button>
+          <button
+            v-if="pickedToResume.length"
+            type="button"
+            class="inline-flex items-center gap-1.5 rounded-full bg-brand-navy px-3 py-1.5 text-xs font-bold text-white hover:bg-brand-navy/90 dark:bg-brand-gold dark:text-[#0B2A5C] transition"
+            @click="openHold('resume', pickedToResume)"
+          >
+            <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" /></svg>
+            Resume review ({{ pickedToResume.length }})
+          </button>
+        </div>
+      </div>
+
+      <ul class="space-y-2 cw-lg:max-h-[calc(100vh-12rem)] cw-lg:overflow-y-auto cw-lg:p-0.5" :aria-label="`${tab} applications`">
+        <li v-for="a in items" :key="a.id" class="flex items-center gap-2">
+          <input
+            v-if="tab === 'pending'"
+            type="checkbox"
+            class="h-4 w-4 flex-none rounded border-brand-navy/30 text-brand-gold focus:ring-brand-gold"
+            :checked="picked.has(a.id)"
+            :aria-label="`Select ${a.user?.name ?? 'applicant'}`"
+            @change="togglePick(a)"
+          />
           <button
             type="button"
-            class="w-full flex items-center gap-3 rounded-2xl p-3 text-left ring-1 transition"
+            class="min-w-0 flex-1 flex items-center gap-3 rounded-2xl p-3 text-left ring-1 transition"
             :class="a.id === selectedId
               ? 'bg-white ring-2 ring-brand-gold shadow-[0_10px_30px_-18px_rgba(212,165,74,0.8)] dark:bg-[#0B1A35]'
               : 'bg-white ring-brand-navy/[0.07] hover:ring-brand-gold/60 dark:bg-[#0B1A35] dark:ring-white/[0.08]'"
@@ -454,7 +548,10 @@ watch([selected, loading], () => nextTick(fitReview))
               <span v-else class="mt-0.5 block truncate text-xs text-brand-navy/50 dark:text-white/45">
                 {{ tab === 'approved' ? 'Approved' : 'Rejected' }} {{ shortDate(a.reviewed_at) }}<template v-if="a.reviewed_by"> · {{ a.reviewed_by }}</template>
               </span>
-              <span v-if="tab === 'pending' && a.hold_note" class="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[0.6875rem] font-semibold text-amber-700 dark:text-amber-400" :title="a.hold_note">On hold · check later</span>
+              <span v-if="tab === 'pending' && a.on_hold" class="mt-1 inline-flex items-center gap-1 rounded-full bg-amber-500/10 px-2 py-0.5 text-[0.6875rem] font-semibold text-amber-700 dark:text-amber-400" :title="a.hold_message ?? undefined">
+                <svg class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" /></svg>
+                On hold · applicant notified
+              </span>
               <span v-else-if="tab === 'pending'" class="mt-1 flex items-center gap-1 text-[0.6875rem]" :class="a.ai_pending ? 'text-brand-navy/45 dark:text-white/40' : 'text-emerald-700 dark:text-emerald-400'">
                 <span v-if="a.ai_pending" class="h-2.5 w-2.5 rounded-full border-2 border-brand-gold/30 border-t-brand-gold animate-spin" aria-hidden="true" />
                 <svg v-else class="h-3 w-3" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="3" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
@@ -464,6 +561,7 @@ watch([selected, loading], () => nextTick(fitReview))
           </button>
         </li>
       </ul>
+      </div>
 
       <!-- ── Review: one step per screen, Back / Next always in view ── -->
       <section v-if="selected" ref="reviewEl" :style="reviewHeight ? { height: reviewHeight } : undefined" class="min-w-0 flex flex-col rounded-3xl bg-white dark:bg-[#0B1A35] ring-1 ring-brand-navy/[0.07] dark:ring-white/[0.08]">
@@ -491,6 +589,15 @@ watch([selected, loading], () => nextTick(fitReview))
             >
               <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
               Verify on {{ isBroker(selected) ? 'PRC' : 'site' }}
+            </button>
+            <button
+              v-if="!selected.on_hold"
+              type="button"
+              class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold text-amber-800 ring-1 ring-amber-400/50 hover:bg-amber-500/10 dark:text-amber-300 transition"
+              @click="openHold('hold', [selected])"
+            >
+              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" /></svg>
+              Hold
             </button>
             <button type="button" class="whitespace-nowrap rounded-full px-4 py-2 text-sm font-semibold text-red-600 ring-1 ring-red-300 hover:bg-red-500/10 dark:text-red-400 dark:ring-red-400/40 transition" @click="decision = 'reject'">Reject</button>
             <button type="button" class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full bg-brand-gold px-4 py-2 text-sm font-bold text-[#0B2A5C] shadow-[0_4px_14px_rgba(212,165,74,0.45)] transition" @click="startApprove">
@@ -525,14 +632,22 @@ watch([selected, loading], () => nextTick(fitReview))
         <div class="min-h-0 flex-1 overflow-y-auto overscroll-contain px-4 py-4 cw-md:px-5 dark:[color-scheme:dark]">
           <!-- 1. Applicant -->
           <div v-if="cur === 'applicant'" class="space-y-4">
-            <div v-if="tab === 'pending' && selected.hold_note" class="flex flex-wrap items-start justify-between gap-3 rounded-2xl bg-amber-500/[0.07] ring-1 ring-amber-400/30 px-4 py-3">
-              <div class="min-w-0">
+            <div v-if="tab === 'pending' && selected.on_hold" class="flex flex-wrap items-start justify-between gap-3 rounded-2xl bg-amber-500/[0.07] ring-1 ring-amber-400/30 px-4 py-3">
+              <div class="min-w-[min(100%,18rem)] flex-1">
                 <p class="text-xs font-bold uppercase tracking-wide text-amber-700 dark:text-amber-400">
                   On hold<template v-if="selected.held_by"> · {{ selected.held_by }}</template><template v-if="selected.held_at"> · {{ shortDate(selected.held_at) }}</template>
                 </p>
-                <p class="mt-0.5 text-sm text-brand-navy/80 dark:text-white/75">“{{ selected.hold_note }}”</p>
+                <p v-if="selected.hold_message" class="mt-1 text-sm text-brand-navy/80 dark:text-white/75">
+                  <span class="font-semibold">Sent to {{ selected.user?.name?.split(' ')[0] ?? 'the applicant' }}:</span> “{{ selected.hold_message }}”
+                </p>
+                <p v-if="selected.hold_note" class="mt-1 text-xs text-brand-navy/60 dark:text-white/55">
+                  <span class="font-semibold">Admin note:</span> {{ selected.hold_note }}
+                </p>
               </div>
-              <button type="button" class="flex-none rounded-full px-3 py-1.5 text-xs font-semibold text-amber-800 ring-1 ring-amber-400/50 hover:bg-amber-500/10 dark:text-amber-300" @click="releaseHold(selected)">Remove hold</button>
+              <button type="button" class="inline-flex flex-none items-center gap-1.5 rounded-full bg-brand-navy px-3 py-1.5 text-xs font-bold text-white hover:bg-brand-navy/90 dark:bg-brand-gold dark:text-[#0B2A5C]" @click="openHold('resume', [selected])">
+                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" /></svg>
+                Resume review
+              </button>
             </div>
 
             <div v-if="tab !== 'pending'" class="rounded-2xl px-4 py-3 ring-1" :class="tab === 'approved' ? 'bg-emerald-500/[0.06] ring-emerald-500/25' : 'bg-red-500/[0.05] ring-red-400/25'">
@@ -735,7 +850,16 @@ watch([selected, loading], () => nextTick(fitReview))
       </section>
     </div>
 
-    <AgentDecisionDialog :open="!!decision" :mode="decision ?? 'approve'" :application="selected" @close="decision = null" @done="onDecided" />
+    <AgentDecisionDialog :open="!!decision" :mode="decision ?? 'approve'" :application="selected" @close="decision = null" @done="onDecided" @hold="selected && openHold('hold', [selected])" />
+    <HoldNoticeDialog
+      :open="!!holdDialog"
+      :mode="holdDialog?.mode ?? 'hold'"
+      :applications="holdDialog?.apps ?? []"
+      :all="holdDialog?.all"
+      :all-count="holdDialog?.allCount"
+      @close="holdDialog = null"
+      @done="onHoldDone"
+    />
 
     <!-- ── Verify on PRC: PRC's lookup beside the application, without leaving the dashboard ── -->
     <Teleport to="body">
@@ -756,11 +880,39 @@ watch([selected, loading], () => nextTick(fitReview))
               </div>
             </div>
             <div class="relative min-h-0 flex-1 bg-white">
-              <div v-if="!prcLoaded" class="absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center text-sm text-brand-navy/60">
+              <div v-if="prcState === 'loading'" class="absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center text-sm text-brand-navy/60">
                 <span class="h-5 w-5 rounded-full border-2 border-brand-gold/30 border-t-brand-gold animate-spin" aria-hidden="true" />
                 Opening PRC's lookup…
               </div>
-              <iframe :src="prcLink.url" title="PRC license verification" class="relative h-full w-full border-0" referrerpolicy="no-referrer" sandbox="allow-scripts allow-forms allow-same-origin allow-popups" @load="prcLoaded = true" />
+
+              <!-- PRC didn't answer in time: say so plainly, and offer the ways forward -->
+              <div v-else-if="prcState === 'down'" class="absolute inset-0 z-10 overflow-y-auto bg-white dark:bg-[#0B1A35] px-5 py-8 text-center" role="status">
+                <span class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-700 dark:text-amber-300">
+                  <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
+                </span>
+                <p class="mt-3 font-display text-lg font-bold text-brand-navy dark:text-white">PRC's website isn't responding</p>
+                <p class="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed text-brand-navy/65 dark:text-white/60">
+                  This is on PRC's side, not RealtyLink PH. You can try again, use another lookup, or put the application on hold so {{ selected.user?.name?.split(' ')[0] ?? 'the applicant' }} knows what's happening.
+                </p>
+                <div class="mx-auto mt-5 grid max-w-xs gap-2">
+                  <button type="button" class="rounded-full bg-brand-navy px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-navy/90 dark:bg-white/10 dark:hover:bg-white/15" @click="retryPrc">Try again</button>
+                  <a :href="prcLink.url" target="_blank" rel="noopener" class="rounded-full px-4 py-2.5 text-sm font-semibold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20">Open in a new tab</a>
+                  <a v-if="prcBackup" :href="prcBackup.url" target="_blank" rel="noopener" class="rounded-full px-4 py-2.5 text-sm font-semibold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20">Try PRC's backup site</a>
+                  <a v-if="dhsudLink" :href="dhsudLink.url" target="_blank" rel="noopener" class="rounded-full px-4 py-2.5 text-sm font-semibold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20">DHSUD registry</a>
+                  <button
+                    v-if="!selected.on_hold"
+                    type="button"
+                    class="inline-flex items-center justify-center gap-1.5 rounded-full bg-amber-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-amber-600"
+                    @click="openHold('hold', [selected])"
+                  >
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" /></svg>
+                    Put on hold and notify
+                  </button>
+                  <p v-else class="text-xs font-semibold text-amber-700 dark:text-amber-400">Already on hold. {{ selected.user?.name?.split(' ')[0] }} has been notified.</p>
+                </div>
+              </div>
+
+              <iframe :key="prcFrameKey" :src="prcLink.url" title="PRC license verification" class="relative h-full w-full border-0" referrerpolicy="no-referrer" sandbox="allow-scripts allow-forms allow-same-origin allow-popups" @load="onPrcLoad" />
             </div>
             <p class="border-t border-brand-navy/[0.06] dark:border-white/[0.08] px-4 py-2 text-xs text-brand-navy/55 dark:text-white/50">
               The number is copied: paste it into PRC's search. Page blank? Use "New tab" above.

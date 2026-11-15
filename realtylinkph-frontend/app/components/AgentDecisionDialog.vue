@@ -9,10 +9,11 @@ import type { AgentProfile } from '~/types'
  * chips add common ones, and the admin can write their own.
  */
 const props = defineProps<{ open: boolean; mode: 'approve' | 'reject'; application: AgentProfile | null }>()
-const emit = defineEmits<{ close: []; done: [mode: 'approve' | 'reject' | 'hold'] }>()
+// `hold`: PRC's lookup is down, so neither approve nor reject yet — the page
+// opens the hold dialog, which tells the applicant.
+const emit = defineEmits<{ close: []; done: [mode: 'approve' | 'reject']; hold: [] }>()
 
 const { approveAgent, rejectAgent } = useAgent()
-const api = useApi()
 const toast = useToast()
 
 const sending = ref(false)
@@ -21,33 +22,12 @@ const checks = reactive({ prc: false, face: false, valid: false })
 const reason = ref('')
 const REASON_MIN = 10
 
-/* "Check later": PRC's lookup is down, so neither approve nor reject yet. */
-const holding = ref(false)
-const holdNote = ref('')
-const HOLD_DEFAULT = "PRC's verification site was down, so the license couldn't be checked yet."
-async function hold() {
-  if (!props.application || holdNote.value.trim().length < 5 || sending.value) return
-  sending.value = true
-  failed.value = false
-  try {
-    await api.post(`/admin/agent-applications/${props.application.id}/hold`, { note: holdNote.value.trim() })
-    toast.success(`${first.value}'s application is on hold. It stays in Pending.`)
-    emit('done', 'hold')
-  } catch {
-    failed.value = true
-  } finally {
-    sending.value = false
-  }
-}
-
 watch(() => props.open, (o) => {
   if (!o) return
   Object.assign(checks, { prc: false, face: false, valid: false })
   reason.value = ''
   failed.value = false
   sending.value = false
-  holding.value = false
-  holdNote.value = HOLD_DEFAULT
 })
 
 const name = computed(() => props.application?.user?.name ?? 'The applicant')
@@ -139,28 +119,12 @@ function close() { if (!sending.value) emit('close') }
               </p>
 
               <!-- PRC's site down: hold instead of guessing -->
-              <div class="mt-3 rounded-xl ring-1 ring-amber-400/30 bg-amber-500/[0.06] px-3 py-2.5">
-                <div class="flex items-start justify-between gap-3">
-                  <p class="text-xs text-brand-navy/75 dark:text-white/70">
-                    <span class="font-semibold text-amber-800 dark:text-amber-300">PRC's site down?</span>
-                    Try the backup link under "Verify against". If neither works, don't guess: put it on hold and check later.
-                  </p>
-                  <button v-if="!holding" type="button" class="flex-none rounded-full px-3 py-1 text-xs font-semibold text-amber-800 ring-1 ring-amber-400/50 hover:bg-amber-500/10 dark:text-amber-300" @click="holding = true">Check later</button>
-                </div>
-                <div v-if="holding" class="mt-2">
-                  <label for="ad-hold" class="sr-only">Note for other admins</label>
-                  <textarea
-                    id="ad-hold"
-                    v-model="holdNote"
-                    rows="2"
-                    maxlength="500"
-                    class="w-full resize-none rounded-lg border-0 bg-white dark:bg-white/[0.06] px-3 py-2 text-xs text-brand-navy dark:text-white ring-1 ring-amber-400/40 focus:ring-2 focus:ring-brand-gold"
-                  />
-                  <div class="mt-1.5 flex items-center justify-between gap-2">
-                    <p class="text-[0.6875rem] text-brand-navy/50 dark:text-white/45">Only admins see this. It stays in Pending.</p>
-                    <button type="button" class="rounded-full bg-amber-500 px-3 py-1 text-xs font-bold text-white hover:bg-amber-600 disabled:opacity-50" :disabled="holdNote.trim().length < 5 || sending" @click="hold">Put on hold</button>
-                  </div>
-                </div>
+              <div class="mt-3 flex items-start justify-between gap-3 rounded-xl ring-1 ring-amber-400/30 bg-amber-500/[0.06] px-3 py-2.5">
+                <p class="text-xs text-brand-navy/75 dark:text-white/70">
+                  <span class="font-semibold text-amber-800 dark:text-amber-300">PRC's site down?</span>
+                  Don't guess: put it on hold. {{ first }} gets a notice by email and in the app, and it stays in Pending.
+                </p>
+                <button type="button" class="flex-none rounded-full px-3 py-1 text-xs font-semibold text-amber-800 ring-1 ring-amber-400/50 hover:bg-amber-500/10 dark:text-amber-300" :disabled="sending" @click="emit('hold')">Put on hold</button>
               </div>
             </template>
 

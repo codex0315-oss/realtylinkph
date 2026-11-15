@@ -247,10 +247,12 @@ const pending = computed(() => submittedProfile.value ?? existing.value)
 const submittedOn = computed(() =>
   pending.value?.created_at ? new Date(pending.value.created_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : '',
 )
+/* Paused by an admin (e.g. PRC's website is down). Still pending, still in line. */
+const onHold = computed(() => !!pending.value?.on_hold)
 const TRACK = computed(() => [
   { label: 'Submitted',      sub: submittedOn.value || 'Received', state: 'done' },
   { label: 'AI pre-check',   sub: pending.value?.ai_comment ? 'Done' : 'Running in the background', state: pending.value?.ai_comment ? 'done' : 'active' },
-  { label: 'Admin review',   sub: 'Usually within 24 hours', state: pending.value?.ai_comment ? 'active' : 'todo' },
+  { label: 'Admin review',   sub: onHold.value ? 'On hold for now' : 'Usually within 24 hours', state: pending.value?.ai_comment || onHold.value ? 'active' : 'todo' },
   { label: 'Approved',       sub: 'You can start listing', state: 'todo' },
 ])
 
@@ -342,14 +344,26 @@ function startReapply() {
         </span>
         <div class="min-w-0 flex-1">
           <span class="inline-flex items-center gap-1.5 rounded-full px-2.5 py-1 text-[0.6875rem] font-bold uppercase tracking-wide bg-amber-500/10 text-amber-700 dark:text-amber-400">
-            <span class="h-1.5 w-1.5 rounded-full bg-amber-500 animate-pulse motion-reduce:animate-none" /> Under review
+            <span class="h-1.5 w-1.5 rounded-full bg-amber-500" :class="onHold ? '' : 'animate-pulse motion-reduce:animate-none'" /> {{ onHold ? 'On hold' : 'Under review' }}
           </span>
           <h2 class="mt-2 font-heading text-2xl font-semibold text-brand-navy dark:text-white">Application submitted</h2>
           <p class="mt-1 text-sm text-brand-text-secondary dark:text-white/55">
             {{ pending?.applicant_type === 'broker' ? 'Real Estate Broker' : 'Real Estate Salesperson' }} application<template v-if="submittedOn">, sent {{ submittedOn }}</template>.
-            An admin usually decides <span class="font-semibold text-brand-navy dark:text-white">within 24 hours</span>, and we'll notify you either way.
+            <template v-if="!onHold">An admin usually decides <span class="font-semibold text-brand-navy dark:text-white">within 24 hours</span>, and we'll notify you either way.</template>
           </p>
         </div>
+      </div>
+
+      <!-- On hold: what happened, in the admin's words -->
+      <div v-if="onHold" class="mt-5 rounded-2xl bg-amber-500/[0.08] ring-1 ring-amber-400/30 p-4">
+        <p class="flex items-center gap-1.5 text-sm font-semibold text-amber-800 dark:text-amber-300">
+          <svg class="h-4 w-4 flex-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" /></svg>
+          {{ pending?.hold_reason === 'prc_unavailable' ? "On hold: waiting for PRC's website" : 'Your review is on hold' }}
+        </p>
+        <p class="mt-1.5 text-sm leading-relaxed text-brand-navy/80 dark:text-white/75">
+          {{ pending?.hold_message || "Your review is paused for now. Your application is safe and still in line, and there's nothing you need to do." }}
+        </p>
+        <p class="mt-1.5 text-xs text-brand-navy/55 dark:text-white/50">You don't need to apply again. We'll notify you by email and in the app as soon as your review continues.</p>
       </div>
 
       <!-- Tracker -->

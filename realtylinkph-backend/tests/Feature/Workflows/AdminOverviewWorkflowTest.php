@@ -116,7 +116,7 @@ class AdminOverviewWorkflowTest extends TestCase
         $this->postJson("/api/admin/agent-applications/{$p3->id}/review", ['action' => 'reject', 'reason' => 'The license photo is too blurry to read.'])->assertOk();
 
         $this->getJson('/api/admin/applications')->assertOk()
-            ->assertJsonPath('data.counts', ['pending' => 2, 'approved' => 0, 'rejected' => 1])
+            ->assertJsonPath('data.counts', ['pending' => 2, 'approved' => 0, 'rejected' => 1, 'on_hold' => 0])
             ->assertJsonPath('data.items.0.user.name', 'First In')   // waited longest first
             ->assertJsonPath('data.items.1.user.name', 'Second In');
 
@@ -233,7 +233,10 @@ class AdminOverviewWorkflowTest extends TestCase
         $admin = $this->admin(['name' => 'Hold Admin']);
         $this->actingAsUser($admin);
 
-        $this->postJson("/api/admin/agent-applications/{$profile->id}/hold", ['note' => 'PRC verification site is down.'])->assertOk()
+        \Illuminate\Support\Facades\Notification::fake();
+        $this->postJson("/api/admin/agent-applications/{$profile->id}/hold", [
+            'reason' => 'prc_unavailable', 'message' => 'PRC is down; your application is safe.', 'note' => 'PRC verification site is down.',
+        ])->assertOk()
             ->assertJsonPath('data.hold_note', 'PRC verification site is down.')
             ->assertJsonPath('data.held_by', 'Hold Admin')
             ->assertJsonPath('data.status', 'pending');
@@ -246,7 +249,7 @@ class AdminOverviewWorkflowTest extends TestCase
         // A decision clears it.
         $this->actingAsUser($admin)->postJson("/api/admin/agent-applications/{$profile->id}/review", ['action' => 'approve'])->assertOk();
         $this->assertNull($profile->fresh()->hold_note);
-        $this->postJson("/api/admin/agent-applications/{$profile->id}/hold", ['note' => 'Too late now.'])->assertStatus(422);
+        $this->postJson("/api/admin/agent-applications/{$profile->id}/hold", ['reason' => 'other', 'message' => 'Too late now for a hold.'])->assertStatus(422);
     }
 
     public function test_the_main_prc_link_is_the_working_verification_site(): void

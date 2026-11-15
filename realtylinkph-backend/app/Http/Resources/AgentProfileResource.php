@@ -36,10 +36,15 @@ class AgentProfileResource extends JsonResource
             // Official places to verify the credential — fixed and checked, never model-generated.
             'verification_links' => $this->when($isAdmin, fn () => \App\Support\AgentCredentialReference::links($this->applicant_type)),
             'reviewed_at'        => $this->reviewed_at?->toISOString(),
-            // "Check later" (PRC's lookup was down): admin-only, unlike admin_note.
+            // On hold (e.g. PRC's lookup is down). The applicant sees that it's on
+            // hold, why, and the notice they were sent; the admins' own note and
+            // who did it stay admin-only.
+            'on_hold'            => $this->when($isOwnerOrAdmin, fn () => $this->isOnHold()),
+            'hold_reason'        => $this->when($isOwnerOrAdmin, $this->hold_reason),
+            'hold_message'       => $this->when($isOwnerOrAdmin, $this->hold_message),
+            'held_at'            => $this->when($isOwnerOrAdmin, fn () => $this->held_at?->toISOString()),
             'hold_note'          => $this->when($isAdmin, $this->hold_note),
             'held_by'            => $this->when($isAdmin, $this->held_by),
-            'held_at'            => $this->when($isAdmin, fn () => $this->held_at?->toISOString()),
             // Set by the admin Agents page's history tabs (from the audit trail).
             'reviewed_by'        => $this->when($isAdmin && array_key_exists('reviewed_by', $this->resource->getAttributes()), fn () => $this->resource->getAttributes()['reviewed_by']),
             // When a rejected applicant may re-apply (12h after rejection); null otherwise.

@@ -98,7 +98,7 @@ class AgentVerificationService
     {
         $profile = DB::transaction(function () use ($profile): AgentProfile {
             $profile->update(['status' => 'approved', 'admin_note' => null, 'reviewed_at' => now()]);
-            $profile->forceFill(['hold_note' => null, 'held_by' => null, 'held_at' => null])->save();
+            $profile->clearHold();
             $profile->user->update(['role_type' => 'agent']);
 
             return $profile->fresh(['user']);
@@ -116,7 +116,7 @@ class AgentVerificationService
     public function reject(AgentProfile $profile, string $reason): AgentProfile
     {
         $profile->update(['status' => 'rejected', 'admin_note' => $reason, 'reviewed_at' => now()]);
-        $profile->forceFill(['hold_note' => null, 'held_by' => null, 'held_at' => null])->save();
+        $profile->clearHold();
         $profile = $profile->fresh(['user']);
 
         $reapplyAt = $profile->reapplyAt()?->setTimezone('Asia/Manila')->format('M j, Y g:i A');

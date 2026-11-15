@@ -255,8 +255,11 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/agent-applications', [AgentVerificationController::class, 'pending']);
         Route::post('/agent-applications/{profile}/review', [AgentVerificationController::class, 'review']);
         Route::post('/agent-applications/{profile}/recheck', [AdminController::class, 'recheckApplication'])->middleware('throttle:10,1');
-        Route::post('/agent-applications/{profile}/hold', [AdminController::class, 'holdApplication']);
-        Route::delete('/agent-applications/{profile}/hold', [AdminController::class, 'releaseApplication']);
+        // Hold / resume with a notice to the applicant — one at a time or in bulk.
+        Route::post('/agent-applications/hold', [AdminController::class, 'holdApplications'])->middleware('throttle:10,1');
+        Route::post('/agent-applications/resume', [AdminController::class, 'resumeApplications'])->middleware('throttle:10,1');
+        Route::post('/agent-applications/{profile}/hold', [AdminController::class, 'holdApplication'])->middleware('throttle:30,1');
+        Route::delete('/agent-applications/{profile}/hold', [AdminController::class, 'releaseApplication'])->middleware('throttle:30,1');
 
         // Viewing behaviour: strikes, warnings, pauses
         Route::get('/viewings', [\App\Http\Controllers\AdminViewingController::class, 'index']);

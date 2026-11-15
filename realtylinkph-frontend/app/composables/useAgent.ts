@@ -60,9 +60,9 @@ export const useAgent = () => {
   }
 
   /** Admin Agents page: applications in one status, plus counts for the tabs. */
-  async function fetchApplications(status: VerificationStatus): Promise<{ items: AgentProfile[]; counts: Record<VerificationStatus, number> } | null> {
+  async function fetchApplications(status: VerificationStatus): Promise<{ items: AgentProfile[]; counts: Record<VerificationStatus, number> & { on_hold?: number } } | null> {
     try {
-      const res = await api.get<ApiResponse<{ items: AgentProfile[]; counts: Record<VerificationStatus, number> }>>('/admin/applications', { status })
+      const res = await api.get<ApiResponse<{ items: AgentProfile[]; counts: Record<VerificationStatus, number> & { on_hold?: number } }>>('/admin/applications', { status })
       return res.data
     } catch {
       return null

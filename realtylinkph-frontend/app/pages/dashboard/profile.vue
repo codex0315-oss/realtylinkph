@@ -156,7 +156,11 @@ const appStatusMeta: Record<string, { label: string; cls: string }> = {
   pending:  { label: 'Under review', cls: 'bg-amber-100 text-amber-700' },
   approved: { label: 'Approved',     cls: 'bg-emerald-100 text-emerald-700' },
   rejected: { label: 'Not approved', cls: 'bg-red-100 text-red-600' },
+  on_hold:  { label: 'On hold',      cls: 'bg-amber-100 text-amber-800' },
 }
+/* Paused by an admin (e.g. PRC's website is down): still pending, shown as "On hold". */
+const appStatusKey = computed(() => (agentApp.value?.on_hold ? 'on_hold' : agentApp.value?.status ?? 'pending'))
+const HOLD_FALLBACK = "Your review is paused for now. Your application is safe and still in line, and there's nothing you need to do."
 const { inCooldown: appInCooldown, text: appCooldownText } = useReapplyCooldown(() => agentApp.value?.reapply_at)
 
 /* ── Google Calendar ── */
@@ -220,7 +224,7 @@ const SECTIONS = computed(() => [
   { key: 'security' as const,    label: 'Security',       hint: 'Password',               icon: 'M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z' },
   { key: 'apps' as const,        label: 'Connected apps', hint: 'Google Calendar',        icon: 'M13.19 8.688a4.5 4.5 0 011.242 7.244l-4.5 4.5a4.5 4.5 0 01-6.364-6.364l1.757-1.757m13.35-.622l1.757-1.757a4.5 4.5 0 00-6.364-6.364l-4.5 4.5a4.5 4.5 0 001.242 7.244' },
   { key: 'preferences' as const, label: 'Preferences',    hint: 'Theme, alerts',          icon: 'M10.5 6h9.75M10.5 6a1.5 1.5 0 11-3 0m3 0a1.5 1.5 0 10-3 0M3.75 6H7.5m3 12h9.75m-9.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-3.75 0H7.5m9-6h3.75m-3.75 0a1.5 1.5 0 01-3 0m3 0a1.5 1.5 0 00-3 0m-9.75 0h9.75' },
-  ...(agentApp.value ? [{ key: 'application' as const, label: 'Agent application', hint: appStatusMeta[agentApp.value.status]?.label ?? '', icon: 'M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z' }] : []),
+  ...(agentApp.value ? [{ key: 'application' as const, label: 'Agent application', hint: appStatusMeta[appStatusKey.value]?.label ?? '', icon: 'M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z' }] : []),
 ])
 /* The open section lives in the URL (?section=), and each one you open is a
    history step, so Back goes Agent application → Security → Account before
@@ -785,13 +789,21 @@ const memberSince = computed(() =>
         <section v-else-if="section === 'application' && agentApp" key="application" class="pcard">
           <div class="flex flex-wrap items-center justify-between gap-3">
             <h2 class="font-heading text-xl font-semibold text-brand-navy dark:text-white">Agent application</h2>
-            <span class="rounded-full px-2.5 py-1 text-[0.6875rem] font-bold uppercase tracking-wide" :class="appStatusMeta[agentApp.status]?.cls">{{ appStatusMeta[agentApp.status]?.label }}</span>
+            <span class="rounded-full px-2.5 py-1 text-[0.6875rem] font-bold uppercase tracking-wide" :class="appStatusMeta[appStatusKey]?.cls">{{ appStatusMeta[appStatusKey]?.label }}</span>
           </div>
           <p class="mt-1 mb-5 text-sm text-brand-text-secondary dark:text-white/55">{{ agentApp.applicant_type === 'broker' ? 'Real Estate Broker' : 'Real Estate Salesperson' }} application</p>
 
           <!-- Status on the left, the application link level with it on the right -->
           <div class="flex flex-col gap-3 cw-sm:flex-row cw-sm:items-center cw-sm:justify-between">
-            <p v-if="agentApp.status === 'pending'" class="min-w-0 cw-sm:flex-1 text-sm text-brand-navy/75 dark:text-white/70">An admin is reviewing your documents, usually within 24 hours. We’ll notify you of the outcome.</p>
+            <div v-if="agentApp.on_hold" class="min-w-0 cw-sm:flex-1 rounded-xl bg-amber-500/[0.08] ring-1 ring-amber-400/30 px-3.5 py-3">
+              <p class="flex items-center gap-1.5 text-sm font-semibold text-amber-800 dark:text-amber-300">
+                <svg class="h-4 w-4 flex-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" /></svg>
+                {{ agentApp.hold_reason === 'prc_unavailable' ? "On hold: waiting for PRC's website" : 'Your review is on hold' }}
+              </p>
+              <p class="mt-1 text-sm leading-relaxed text-brand-navy/75 dark:text-white/70">{{ agentApp.hold_message || HOLD_FALLBACK }}</p>
+              <p v-if="agentApp.held_at" class="mt-1 text-xs text-brand-navy/50 dark:text-white/45">Since {{ new Date(agentApp.held_at).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) }} · You don’t need to apply again.</p>
+            </div>
+            <p v-else-if="agentApp.status === 'pending'" class="min-w-0 cw-sm:flex-1 text-sm text-brand-navy/75 dark:text-white/70">An admin is reviewing your documents, usually within 24 hours. We’ll notify you of the outcome.</p>
             <p v-else-if="agentApp.status === 'approved'" class="min-w-0 cw-sm:flex-1 flex items-center gap-2 rounded-xl bg-emerald-500/10 px-3.5 py-2.5 text-sm font-medium text-emerald-700 dark:text-emerald-400">
               <svg class="h-4 w-4 flex-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
               You’re a verified agent. Buyers see the verified tick on your profile and listings.
@@ -988,15 +1000,16 @@ const memberSince = computed(() =>
     <div v-if="agentApp" class="pcard">
       <div class="flex items-center justify-between gap-3 mb-1">
         <h2 class="font-bold text-brand-navy dark:text-white">Agent Application</h2>
-        <span class="text-[0.625rem] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full" :class="appStatusMeta[agentApp.status]?.cls">
-          {{ appStatusMeta[agentApp.status]?.label }}
+        <span class="text-[0.625rem] font-bold uppercase tracking-wide px-2.5 py-1 rounded-full" :class="appStatusMeta[appStatusKey]?.cls">
+          {{ appStatusMeta[appStatusKey]?.label }}
         </span>
       </div>
       <p class="text-xs text-gray-500 dark:text-white/40 mb-4">
         {{ agentApp.applicant_type === 'broker' ? 'Real Estate Broker' : 'Real Estate Salesperson' }} application
       </p>
 
-      <p v-if="agentApp.status === 'pending'" class="text-sm text-gray-600 dark:text-white/60">An admin is reviewing your documents — usually within 24 hours. We'll notify you of the outcome.</p>
+      <p v-if="agentApp.on_hold" class="text-sm text-amber-800 dark:text-amber-300">{{ agentApp.hold_message || HOLD_FALLBACK }}</p>
+      <p v-else-if="agentApp.status === 'pending'" class="text-sm text-gray-600 dark:text-white/60">An admin is reviewing your documents — usually within 24 hours. We'll notify you of the outcome.</p>
       <div v-else-if="agentApp.status === 'rejected'">
         <p v-if="agentApp.admin_note" class="text-sm text-red-600 dark:text-red-400">Reason: {{ agentApp.admin_note }}</p>
         <p v-if="appInCooldown" class="text-xs text-amber-700 dark:text-amber-300 mt-2 inline-flex items-center gap-1.5">
