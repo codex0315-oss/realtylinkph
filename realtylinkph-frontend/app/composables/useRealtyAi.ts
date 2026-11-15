@@ -17,7 +17,7 @@ export type AiAction =
   | { type: 'theme'; mode: ThemeMode; previous?: ThemeMode; undone?: boolean }
   | { type: 'gcal_connect' }
   | { type: 'gcal_disconnect'; done?: boolean }
-  | { type: 'password'; can_change: boolean; done?: boolean }
+  | { type: 'password'; can_change: boolean; first_set?: boolean; done?: boolean }
   | { type: 'open_page'; page: string; label: string; href: string }
   | { type: 'capabilities' }
 

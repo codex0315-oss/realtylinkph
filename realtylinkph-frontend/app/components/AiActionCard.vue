@@ -81,7 +81,9 @@ const checks = computed(() => [
   { ok: /[a-z]/i.test(pw.password) && /\d/.test(pw.password), label: 'Letters and numbers' },
   { ok: !!pw.password && pw.password === pw.password_confirmation, label: 'Both match' },
 ])
-const pwReady = computed(() => !!pw.current_password && checks.value.every(c => c.ok))
+// A Google account setting its first password has no current one to type.
+const firstSet = computed(() => props.action.type === 'password' && !!props.action.first_set)
+const pwReady = computed(() => (firstSet.value || !!pw.current_password) && checks.value.every(c => c.ok))
 
 async function changePassword() {
   if (!pwReady.value || busy.value) return
@@ -91,7 +93,8 @@ async function changePassword() {
     await api.post('/me/password', { ...pw })
     Object.assign(pw, { current_password: '', password: '', password_confirmation: '' })
     updateAction({ done: true })
-    toast.success('Password changed.')
+    if (firstSet.value) await fetchMe()
+    toast.success(firstSet.value ? 'Password set. You can now sign in with your email too.' : 'Password changed.')
   } catch (e: unknown) {
     const data = (e as { data?: { message?: string; errors?: Record<string, string[]> } })?.data
     pwError.value = data?.errors ? Object.values(data.errors)[0]?.[0] ?? data?.message ?? 'Could not change password.' : data?.message ?? 'Could not change password.'
@@ -180,7 +183,7 @@ const field = 'w-full rounded-xl border-0 bg-brand-navy/[0.05] dark:bg-white/[0.
         <span class="h-9 w-9 flex-none rounded-xl flex items-center justify-center bg-emerald-500/10 text-emerald-600 dark:text-emerald-400">
           <svg class="h-[1.125rem] w-[1.125rem]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
         </span>
-        <p class="min-w-0 flex-1 text-[0.8125rem] font-semibold text-brand-navy dark:text-white">Password changed</p>
+        <p class="min-w-0 flex-1 text-[0.8125rem] font-semibold text-brand-navy dark:text-white">{{ firstSet ? 'Password set' : 'Password changed' }}</p>
       </div>
 
       <form v-else class="space-y-2" autocomplete="on" @submit.prevent="changePassword">
@@ -188,7 +191,7 @@ const field = 'w-full rounded-xl border-0 bg-brand-navy/[0.05] dark:bg-white/[0.
           <svg class="h-4 w-4 flex-none text-emerald-600 dark:text-emerald-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 10.5V6.75a4.5 4.5 0 10-9 0v3.75m-.75 11.25h10.5a2.25 2.25 0 002.25-2.25v-6.75a2.25 2.25 0 00-2.25-2.25H6.75a2.25 2.25 0 00-2.25 2.25v6.75a2.25 2.25 0 002.25 2.25z" /></svg>
           <p class="text-[0.6875rem] font-semibold text-brand-navy/60 dark:text-white/55">Secure form: goes straight to RealtyLink PH, never to the AI</p>
         </div>
-        <input v-model="pw.current_password" :type="showPw ? 'text' : 'password'" :class="field" placeholder="Current password" autocomplete="current-password" aria-label="Current password" required />
+        <input v-if="!firstSet" v-model="pw.current_password" :type="showPw ? 'text' : 'password'" :class="field" placeholder="Current password" autocomplete="current-password" aria-label="Current password" required />
         <input v-model="pw.password" :type="showPw ? 'text' : 'password'" :class="field" placeholder="New password" autocomplete="new-password" aria-label="New password" required />
         <input v-model="pw.password_confirmation" :type="showPw ? 'text' : 'password'" :class="field" placeholder="Confirm new password" autocomplete="new-password" aria-label="Confirm new password" required />
 
@@ -211,7 +214,7 @@ const field = 'w-full rounded-xl border-0 bg-brand-navy/[0.05] dark:bg-white/[0.
             class="rounded-full bg-brand-gold px-4 py-2 text-xs font-bold text-brand-navy shadow-[0_4px_14px_rgba(212,165,74,0.4)] hover:bg-brand-gold-light disabled:opacity-50 disabled:shadow-none transition"
             :disabled="!pwReady || busy"
           >
-            {{ busy ? 'Saving…' : 'Change password' }}
+            {{ busy ? 'Saving…' : firstSet ? 'Set password' : 'Change password' }}
           </button>
         </div>
       </form>

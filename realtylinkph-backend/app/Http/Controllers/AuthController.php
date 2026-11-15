@@ -53,6 +53,21 @@ class AuthController extends Controller
     public function login(LoginRequest $request): JsonResponse
     {
         if (! Auth::attempt($request->only('email', 'password'))) {
+            // An account made with "Continue with Google" has no password of its
+            // own yet, so explain how to get in instead of a bare "invalid".
+            $googleOnly = User::where('email', $request->input('email'))
+                ->where('password_set', false)
+                ->where('is_system', false)
+                ->exists();
+
+            if ($googleOnly) {
+                return ApiResponse::error(
+                    'This account was created with Google. Use Continue with Google, or set a password in My Profile → Security (or tap Forgot password?).',
+                    ['code' => 'google_account'],
+                    401
+                );
+            }
+
             return ApiResponse::error('Invalid credentials.', [], 401);
         }
 
@@ -184,17 +199,33 @@ class AuthController extends Controller
         );
     }
 
+    /**
+     * Change the password — or, for an account made with Google that has none of
+     * its own yet, set the first one. That case needs no current password (the
+     * stored one is random and nobody knows it); being signed in is the proof.
+     * Google sign-in keeps working either way: it never looks at the password.
+     */
     public function changePassword(Request $request): JsonResponse
     {
+        /** @var User $user */
+        $user     = $request->user();
+        $firstSet = $user->password_set === false;
+
         $validated = $request->validate([
-            'current_password' => ['required', 'current_password'],
+            'current_password' => $firstSet ? ['nullable'] : ['required', 'current_password'],
             'password'         => ['required', 'confirmed', \Illuminate\Validation\Rules\Password::min(8)->letters()->numbers()],
         ]);
 
-        $request->user()->update(['password' => Hash::make($validated['password'])]);
-        $this->twoFactor->forgetDevices($request->user());   // a new password means every trusted browser starts over
+        $user->update(['password' => Hash::make($validated['password']), 'password_set' => true]);
+        $this->twoFactor->forgetDevices($user);   // a new password means every trusted browser starts over
 
-        return ApiResponse::success(null, 'Password changed successfully.', 200);
+        return ApiResponse::success(
+            UserResource::make($user->fresh('agentProfile')),
+            $firstSet
+                ? 'Password set. You can now sign in with your email and password, or with Google.'
+                : 'Password changed successfully.',
+            200
+        );
     }
 
     public function forgotPassword(ForgotPasswordRequest $request): JsonResponse

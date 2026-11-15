@@ -178,8 +178,8 @@ class BuyerAssistantService
                     'action' => ['type' => 'password', 'can_change' => true],
                 ]
                 : [
-                    'reply'  => 'Your account signs in with Google, so there\'s no RealtyLink PH password to change; just keep using "Continue with Google". If you\'d also like to sign in with your email and a password, choose "Forgot password" on the sign-in screen and we\'ll email you a link to set one.',
-                    'action' => ['type' => 'password', 'can_change' => false],
+                    'reply'  => 'Your account was made with Google, so it has no password of its own yet. You can set one in the secure form below, then sign in with your email and password or keep using "Continue with Google"; both will work. Type passwords only in the form, never in the chat.',
+                    'action' => ['type' => 'password', 'can_change' => true, 'first_set' => true],
                 ],
 
             'open_page' => [

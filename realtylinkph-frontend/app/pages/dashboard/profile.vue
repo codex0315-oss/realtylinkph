@@ -85,17 +85,25 @@ const showPw = ref(false)
 const savingPw = ref(false)
 const pwSaved  = ref(false)
 const pwError  = ref<string | null>(null)
+const pwSavedMsg = ref('Password changed')
+
+// Signed up with Google: no password of their own yet, so the form sets the
+// first one and doesn't ask for a "current" password nobody knows.
+const needsPassword = computed(() => authStore.user?.password_set === false)
 
 async function changePassword() {
   savingPw.value = true
   pwSaved.value  = false
   pwError.value  = null
+  const firstSet = needsPassword.value
   try {
     await api.post('/me/password', { ...pw })
     pw.current_password = ''
     pw.password = ''
     pw.password_confirmation = ''
+    pwSavedMsg.value = firstSet ? 'Password set. You can now sign in with your email and password, or with Google.' : 'Password changed'
     pwSaved.value = true
+    if (firstSet) await fetchMe()
   } catch (e: unknown) {
     const data = (e as { data?: { message?: string; errors?: Record<string, string[]> } })?.data
     pwError.value = data?.errors ? Object.values(data.errors)[0]?.[0] ?? data?.message ?? 'Could not change password.' : data?.message ?? 'Could not change password.'
@@ -297,7 +305,7 @@ const PW_LEVEL = [
   { label: 'Good', bar: 'bg-emerald-500' },
   { label: 'Strong', bar: 'bg-emerald-600' },
 ]
-const pwReady = computed(() => !!pw.current_password && pwChecks.value.every(c => c.ok))
+const pwReady = computed(() => (needsPassword.value || !!pw.current_password) && pwChecks.value.every(c => c.ok))
 
 /* ── Unsaved changes ── */
 const dirty = computed(() =>
@@ -603,16 +611,28 @@ const memberSince = computed(() =>
         <!-- ── Security ── -->
         <section v-else-if="section === 'security'" key="security" class="pcard">
           <h2 class="font-heading text-xl font-semibold text-brand-navy dark:text-white">Security</h2>
-          <p class="mt-1 mb-6 text-sm text-brand-text-secondary dark:text-white/55">Change the password you sign in with.</p>
+          <p class="mt-1 mb-6 text-sm text-brand-text-secondary dark:text-white/55">{{ needsPassword ? 'Set a password so you can also sign in with your email.' : 'Change the password you sign in with.' }}</p>
+
+          <!-- Google sign-up: explain why there's no "current password" -->
+          <div v-if="needsPassword" class="mb-6 flex items-start gap-3 rounded-2xl p-4 bg-brand-cream/80 ring-1 ring-brand-navy/[0.05] dark:bg-white/[0.04] dark:ring-white/[0.08]">
+            <span class="h-9 w-9 flex-none rounded-xl flex items-center justify-center bg-[#ffffff] ring-1 ring-brand-navy/[0.08]">
+              <svg class="h-[1.125rem] w-[1.125rem]" viewBox="0 0 48 48" aria-hidden="true"><path fill="#FFC107" d="M43.6 20.1H42V20H24v8h11.3C33.7 32.7 29.2 36 24 36c-6.6 0-12-5.4-12-12s5.4-12 12-12c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 12.9 4 4 12.9 4 24s8.9 20 20 20 20-8.9 20-20c0-1.3-.1-2.6-.4-3.9z" /><path fill="#FF3D00" d="M6.3 14.7l6.6 4.8C14.7 15.1 19 12 24 12c3.1 0 5.8 1.2 7.9 3l5.7-5.7C34 6.1 29.3 4 24 4 16.3 4 9.7 8.3 6.3 14.7z" /><path fill="#4CAF50" d="M24 44c5.2 0 9.9-2 13.4-5.2l-6.2-5.2C29.2 35.1 26.7 36 24 36c-5.2 0-9.6-3.3-11.3-7.9l-6.5 5C9.5 39.6 16.2 44 24 44z" /><path fill="#1976D2" d="M43.6 20.1H42V20H24v8h11.3c-.8 2.2-2.2 4.2-4.1 5.6l6.2 5.2C37 39.2 44 34 44 24c0-1.3-.1-2.6-.4-3.9z" /></svg>
+            </span>
+            <div class="min-w-0">
+              <p class="text-sm font-semibold text-brand-navy dark:text-white">Your account uses Google sign-in</p>
+              <p class="mt-0.5 text-xs leading-relaxed text-brand-text-secondary dark:text-white/55">Set a password to also sign in with <span class="font-semibold break-all">{{ authStore.user?.email }}</span>. Continue with Google will keep working too.</p>
+            </div>
+          </div>
 
           <form class="grid grid-cols-1 cw-xl:grid-cols-[minmax(0,1.35fr)_minmax(0,1fr)] gap-x-8 gap-y-5" @submit.prevent="changePassword">
             <div>
-            <div v-if="pwSaved" class="mb-5 inline-flex items-center gap-2 rounded-xl bg-emerald-500/10 px-3.5 py-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">
-              <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
-              Password changed
+            <div v-if="pwSaved" class="mb-5 inline-flex items-start gap-2 rounded-xl bg-emerald-500/10 px-3.5 py-2 text-sm font-medium text-emerald-700 dark:text-emerald-400">
+              <svg class="mt-0.5 h-4 w-4 flex-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.4" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M4.5 12.75l6 6 9-13.5" /></svg>
+              {{ pwSavedMsg }}
             </div>
             <div v-if="pwError" class="mb-5 rounded-xl bg-red-500/10 px-4 py-3 text-sm text-red-600 dark:text-red-400">{{ pwError }}</div>
 
+            <template v-if="!needsPassword">
             <label for="pw-cur" :class="labelCls">Current password</label>
             <div class="relative">
               <input id="pw-cur" v-model="pw.current_password" :type="showCur ? 'text' : 'password'" autocomplete="current-password" :class="[fieldCls, 'pr-12']" />
@@ -620,8 +640,9 @@ const memberSince = computed(() =>
                 <svg class="h-[1.125rem] w-[1.125rem]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path v-if="!showCur" stroke-linecap="round" stroke-linejoin="round" d="M2.036 12.322a1.012 1.012 0 010-.639C3.423 7.51 7.36 4.5 12 4.5c4.638 0 8.573 3.007 9.963 7.178.07.207.07.431 0 .639C20.577 16.49 16.64 19.5 12 19.5c-4.638 0-8.573-3.007-9.963-7.178z M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path v-else stroke-linecap="round" stroke-linejoin="round" d="M3.98 8.223A10.477 10.477 0 001.934 12C3.226 16.338 7.244 19.5 12 19.5c.993 0 1.953-.138 2.863-.395M6.228 6.228A10.45 10.45 0 0112 4.5c4.756 0 8.773 3.162 10.065 7.498a10.523 10.523 0 01-4.293 5.774M6.228 6.228L3 3m3.228 3.228l3.65 3.65m7.894 7.894L21 21m-3.228-3.228l-3.65-3.65m0 0a3 3 0 10-4.243-4.243m4.242 4.242L9.88 9.88" /></svg>
               </button>
             </div>
+            </template>
 
-            <div class="mt-5 grid grid-cols-1 cw-sm:grid-cols-2 gap-4">
+            <div class="grid grid-cols-1 cw-sm:grid-cols-2 gap-4" :class="{ 'mt-5': !needsPassword }">
               <div>
                 <label for="pw-new" :class="labelCls">New password</label>
                 <div class="relative">
@@ -658,7 +679,7 @@ const memberSince = computed(() =>
               </ul>
 
             <button type="submit" :disabled="savingPw || !pwReady" class="mt-5 self-start rounded-full bg-brand-navy px-6 py-3 text-sm font-bold text-white dark:bg-brand-gold dark:text-brand-navy hover:-translate-y-0.5 transition disabled:opacity-40 disabled:hover:translate-y-0 disabled:cursor-not-allowed">
-              {{ savingPw ? 'Updating…' : 'Update password' }}
+              {{ savingPw ? 'Saving…' : needsPassword ? 'Set password' : 'Update password' }}
             </button>
             </div>
           </form>
@@ -920,20 +941,22 @@ const memberSince = computed(() =>
 
     <!-- ── Security (change password) ── -->
     <div class="pcard">
-      <h2 class="font-bold text-brand-navy dark:text-white mb-1">Change Password</h2>
-      <p class="text-xs text-gray-500 dark:text-white/40 mb-5">Use at least 8 characters with letters and numbers.</p>
+      <h2 class="font-bold text-brand-navy dark:text-white mb-1">{{ needsPassword ? 'Set a Password' : 'Change Password' }}</h2>
+      <p class="text-xs text-gray-500 dark:text-white/40 mb-5">
+        {{ needsPassword ? 'Your account uses Google sign-in. Set a password to also sign in with your email; Continue with Google keeps working.' : 'Use at least 8 characters with letters and numbers.' }}
+      </p>
 
       <form class="space-y-5" @submit.prevent="changePassword">
         <div v-if="pwSaved" class="flex items-center gap-2 text-sm text-emerald-700 bg-emerald-50 border border-emerald-200 rounded-xl px-4 py-3">
           <svg class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M5 13l4 4L19 7" /></svg>
-          Password changed successfully.
+          {{ pwSavedMsg }}
         </div>
         <div v-if="pwError" class="flex items-center gap-2 text-sm text-red-600 bg-red-50 border border-red-200 rounded-xl px-4 py-3">
           <svg class="h-4 w-4 flex-shrink-0" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
           {{ pwError }}
         </div>
 
-        <div>
+        <div v-if="!needsPassword">
           <label class="block text-sm font-semibold text-brand-navy dark:text-white/80 mb-1.5">Current password</label>
           <input v-model="pw.current_password" :type="showPw ? 'text' : 'password'" class="w-full px-4 py-3 text-sm border border-gray-200 dark:border-white/10 rounded-xl bg-gray-50 dark:bg-white/5 dark:text-white focus:bg-white dark:focus:bg-white/10 focus:outline-none focus:ring-2 focus:ring-brand-gold/30 focus:border-brand-gold transition-colors" />
         </div>
@@ -954,7 +977,7 @@ const memberSince = computed(() =>
 
         <button type="submit" :disabled="savingPw" class="inline-flex items-center justify-center gap-2 bg-brand-navy dark:bg-brand-gold text-white dark:text-brand-navy font-bold text-sm px-7 py-3 rounded-xl hover:-translate-y-0.5 transition-all disabled:opacity-60 disabled:cursor-not-allowed">
           <svg v-if="savingPw" class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4" /><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4z" /></svg>
-          {{ savingPw ? 'Updating…' : 'Update password' }}
+          {{ savingPw ? 'Saving…' : needsPassword ? 'Set password' : 'Update password' }}
         </button>
       </form>
     </div>

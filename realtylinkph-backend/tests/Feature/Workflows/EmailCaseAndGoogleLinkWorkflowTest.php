@@ -65,6 +65,50 @@ class EmailCaseAndGoogleLinkWorkflowTest extends TestCase
         $this->assertSame(1, User::where('email', 'juan.delacruz@gmail.com')->count(), 'no duplicate account');
     }
 
+    public function test_a_google_account_sets_a_password_then_signs_in_both_ways(): void
+    {
+        // Sign up with Google: no password of their own yet.
+        $this->fakeGoogle('ana.reyes@gmail.com');
+        $token = $this->asGuest()->postJson('/api/auth/google/callback', ['code' => 'abc', 'intent' => 'register'])
+            ->assertOk()->json('data.token');
+        $user = User::where('email', 'ana.reyes@gmail.com')->firstOrFail();
+        $this->assertFalse($user->password_set);
+
+        // Trying a password now explains why, instead of a bare "Invalid credentials".
+        $this->asGuest()->postJson('/api/login', ['email' => 'ana.reyes@gmail.com', 'password' => 'Guess1234'])
+            ->assertStatus(401)
+            ->assertJsonPath('errors.code', 'google_account');
+
+        // Set the first password from My Profile: no current password needed.
+        $this->withToken($token)->postJson('/api/me/password', ['password' => 'MyHome2026', 'password_confirmation' => 'MyHome2026'])
+            ->assertOk()
+            ->assertJsonPath('data.password_set', true);
+        $this->assertTrue($user->fresh()->password_set);
+        $this->app['auth']->forgetGuards();
+
+        // Now both ways in open the same account.
+        $this->asGuest()->postJson('/api/login', ['email' => 'ana.reyes@gmail.com', 'password' => 'MyHome2026'])
+            ->assertOk()->assertJsonPath('data.user.id', $user->id);
+
+        $this->fakeGoogle('ana.reyes@gmail.com');
+        $this->asGuest()->postJson('/api/auth/google/callback', ['code' => 'abc', 'intent' => 'login'])
+            ->assertOk()->assertJsonPath('data.user.id', $user->id);
+
+        // From here on, changing it asks for the current password like everyone else.
+        $this->actingAsUser($user->fresh());
+        $this->postJson('/api/me/password', ['password' => 'Another2026', 'password_confirmation' => 'Another2026'])
+            ->assertStatus(422)->assertJsonValidationErrors('current_password');
+    }
+
+    public function test_a_wrong_password_on_a_normal_account_still_says_invalid_credentials(): void
+    {
+        $this->buyer(['email' => 'pedro@gmail.com']);
+
+        $this->asGuest()->postJson('/api/login', ['email' => 'pedro@gmail.com', 'password' => 'Wrong1234'])
+            ->assertStatus(401)
+            ->assertJsonPath('message', 'Invalid credentials.');
+    }
+
     public function test_an_old_mixed_case_account_is_still_found_by_google(): void
     {
         // An account saved before this change, with capitals in the database.

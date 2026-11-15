@@ -172,7 +172,8 @@ class AiFinderWorkflowTest extends TestCase
         $google = $this->buyer(['password_set' => false]);
         $this->actingAsUser($google);
         $res = $this->chat('Change my password')->assertOk()
-            ->assertJsonPath('data.action.can_change', false);
+            ->assertJsonPath('data.action.can_change', true)
+            ->assertJsonPath('data.action.first_set', true);
         $this->assertStringContainsString('Continue with Google', $res->json('data.reply'));
 
         $this->getJson('/api/me')->assertJsonPath('data.password_set', false);

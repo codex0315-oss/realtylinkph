@@ -184,11 +184,13 @@ function httpStatus(e: unknown): number | undefined {
 
 function extractApiError(e: unknown): string {
   if (typeof e === 'object' && e !== null) {
-    const data = (e as { data?: { message?: string; errors?: Record<string, string[]> } }).data
+    const data = (e as { data?: { message?: string; errors?: Record<string, unknown> } }).data
     // Prefer the specific field validation message over the generic "Validation failed."
+    // Only field errors are lists; a plain value like { code: 'google_account' } is a
+    // machine tag for the frontend, not text to show.
     if (data?.errors) {
-      const first = Object.values(data.errors).flat().filter(Boolean)[0]
-      if (first) return first
+      const first = Object.values(data.errors).filter(Array.isArray).flat().filter(Boolean)[0]
+      if (typeof first === 'string') return first
     }
     if (data?.message) return data.message
   }
