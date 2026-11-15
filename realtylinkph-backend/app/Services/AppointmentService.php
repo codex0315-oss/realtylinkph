@@ -32,8 +32,18 @@ class AppointmentService
             $datetime = Carbon::parse($data['preferred_datetime']);
             $agent    = $property->agent;
 
-            if (! $this->availabilityService->isSlotAvailable($agent, $datetime)) {
-                throw new \RuntimeException('The selected time slot is not available.');
+            // Lock the agent's row for this transaction so two buyers can't both
+            // pass the overlap check with times a few minutes apart.
+            User::whereKey($agent->id)->lockForUpdate()->first();
+
+            // A time outside the default hourly slots follows the custom-time rules
+            // (7:00 AM – 7:00 PM start, 15-minute steps, 2 hours' notice, 60 days ahead).
+            if (! $this->availabilityService->isStandardSlot($datetime)
+                && ($why = $this->availabilityService->customTimeError($datetime))) {
+                throw new \RuntimeException($why);
+            }
+            if ($why = $this->availabilityService->availabilityError($agent, $datetime)) {
+                throw new \RuntimeException($why);
             }
 
             // One active viewing per buyer per property (cancelled ones can re-book).

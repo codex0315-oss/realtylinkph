@@ -24,6 +24,17 @@ class AvailabilityService
     public const DAY_START_HOUR = 8;
     public const DAY_END_HOUR   = 18;
 
+    /** A viewing lasts an hour; agents get a gap after each one to travel. */
+    public const VIEWING_MINUTES    = 60;
+    public const TRAVEL_GAP_MINUTES = 30;
+
+    /** Custom times (outside the default hourly slots). */
+    public const CUSTOM_EARLIEST       = '07:00';
+    public const CUSTOM_LATEST_START   = '19:00';   // so the viewing ends by 8:00 PM
+    public const CUSTOM_STEP_MINUTES   = 15;
+    public const CUSTOM_NOTICE_HOURS   = 2;
+    public const MAX_DAYS_AHEAD        = 60;
+
     public function getAvailableSlots(User $agent, string $date): array
     {
         $day = CarbonImmutable::parse($date);
@@ -32,13 +43,68 @@ class AvailabilityService
             return [];
         }
 
-        $slots    = $this->generateTimeSlots($day);
-        $blocked  = $this->getBlockedTimeRanges($agent, $day);
-        $booked   = $this->getBookedSlots($agent, $day);
+        $slots   = $this->generateTimeSlots($day);
+        $blocked = $this->getBlockedTimeRanges($agent, $day);
+        $booked  = $this->bookingsOn($agent, $day);
+        $now     = now();
 
-        return array_values(array_filter($slots, function (string $slot) use ($blocked, $booked) {
-            return ! in_array($slot, $booked, true) && ! $this->isInBlockedRange($slot, $blocked);
+        return array_values(array_filter($slots, function (string $slot) use ($day, $blocked, $booked, $now) {
+            $start = Carbon::parse($day->format('Y-m-d') . ' ' . $slot);
+
+            return $start->gt($now)   // no times that have already passed today
+                && ! $this->overlapsBlocked($start, $blocked)
+                && $this->conflictIn($start, $booked) === null;
         }));
+    }
+
+    /**
+     * Why this time can't be booked with this agent, or null if it can.
+     * A viewing takes an hour, and agents get a 30-minute gap before the next one.
+     */
+    public function availabilityError(User $agent, Carbon $start): ?string
+    {
+        $day = CarbonImmutable::parse($start->format('Y-m-d'));
+
+        if ($this->isDayFullyBlocked($agent, $day) || $this->overlapsBlocked($start, $this->getBlockedTimeRanges($agent, $day))) {
+            return 'The agent isn’t available at that time. Please choose another time or day.';
+        }
+
+        if ($clash = $this->conflictIn($start, $this->bookingsOn($agent, $day))) {
+            $from  = $clash->copy()->format('g:i A');
+            $until = $clash->copy()->addMinutes(self::VIEWING_MINUTES)->format('g:i A');
+            $next  = $clash->copy()->addMinutes(self::VIEWING_MINUTES + self::TRAVEL_GAP_MINUTES)->format('g:i A');
+
+            return "The agent already has a viewing from {$from} to {$until}. Please choose {$next} or later, or an earlier time.";
+        }
+
+        return null;
+    }
+
+    /** Is this one of the default hourly slots (8:00 AM – 5:00 PM, on the hour)? */
+    public function isStandardSlot(Carbon $start): bool
+    {
+        return $start->minute === 0 && $start->hour >= self::DAY_START_HOUR && $start->hour < self::DAY_END_HOUR;
+    }
+
+    /** Rules for a custom time the buyer typed in, or null if it's fine. */
+    public function customTimeError(Carbon $start): ?string
+    {
+        $hm = $start->format('H:i');
+
+        if ($hm < self::CUSTOM_EARLIEST || $hm > self::CUSTOM_LATEST_START) {
+            return 'Custom times must start between 7:00 AM and 7:00 PM, so the viewing ends by 8:00 PM.';
+        }
+        if ($start->minute % self::CUSTOM_STEP_MINUTES !== 0 || $start->second !== 0) {
+            return 'Please choose a time in 15-minute steps, like 9:15 or 10:30.';
+        }
+        if ($start->lt(now()->addHours(self::CUSTOM_NOTICE_HOURS))) {
+            return 'Custom times need at least 2 hours’ notice so the agent can confirm.';
+        }
+        if ($start->gt(now()->addDays(self::MAX_DAYS_AHEAD))) {
+            return 'Viewings can be booked up to 60 days ahead.';
+        }
+
+        return null;
     }
 
     /**
@@ -93,17 +159,54 @@ class AvailabilityService
 
     public function isSlotAvailable(User $agent, Carbon $datetime): bool
     {
-        $day = CarbonImmutable::parse($datetime->format('Y-m-d'));
+        return $this->availabilityError($agent, $datetime) === null;
+    }
 
-        if ($this->isDayFullyBlocked($agent, $day)) {
-            return false;
+    /** Start times of the agent's live (pending/confirmed) viewings that day. @return array<int, Carbon> */
+    private function bookingsOn(User $agent, CarbonImmutable $day): array
+    {
+        return Appointment::where('agent_id', $agent->id)
+            ->whereIn('status', ['pending', 'confirmed'])
+            ->whereDate('preferred_datetime', $day->toDateString())
+            ->pluck('preferred_datetime')
+            ->map(fn ($dt) => Carbon::parse($dt))
+            ->all();
+    }
+
+    /**
+     * The existing viewing this one would clash with: two viewings clash when
+     * they're closer than an hour plus the travel gap.
+     *
+     * @param array<int, Carbon> $booked
+     */
+    private function conflictIn(Carbon $start, array $booked): ?Carbon
+    {
+        $span = self::VIEWING_MINUTES + self::TRAVEL_GAP_MINUTES;
+        foreach ($booked as $b) {
+            if (abs($b->diffInMinutes($start, false)) < $span) {
+                return $b;
+            }
         }
 
-        $slot    = $datetime->format('H:i');
-        $blocked = $this->getBlockedTimeRanges($agent, $day);
-        $booked  = $this->getBookedSlots($agent, $day);
+        return null;
+    }
 
-        return ! in_array($slot, $booked, true) && ! $this->isInBlockedRange($slot, $blocked);
+    /** Does the hour-long viewing starting here overlap a blocked time range? */
+    private function overlapsBlocked(Carbon $start, array $ranges): bool
+    {
+        $s = $start->format('H:i');
+        $e = $start->copy()->addMinutes(self::VIEWING_MINUTES)->format('H:i');
+        foreach ($ranges as $range) {
+            if ($range['start_time'] && $range['end_time']) {
+                $bs = substr((string) $range['start_time'], 0, 5);
+                $be = substr((string) $range['end_time'], 0, 5);
+                if ($s < $be && $bs < $e) {
+                    return true;
+                }
+            }
+        }
+
+        return false;
     }
 
     private function generateTimeSlots(CarbonImmutable $day): array

@@ -47,10 +47,37 @@ const loadingSlots = ref(false)
 const note = ref('')
 const MAX_NOTE = 500
 
+/* ── Custom time ──
+ * Besides the default hourly slots, the buyer can type a time: 7:00 AM – 7:00 PM
+ * start (the viewing ends by 8:00 PM), 15-minute steps, at least 2 hours' notice.
+ * The server checks the same rules plus the agent's blocked hours and other
+ * viewings (an hour each, with a 30-minute travel gap) when the request is sent. */
+const customOpen = ref(false)
+const customTime = ref('')
+const customError = computed(() => {
+  const t = customTime.value
+  if (!t || !date.value) return ''
+  const [h, m] = t.split(':').map(Number)
+  if ((m ?? 0) % 15 !== 0) return 'Please use 15-minute steps, like 9:15 or 10:30.'
+  if (t < '07:00' || t > '19:00') return 'Choose a start between 7:00 AM and 7:00 PM, so the viewing ends by 8:00 PM.'
+  if (new Date(`${date.value}T${t}`).getTime() < Date.now() + 2 * 3_600_000) return 'Custom times need at least 2 hours’ notice so the agent can confirm.'
+  return h === undefined ? 'Enter a time.' : ''
+})
+const isCustom = computed(() => !!slot.value && !slots.value.includes(slot.value))
+watch([customTime, date], () => {
+  if (customTime.value && !customError.value) slot.value = customTime.value
+  else if (isCustom.value) slot.value = ''
+})
+function pickSlot(t: string) {
+  slot.value = t
+  customTime.value = ''
+}
+
 async function pickDate(d: Date) {
   if (isBlocked(d)) return
   date.value = dateKey(d)
   slot.value = ''
+  customTime.value = ''
   slots.value = []
   loadingSlots.value = true
   slots.value = await fetchSlots(props.property.agent_id, date.value)
@@ -258,10 +285,41 @@ const eyebrow = 'text-[0.6875rem] font-bold uppercase tracking-[0.16em] text-bra
                           :class="slot === t
                             ? 'bg-brand-gold text-brand-navy ring-brand-gold shadow-[0_6px_16px_-6px_rgba(212,165,74,0.8)]'
                             : 'text-brand-navy ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/15'"
-                          @click="slot = t"
+                          @click="pickSlot(t)"
                         >{{ label(t) }}</button>
                       </div>
                     </div>
+                  </div>
+                </div>
+
+                <!-- Custom time -->
+                <div v-if="date && !loadingSlots" class="mt-3">
+                  <button
+                    v-if="!customOpen"
+                    type="button"
+                    class="inline-flex items-center gap-1.5 text-sm font-semibold text-brand-gold-deep hover:underline underline-offset-4 dark:text-brand-gold"
+                    @click="customOpen = true"
+                  >
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 6v6h4.5m4.5 0a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+                    None of these work? Choose another time
+                  </button>
+                  <div v-else class="rounded-2xl ring-1 p-3.5 transition" :class="isCustom ? 'ring-brand-gold bg-brand-gold/[0.06]' : 'ring-brand-navy/10 dark:ring-white/10'">
+                    <div class="flex flex-wrap items-center gap-3">
+                      <label for="sv-custom" class="text-sm font-semibold text-brand-navy dark:text-white">Your preferred time</label>
+                      <input
+                        id="sv-custom"
+                        v-model="customTime"
+                        type="time"
+                        min="07:00"
+                        max="19:00"
+                        step="900"
+                        class="rounded-xl border-0 px-3 py-2 text-sm font-semibold text-brand-navy dark:text-white bg-brand-navy/[0.04] dark:bg-white/[0.06] ring-1 ring-inset ring-brand-navy/10 dark:ring-white/10 focus:ring-2 focus:ring-brand-gold dark:[color-scheme:dark]"
+                      >
+                      <button type="button" class="ml-auto text-xs font-semibold text-brand-navy/50 hover:text-brand-navy dark:text-white/50 dark:hover:text-white" @click="customOpen = false; customTime = ''">Use a listed time</button>
+                    </div>
+                    <p v-if="customError" class="mt-2 text-xs font-semibold text-red-600 dark:text-red-400">{{ customError }}</p>
+                    <p v-else-if="isCustom" class="mt-2 text-xs font-semibold text-emerald-700 dark:text-emerald-400">✓ {{ label(slot) }} selected. The agent will confirm if they’re free.</p>
+                    <p v-else class="mt-2 text-xs text-brand-navy/50 dark:text-white/50">Between 7:00 AM and 7:00 PM, in 15-minute steps, at least 2 hours from now.</p>
                   </div>
                 </div>
 
