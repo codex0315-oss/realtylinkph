@@ -18,6 +18,10 @@ class MessageResource extends JsonResource
             // Unsent for everyone: the text stays in the database for admins only.
             'body'            => $this->unsent_at ? null : $this->body,
             'unsent'          => $this->unsent_at !== null,
+            'edited'          => $this->edited_at !== null,
+            'edited_at'       => $this->edited_at?->toISOString(),
+            'pinned_at'       => $this->pinned_at?->toISOString(),
+            'pinned_by_id'    => $this->pinned_by_id,
             'is_ai'           => (bool) $this->is_ai,
             'is_read'         => $this->is_read,
             'delivered_at'    => $this->delivered_at?->toISOString(),

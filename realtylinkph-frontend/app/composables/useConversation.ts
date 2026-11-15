@@ -129,6 +129,42 @@ export const useConversation = () => {
     }
   }
 
+  /** Edit your own message (no time limit, like Messenger). */
+  async function editMessage(messageId: number, conversationId: number, body: string): Promise<boolean> {
+    try {
+      const res = await api.patch<ApiResponse<Message>>(`/messages/${messageId}`, { body })
+      conversationStore.applyUpdate({ ...res.data, conversation_id: conversationId })
+      return true
+    } catch (e) {
+      error.value = extractError(e)
+      return false
+    }
+  }
+
+  /** Pin or unpin any message in the chat; both people see it. */
+  async function pinMessage(messageId: number, conversationId: number, pin: boolean): Promise<boolean> {
+    try {
+      const res = pin
+        ? await api.post<ApiResponse<Message>>(`/messages/${messageId}/pin`)
+        : await api.del<ApiResponse<Message>>(`/messages/${messageId}/pin`)
+      conversationStore.applyUpdate({ ...res.data, conversation_id: conversationId })
+      return true
+    } catch (e) {
+      error.value = extractError(e)
+      return false
+    }
+  }
+
+  /** The open chat's pinned messages, for the "Pinned messages" bar. */
+  async function fetchPinned(conversationId: number): Promise<void> {
+    try {
+      const res = await api.get<ApiResponse<Message[]>>(`/conversations/${conversationId}/pinned`)
+      if (conversationStore.activeId === conversationId) conversationStore.setPinned(res.data)
+    } catch {
+      /* the bar just stays empty */
+    }
+  }
+
   /** "Remove for you": hidden from this user only; the other person still sees it. */
   async function removeMessageForMe(messageId: number, conversationId: number): Promise<boolean> {
     try {
@@ -154,6 +190,9 @@ export const useConversation = () => {
     markRead,
     deleteConversation,
     unsendMessage,
+    editMessage,
+    pinMessage,
+    fetchPinned,
     removeMessageForMe,
   }
 }

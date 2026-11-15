@@ -15,6 +15,7 @@ export const useConversationStore = defineStore('conversation', () => {
   }
 
   function setActive(id: number): void {
+    if (id !== activeId.value) pinned.value = []
     activeId.value = id
     activeMessages.value = []
   }
@@ -95,11 +96,38 @@ export const useConversationStore = defineStore('conversation', () => {
     }
   }
 
+  /** Pinned messages of the open chat (for the "Pinned messages" bar), newest pin first. */
+  const pinned = ref<Message[]>([])
+  function setPinned(list: Message[]): void { pinned.value = list }
+
+  /** A message was edited, pinned or unpinned (by us, or the other side live). */
+  function applyUpdate(u: Partial<Message> & { id: number; conversation_id: number }): void {
+    const patch = { body: u.body ?? undefined, edited: u.edited, edited_at: u.edited_at, pinned_at: u.pinned_at ?? null, pinned_by_id: u.pinned_by_id ?? null }
+    for (const m of activeMessages.value) {
+      if (m.id === u.id) Object.assign(m, Object.fromEntries(Object.entries(patch).filter(([, v]) => v !== undefined)))
+    }
+    const conv = conversations.value.find(c => c.id === u.conversation_id)
+    if (conv?.latest_message?.id === u.id && u.body) conv.latest_message = { ...conv.latest_message, body: u.body, edited: u.edited }
+    if (u.conversation_id === activeId.value) {
+      const rest = pinned.value.filter(m => m.id !== u.id)
+      if (u.pinned_at) {
+        const full = activeMessages.value.find(m => m.id === u.id) ?? (u as Message)
+        rest.unshift({ ...full, ...u } as Message)
+      } else {
+        // Edited but still pinned: keep its place with the new text.
+        const was = pinned.value.find(m => m.id === u.id)
+        if (was && u.pinned_at === undefined) rest.unshift({ ...was, body: u.body ?? was.body })
+      }
+      pinned.value = rest.sort((a, b) => +new Date(b.pinned_at ?? 0) - +new Date(a.pinned_at ?? 0))
+    }
+  }
+
   /** A message was unsent for everyone (by us, or the other side live). */
   function applyUnsent(id: number, conversationId: number): void {
     for (const m of activeMessages.value) {
-      if (m.id === id) { m.unsent = true; m.body = '' }
+      if (m.id === id) { m.unsent = true; m.body = ''; m.pinned_at = null }
     }
+    pinned.value = pinned.value.filter(m => m.id !== id)
     const conv = conversations.value.find(c => c.id === conversationId)
     if (conv?.latest_message?.id === id) conv.latest_message = { ...conv.latest_message, unsent: true, body: '' }
   }
@@ -155,6 +183,9 @@ export const useConversationStore = defineStore('conversation', () => {
     removePending,
     applyReceipt,
     applyUnsent,
+    applyUpdate,
+    pinned,
+    setPinned,
     hideMessage,
     decrementUnread,
     removeConversation,

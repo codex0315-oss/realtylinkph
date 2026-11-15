@@ -7,8 +7,8 @@
  * Someone else's message: "Remove for you" only.
  * The parent does the work (and the confirm dialog) on the emitted events.
  */
-const props = withDefaults(defineProps<{ canUnsend?: boolean; side?: 'left' | 'right'; disabled?: boolean }>(), { canUnsend: false, side: 'left', disabled: false })
-const emit = defineEmits<{ unsend: []; remove: [] }>()
+const props = withDefaults(defineProps<{ canUnsend?: boolean; canEdit?: boolean; canPin?: boolean; pinned?: boolean; side?: 'left' | 'right'; disabled?: boolean }>(), { canUnsend: false, canEdit: false, canPin: true, pinned: false, side: 'left', disabled: false })
+const emit = defineEmits<{ unsend: []; remove: []; edit: []; pin: []; unpin: [] }>()
 
 const open = ref(false)
 const root = ref<HTMLElement | null>(null)
@@ -25,9 +25,9 @@ function onContextMenu(e: MouseEvent) {
   e.preventDefault()
   open.value = true
 }
-function choose(kind: 'unsend' | 'remove') {
+function choose(kind: 'unsend' | 'remove' | 'edit' | 'pin' | 'unpin') {
   open.value = false
-  kind === 'unsend' ? emit('unsend') : emit('remove')
+  ;({ unsend: () => emit('unsend'), remove: () => emit('remove'), edit: () => emit('edit'), pin: () => emit('pin'), unpin: () => emit('unpin') })[kind]()
 }
 function onDocClick(e: MouseEvent) {
   if (open.value && root.value && !root.value.contains(e.target as Node)) open.value = false
@@ -69,6 +69,15 @@ onUnmounted(() => { document.removeEventListener('click', onDocClick); document.
         class="absolute z-30 top-full mt-1 w-52 overflow-hidden rounded-xl bg-[#ffffff] dark:bg-[#0B1A35] ring-1 ring-brand-navy/10 dark:ring-white/10 shadow-[0_14px_36px_-12px_rgba(11,42,92,0.45)] py-1"
         :class="side === 'right' ? 'right-0' : 'left-0'"
       >
+        <button v-if="canEdit" type="button" role="menuitem" class="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm font-medium text-brand-navy hover:bg-brand-navy/[0.05] dark:text-white dark:hover:bg-white/[0.06]" @click.stop="choose('edit')">
+          <svg class="h-4 w-4 flex-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931zm0 0L19.5 7.125" /></svg>
+          Edit
+        </button>
+        <button v-if="canPin" type="button" role="menuitem" class="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm font-medium text-brand-navy hover:bg-brand-navy/[0.05] dark:text-white dark:hover:bg-white/[0.06]" @click.stop="choose(pinned ? 'unpin' : 'pin')">
+          <svg class="h-4 w-4 flex-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M16.5 3.75l3.75 3.75-2.25.75-3 3 .75 4.5-1.5 1.5-3.75-3.75L6 18l-.75-.75 4.5-4.5L6 9l1.5-1.5 4.5.75 3-3 .75-2.25z" /></svg>
+          {{ pinned ? 'Unpin' : 'Pin' }}
+        </button>
+        <div v-if="(canEdit || canPin)" class="my-1 h-px bg-brand-navy/[0.06] dark:bg-white/[0.08]" />
         <button v-if="canUnsend" type="button" role="menuitem" class="flex w-full items-center gap-2.5 px-3.5 py-2.5 text-left text-sm font-semibold text-red-600 hover:bg-red-500/[0.07] dark:text-red-400" @click.stop="choose('unsend')">
           <svg class="h-4 w-4 flex-none" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.9" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 15L3 9m0 0l6-6M3 9h12a6 6 0 010 12h-3" /></svg>
           Unsend for everyone

@@ -19,7 +19,14 @@ class Message extends Model
         'read_at',
         'unsent_at',
         'hidden_for',
+        'edited_at',
+        'original_body',
+        'pinned_at',
+        'pinned_by_id',
     ];
+
+    /** Never sent to users: the first version of an edited message, kept for admins. */
+    protected $hidden = ['original_body'];
 
     protected function casts(): array
     {
@@ -30,6 +37,8 @@ class Message extends Model
             'read_at' => 'datetime',
             'unsent_at' => 'datetime',
             'hidden_for' => 'array',
+            'edited_at' => 'datetime',
+            'pinned_at' => 'datetime',
         ];
     }
 

@@ -107,6 +107,39 @@ class ConversationController extends Controller
         return ApiResponse::success(MessageResource::make($message), 'Message unsent.', 200);
     }
 
+    /** Edit your own message (no time limit). */
+    public function editMessage(Request $request, Message $message): JsonResponse
+    {
+        $this->authorize('sendMessage', $message->conversation);
+        $data = $request->validate(['body' => ['required', 'string', 'max:2000']]);
+
+        $message = $this->service->edit($message, $request->user(), $data['body']);
+
+        return ApiResponse::success(MessageResource::make($message), 'Message edited.', 200);
+    }
+
+    public function pinMessage(Request $request, Message $message): JsonResponse
+    {
+        $this->authorize('sendMessage', $message->conversation);
+
+        return ApiResponse::success(MessageResource::make($this->service->setPinned($message, $request->user(), true)), 'Message pinned.', 200);
+    }
+
+    public function unpinMessage(Request $request, Message $message): JsonResponse
+    {
+        $this->authorize('sendMessage', $message->conversation);
+
+        return ApiResponse::success(MessageResource::make($this->service->setPinned($message, $request->user(), false)), 'Message unpinned.', 200);
+    }
+
+    /** The chat's pinned messages, for the "Pinned messages" bar. */
+    public function pinnedMessages(Request $request, Conversation $conversation): JsonResponse
+    {
+        $this->authorize('view', $conversation);
+
+        return ApiResponse::success(MessageResource::collection($this->service->pinned($conversation, $request->user())), 'Pinned messages retrieved.', 200);
+    }
+
     /** "Remove for you" on one message; the other person still sees it. */
     public function hideMessage(Request $request, Message $message): JsonResponse
     {

@@ -16,6 +16,12 @@ export interface Message {
   created_at: string
   /** Unsent for everyone: the text is gone (body is null) and the bubble reads "… unsent a message". */
   unsent?: boolean
+  /** The sender changed the text (shown as "Edited"). */
+  edited?: boolean
+  edited_at?: string | null
+  /** Pinned by either person; listed in the chat's "Pinned messages" bar. */
+  pinned_at?: string | null
+  pinned_by_id?: number | null
   sender?: User
   /**
    * Client-only. Present on messages the user just sent: 'sending' until the

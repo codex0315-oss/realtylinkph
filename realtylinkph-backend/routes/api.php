@@ -201,6 +201,10 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::delete('/conversations/{conversation}', [ConversationController::class, 'destroy']);
     Route::post('/messages/{message}/unsend', [ConversationController::class, 'unsendMessage'])->middleware('throttle:30,1');
     Route::post('/messages/{message}/hide', [ConversationController::class, 'hideMessage'])->middleware('throttle:60,1');
+    Route::patch('/messages/{message}', [ConversationController::class, 'editMessage'])->middleware('throttle:30,1');
+    Route::post('/messages/{message}/pin', [ConversationController::class, 'pinMessage'])->middleware('throttle:60,1');
+    Route::delete('/messages/{message}/pin', [ConversationController::class, 'unpinMessage'])->middleware('throttle:60,1');
+    Route::get('/conversations/{conversation}/pinned', [ConversationController::class, 'pinnedMessages']);
 
     // Reviews
     Route::post('/reviews', [ReviewController::class, 'submit']);

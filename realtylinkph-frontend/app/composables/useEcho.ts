@@ -64,6 +64,13 @@ export const useEcho = () => {
     })
   }
 
+  /** Server-sent: a message was edited, pinned or unpinned. */
+  function listenForUpdates(conversationId: number, onUpdate: (e: Message) => void): void {
+    $echo?.private(`conversation.${conversationId}`).listen('.message.updated', (e: Message) => {
+      if (e && typeof e.id === 'number') onUpdate(e)
+    })
+  }
+
   /** Server-sent: the other person unsent a message for everyone. */
   function listenForUnsent(conversationId: number, onUnsent: (e: { id: number; conversation_id: number }) => void): void {
     $echo?.private(`conversation.${conversationId}`).listen('.message.unsent', (e: { id: number; conversation_id: number }) => {
@@ -138,6 +145,7 @@ export const useEcho = () => {
     listenForAiTyping,
     listenForReceipts,
     listenForUnsent,
+    listenForUpdates,
     whisperTyping,
     listenForTyping,
     whisperSeen,

@@ -20,7 +20,7 @@ const route = useRoute()
 const { fetchConversations, fetchMessages, sendMessage, markRead, loading } = useConversation()
 const {
   listenToConversation, stopListeningToConversation,
-  listenForReceipts, listenForUnsent, listenForAiTyping, listenForTyping, whisperTyping, whisperSeen,
+  listenForReceipts, listenForUnsent, listenForUpdates, listenForAiTyping, listenForTyping, whisperTyping, whisperSeen,
 } = useEcho()
 
 const me = computed(() => authStore.user?.id)
@@ -162,6 +162,8 @@ async function openThread(c: Conversation) {
     if (e.by_user_id !== me.value) convStore.applyReceipt(e.kind, e.message_ids, e.at)
   })
   listenForUnsent(c.id, (e) => convStore.applyUnsent(e.id, e.conversation_id))
+  listenForUpdates(c.id, (e) => convStore.applyUpdate(e))
+  fetchPinned(c.id)
   listenForAiTyping(c.id, () => {
     aiTyping.value = true
     clearTimeout(aiClear)
@@ -205,6 +207,13 @@ function autosize() {
 async function send() {
   const body = draft.value.trim()
   if (!body || !openId.value) return
+  if (editing.value) {
+    const m = editing.value
+    if (body === m.body) { cancelEdit(); return }
+    if (await editMessage(m.id, m.conversation_id, body)) cancelEdit()
+    else toast.error('Couldn’t save your edit. Please try again.')
+    return
+  }
   draft.value = ''
   nextTick(autosize)
   const p = sendMessage(openId.value, body)
@@ -213,6 +222,7 @@ async function send() {
 }
 function onKeydown(e: KeyboardEvent) {
   if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); send() }
+  if (e.key === 'Escape' && editing.value) { e.preventDefault(); cancelEdit() }
 }
 function retry(m: Message) {
   if (m.client_id && openId.value) sendMessage(openId.value, m.body, m.client_id)
@@ -280,7 +290,29 @@ watch(chatTarget, async (id) => {
 /* ── Unsend, like Messenger ──
  * Your own messages (and, for an agent, RealtyLink AI replies sent for them):
  * "Unsend for everyone". Any message: "Remove for you". Always confirmed. */
-const { unsendMessage, removeMessageForMe } = useConversation()
+const { unsendMessage, removeMessageForMe, editMessage, pinMessage, fetchPinned } = useConversation()
+
+/* ── Edit (your own messages, no time limit) and pin (any message) ── */
+const editing = ref<Message | null>(null)
+function startEdit(m: Message) {
+  editing.value = m
+  draft.value = m.body
+  nextTick(() => { autosize(); inputEl.value?.focus() })
+}
+function cancelEdit() { editing.value = null; draft.value = ''; nextTick(autosize) }
+async function togglePin(m: Message, pin: boolean) {
+  if (!(await pinMessage(m.id, m.conversation_id, pin))) toast.error(pin ? 'Couldn’t pin the message.' : 'Couldn’t unpin the message.')
+}
+async function unpinById(id: number) {
+  const m = convStore.pinned.find(x => x.id === id)
+  if (m) await togglePin(m, false)
+}
+function jumpTo(id: number) {
+  const el = document.getElementById(`pmsg-${id}`)
+  if (!el) { toast.info('That message is further up. Scroll up to load older messages.'); return }
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  el.classList.add('msg-flash'); setTimeout(() => el.classList.remove('msg-flash'), 1600)
+}
 const otherName = computed(() => (thread.value ? other(thread.value)?.name : null) ?? 'The other person')
 function canUnsend(m: Message): boolean {
   return m.sender_id === me.value || (!!m.is_ai && thread.value?.agent_id === me.value)
@@ -618,6 +650,7 @@ async function removeChat(c: Conversation) {
           </NuxtLink>
         </div>
 
+        <PinnedBar :pinned="convStore.pinned" :me-id="me" :other-name="otherName" @jump="jumpTo" @unpin="unpinById" />
         <div ref="threadEl" class="flex-1 overflow-y-auto overscroll-contain px-4 py-4 space-y-1 bg-brand-cream/60 dark:bg-black/10">
           <div v-if="loading && !convStore.activeMessages.length" class="py-10 text-center text-xs text-brand-navy/45 dark:text-white/45">Loading messages…</div>
           <div v-else-if="!convStore.activeMessages.length" class="h-full flex flex-col items-center justify-center text-center px-6">
@@ -629,15 +662,21 @@ async function removeChat(c: Conversation) {
           </div>
           <template v-for="item in feed" :key="item.id">
             <p v-if="item.kind === 'day'" class="py-3 text-center text-[0.6875rem] font-semibold text-brand-navy/40 dark:text-white/40">{{ item.label }}</p>
-            <div v-else class="flex flex-col" :class="[item.m.sender_id === me ? 'items-end' : 'items-start', item.first ? 'mt-2' : '']">
+            <div v-else :id="`pmsg-${item.m.id}`" class="flex flex-col rounded-xl transition-colors" :class="[item.m.sender_id === me ? 'items-end' : 'items-start', item.first ? 'mt-2' : '']">
               <p v-if="item.m.is_ai && item.first" class="mb-1 text-[0.625rem] font-bold uppercase tracking-wide text-brand-gold-deep dark:text-brand-gold">RealtyLink AI</p>
               <MessageActions
                 class="max-w-[88%]"
                 :side="item.m.sender_id === me ? 'right' : 'left'"
                 :can-unsend="!item.m.unsent && canUnsend(item.m)"
+                :can-edit="!item.m.unsent && !item.m.is_ai && item.m.sender_id === me"
+                :can-pin="!item.m.unsent"
+                :pinned="!!item.m.pinned_at"
                 :disabled="item.m.id < 0"
                 @unsend="askUnsend(item.m)"
                 @remove="askRemove(item.m)"
+                @edit="startEdit(item.m)"
+                @pin="togglePin(item.m, true)"
+                @unpin="togglePin(item.m, false)"
               >
                 <div
                   v-if="item.m.unsent"
@@ -655,7 +694,9 @@ async function removeChat(c: Conversation) {
                 >{{ item.m.body }}</div>
               </MessageActions>
               <p class="mt-0.5 flex items-center gap-1 text-[0.625rem] text-brand-navy/40 dark:text-white/40">
+                <span v-if="item.m.pinned_at && !item.m.unsent" class="font-semibold text-brand-gold-deep dark:text-brand-gold">📌 Pinned ·</span>
                 {{ clock(item.m.created_at) }}
+                <span v-if="item.m.edited && !item.m.unsent">· Edited</span>
                 <template v-if="item.m.sender_id === me && !item.m.unsent">
                   <span v-if="tickOf(item.m) === 'failed'" class="font-semibold text-red-500">
                     · Not sent · <button type="button" class="underline" @click="retry(item.m)">Retry</button>
@@ -674,6 +715,11 @@ async function removeChat(c: Conversation) {
           </div>
         </div>
 
+        <div v-if="editing" class="flex items-center gap-2 border-t border-brand-navy/[0.06] dark:border-white/10 bg-brand-gold/[0.07] px-4 py-2 text-xs">
+          <svg class="h-3.5 w-3.5 flex-none text-brand-gold-deep dark:text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" /></svg>
+          <span class="min-w-0 flex-1 truncate"><b class="text-brand-navy dark:text-white">Editing message</b> <span class="text-brand-navy/50 dark:text-white/50">· {{ editing.body }}</span></span>
+          <button type="button" class="font-semibold text-brand-navy/60 hover:text-brand-navy dark:text-white/60 dark:hover:text-white" @click="cancelEdit">Cancel</button>
+        </div>
         <form class="flex items-end gap-2 px-3 py-3 border-t border-brand-navy/[0.06] dark:border-white/10" @submit.prevent="send">
           <textarea
             ref="inputEl"
@@ -702,6 +748,7 @@ async function removeChat(c: Conversation) {
 </template>
 
 <style scoped>
+.msg-flash { background: rgba(212, 165, 74, 0.22); }
 .slide-in-enter-active, .slide-in-leave-active,
 .slide-out-enter-active, .slide-out-leave-active { transition: opacity 0.18s ease, transform 0.22s cubic-bezier(0.22, 1, 0.36, 1); }
 .slide-in-enter-from  { opacity: 0; transform: translateX(24px); }

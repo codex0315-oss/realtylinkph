@@ -6,6 +6,7 @@ namespace App\Services;
 
 use App\Events\MessageSent;
 use App\Events\MessageUnsent;
+use App\Events\MessageUpdated;
 use App\Events\MessagesReceipt;
 use App\Jobs\SendAiAutoReply;
 use App\Models\Conversation;
@@ -244,7 +245,8 @@ class ConversationService
         abort_unless($mine || $aiMine, 403, 'You can only unsend your own messages.');
 
         if (! $message->isUnsent()) {
-            $message->forceFill(['unsent_at' => now()])->save();
+            // An unsent message can't stay pinned.
+            $message->forceFill(['unsent_at' => now(), 'pinned_at' => null, 'pinned_by_id' => null])->save();
             try {
                 broadcast(new MessageUnsent($message))->toOthers();
             } catch (\Throwable $e) {
@@ -253,6 +255,61 @@ class ConversationService
         }
 
         return $message;
+    }
+
+    /**
+     * Edit your own message, with no time limit (like Messenger). The first
+     * version is kept for admins only; both people see the new text + "Edited".
+     */
+    public function edit(Message $message, User $user, string $body): Message
+    {
+        abort_unless($message->sender_id === $user->id && ! $message->is_ai, 403, 'You can only edit your own messages.');
+        abort_if($message->isUnsent(), 422, 'An unsent message can’t be edited.');
+
+        $body = trim($body);
+        if ($body === $message->body) {
+            return $message;
+        }
+
+        $message->forceFill([
+            'original_body' => $message->original_body ?? $message->body,
+            'body'          => $body,
+            'edited_at'     => now(),
+        ])->save();
+        $this->broadcastUpdate($message);
+
+        return $message;
+    }
+
+    /** Pin or unpin any message in the chat; both people see the pins. */
+    public function setPinned(Message $message, User $user, bool $pinned): Message
+    {
+        abort_if($pinned && $message->isUnsent(), 422, 'An unsent message can’t be pinned.');
+
+        $message->forceFill($pinned
+            ? ['pinned_at' => $message->pinned_at ?? now(), 'pinned_by_id' => $message->pinned_by_id ?? $user->id]
+            : ['pinned_at' => null, 'pinned_by_id' => null])->save();
+        $this->broadcastUpdate($message);
+
+        return $message;
+    }
+
+    /** The chat's pinned messages that this user can see, newest pin first. */
+    public function pinned(Conversation $conversation, User $viewer)
+    {
+        return Message::where('conversation_id', $conversation->id)
+            ->whereNotNull('pinned_at')->whereNull('unsent_at')
+            ->visibleTo($viewer)
+            ->orderByDesc('pinned_at')->get();
+    }
+
+    private function broadcastUpdate(Message $message): void
+    {
+        try {
+            broadcast(new MessageUpdated($message))->toOthers();
+        } catch (\Throwable $e) {
+            Log::warning('MessageUpdated broadcast failed', ['message' => $message->id, 'error' => $e->getMessage()]);
+        }
     }
 
     /** "Remove for you": hide the message from this user's view only. */

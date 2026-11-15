@@ -5,7 +5,7 @@ definePageMeta({ layout: 'dashboard' })
 
 const authStore = useAuthStore()
 const convStore = useConversationStore()
-const { fetchConversations, openConversation, fetchMessages, sendMessage, discardFailed, markDelivered, markRead, deleteConversation, unsendMessage, removeMessageForMe, loading } = useConversation()
+const { fetchConversations, openConversation, fetchMessages, sendMessage, discardFailed, markDelivered, markRead, deleteConversation, unsendMessage, removeMessageForMe, editMessage, pinMessage, fetchPinned, loading } = useConversation()
 const ask   = useConfirm()
 const toast = useToast()
 const route  = useRoute()
@@ -15,7 +15,7 @@ const {
   listenToConversation, stopListeningToConversation,
   whisperTyping, listenForTyping,
   whisperSeen, listenForSeen,
-  onNotificationType, listenForAiTyping, listenForReceipts, listenForUnsent,
+  onNotificationType, listenForAiTyping, listenForReceipts, listenForUnsent, listenForUpdates,
 } = useEcho()
 
 await fetchConversations()
@@ -262,6 +262,8 @@ async function openConv(id: number) {
   })
   // The other party's app received / read our messages → move the ticks.
   listenForUnsent(id, (e) => convStore.applyUnsent(e.id, e.conversation_id))
+  listenForUpdates(id, (e) => convStore.applyUpdate(e))
+  fetchPinned(id)
   listenForReceipts(id, (e) => {
     if (e.by_user_id === me.value) return
     convStore.applyReceipt(e.kind, e.message_ids, e.at)
@@ -297,9 +299,40 @@ function onType() {
   }
 }
 
+/* ── Edit (your own messages, no time limit) and pin (any message) ── */
+const editing = ref<Message | null>(null)
+const messageInput = ref<HTMLInputElement | null>(null)
+function startEdit(m: Message) {
+  editing.value = m
+  newMessage.value = m.body
+  showEmoji.value = false
+  nextTick(() => messageInput.value?.focus())
+}
+function cancelEdit() { editing.value = null; newMessage.value = '' }
+async function togglePin(m: Message, pin: boolean) {
+  if (!(await pinMessage(m.id, m.conversation_id, pin))) toast.error(pin ? 'Couldn’t pin the message.' : 'Couldn’t unpin the message.')
+}
+async function unpinById(id: number) {
+  const m = convStore.pinned.find(x => x.id === id)
+  if (m) await togglePin(m, false)
+}
+function jumpTo(id: number) {
+  const el = document.getElementById(`fmsg-${id}`)
+  if (!el) { toast.info('That message is further up. Scroll up to load older messages.'); return }
+  el.scrollIntoView({ behavior: 'smooth', block: 'center' })
+  el.classList.add('msg-flash'); setTimeout(() => el.classList.remove('msg-flash'), 1600)
+}
+
 async function send() {
   if (!newMessage.value.trim() || !convStore.activeId) return
   const body = newMessage.value.trim()
+  if (editing.value) {
+    const m = editing.value
+    if (body === m.body) { cancelEdit(); return }
+    if (await editMessage(m.id, m.conversation_id, body)) cancelEdit()
+    else toast.error('Couldn’t save your edit. Please try again.')
+    return
+  }
   // Clear the box and show the bubble immediately; the request runs behind it.
   newMessage.value = ''
   showEmoji.value = false
@@ -551,6 +584,7 @@ if (convStore.conversations.length) {
           </NuxtLink>
         </div>
 
+        <PinnedBar :pinned="convStore.pinned" :me-id="me" :other-name="activeOther?.name" @jump="jumpTo" @unpin="unpinById" />
         <!-- Messages -->
         <div
           ref="threadEl"
@@ -588,7 +622,7 @@ if (convStore.conversations.length) {
                 />
               </div>
 
-              <div class="max-w-[72%] flex flex-col" :class="isMine(item.message) ? 'items-end' : 'items-start'">
+              <div :id="`fmsg-${item.message.id}`" class="max-w-[72%] flex flex-col rounded-xl transition-colors" :class="isMine(item.message) ? 'items-end' : 'items-start'">
                 <!-- Who this is, when it's the AI — shown once per group, never hidden -->
                 <p v-if="isAi(item.message) && item.showMeta" class="text-[0.625rem] font-semibold text-brand-gold-deep dark:text-brand-gold mb-1 ml-1">
                   {{ aiLabel }}
@@ -596,9 +630,15 @@ if (convStore.conversations.length) {
                 <MessageActions
                   :side="isMine(item.message) ? 'right' : 'left'"
                   :can-unsend="!item.message.unsent && canUnsend(item.message)"
+                  :can-edit="!item.message.unsent && !item.message.is_ai && isMine(item.message)"
+                  :can-pin="!item.message.unsent"
+                  :pinned="!!item.message.pinned_at"
                   :disabled="item.message.id < 0"
                   @unsend="askUnsend(item.message)"
                   @remove="askRemove(item.message)"
+                  @edit="startEdit(item.message)"
+                  @pin="togglePin(item.message, true)"
+                  @unpin="togglePin(item.message, false)"
                 >
                 <div class="relative group/msg min-w-0">
                   <div
@@ -651,7 +691,9 @@ if (convStore.conversations.length) {
 
                 <!-- time + ticks (ticks on my messages only) -->
                 <span class="flex items-center gap-1 text-[0.625rem] text-gray-400 dark:text-white/30 mt-1 px-1">
+                  <span v-if="item.message.pinned_at && !item.message.unsent" class="font-semibold text-brand-gold-deep dark:text-brand-gold">📌 Pinned ·</span>
                   {{ timeOf(item.message.created_at) }}
+                  <span v-if="item.message.edited && !item.message.unsent">· Edited</span>
                   <template v-if="isMine(item.message) && !item.message.unsent">
                     <span :title="TICK_TITLE[tickOf(item.message)]" class="inline-flex items-center">
                       <!-- sending: clock -->
@@ -722,6 +764,11 @@ if (convStore.conversations.length) {
         </div>
 
         <!-- Input -->
+        <div v-if="editing" class="flex items-center gap-2 border-t border-gray-100 dark:border-white/10 bg-brand-gold/[0.07] px-5 py-2 text-xs">
+          <svg class="h-3.5 w-3.5 flex-none text-brand-gold-deep dark:text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M16.862 4.487l1.687-1.688a1.875 1.875 0 112.652 2.652L10.582 16.07a4.5 4.5 0 01-1.897 1.13L6 18l.8-2.685a4.5 4.5 0 011.13-1.897l8.932-8.931z" /></svg>
+          <span class="min-w-0 flex-1 truncate"><b class="text-brand-navy dark:text-white">Editing message</b> <span class="text-gray-500 dark:text-white/50">· {{ editing.body }}</span></span>
+          <button type="button" class="font-semibold text-gray-500 hover:text-brand-navy dark:text-white/60 dark:hover:text-white" @click="cancelEdit">Cancel</button>
+        </div>
         <div class="px-4 py-3 border-t border-gray-100 dark:border-white/10">
           <div v-if="showEmoji" class="flex gap-1.5 mb-2 px-1">
             <button v-for="e in ['😀','😎','👍','🔥','❤️','🎉','🙏','🏡','✅','😂']" :key="e" class="text-lg hover:scale-125 transition-transform" @click="addEmoji(e)">{{ e }}</button>
@@ -734,12 +781,14 @@ if (convStore.conversations.length) {
               <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
             </button>
             <input
+              ref="messageInput"
               v-model="newMessage"
               type="text"
               placeholder="Type your message…"
               class="flex-1 min-w-0 w-full bg-transparent text-sm text-brand-navy dark:text-white placeholder-gray-400 outline-none py-2"
               @input="onType"
               @keydown.enter.prevent="send"
+              @keydown.esc="editing && cancelEdit()"
             />
             <button
               class="h-9 w-9 rounded-full flex items-center justify-center text-white transition-all disabled:opacity-40 flex-shrink-0"
@@ -758,6 +807,7 @@ if (convStore.conversations.length) {
 </template>
 
 <style scoped>
+.msg-flash { background: rgba(212, 165, 74, 0.22); }
 .typing-dot {
   animation: typing-bounce 1s infinite ease-in-out;
 }
