@@ -48,6 +48,8 @@ class AgentProfile extends Model
             'ai_checks'               => 'array',
             'reviewed_at'             => 'datetime',
             'held_at'                 => 'datetime',
+            'license_check_valid_until' => 'date',
+            'license_checked_at'      => 'datetime',
         ];
     }
 

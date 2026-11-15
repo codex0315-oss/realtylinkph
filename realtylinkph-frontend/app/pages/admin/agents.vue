@@ -1,5 +1,5 @@
 <script setup lang="ts">
-import type { AgentProfile, VerificationStatus } from '~/types'
+import type { AgentProfile, LicenseCheckResult, VerificationStatus } from '~/types'
 
 definePageMeta({ layout: 'dashboard' })
 
@@ -199,12 +199,14 @@ const isConcern = (title: string) => /concern|red flag/i.test(title)
  * A reminder, not a gate: Approve still works, but asks once more if a box
  * is unticked or the AI flagged something. Reset for each application. */
 const checks = reactive({ photo: false, details: false, prc: false })
-watch(selectedId, () => { checks.photo = false; checks.details = false; checks.prc = false })
+// A recorded "found on PRC / DHSUD" ticks the official-site box for them.
+const licenseFound = (a: AgentProfile | null) => !!a?.license_check && a.license_check.result !== 'not_found'
+watch(selectedId, () => { checks.photo = false; checks.details = false; checks.prc = licenseFound(selected.value) }, { immediate: true })
 const CHECKS = computed(() => selected.value
   ? [
       { key: 'photo' as const, label: 'The selfie looks like the photo on the ' + (idDoc.value?.label.toLowerCase() ?? 'ID') },
       { key: 'details' as const, label: 'The name and number on the document match the application' },
-      { key: 'prc' as const, label: `The ${isBroker(selected.value) ? 'PRC' : 'accreditation'} number checks out on the official site` },
+      { key: 'prc' as const, label: `The license checks out on an official site (PRC or DHSUD)` },
     ]
   : [])
 
@@ -369,14 +371,91 @@ function retryPrc() {
   prcFrameKey.value++
   startPrcTimer()
 }
+/* Which official source the panel shows. PRC loads inside the panel; its backup
+ * and DHSUD's registry refuse to be framed, so they open in a new tab with the
+ * right thing copied first (DHSUD searches by full name, not number). */
+type Source = 'prc' | 'backup' | 'dhsud'
+const source = ref<Source>('prc')
+const SOURCES = computed(() => [
+  { key: 'prc' as const, label: 'PRC', link: prcLink.value },
+  { key: 'backup' as const, label: 'PRC backup', link: prcBackup.value },
+  { key: 'dhsud' as const, label: 'DHSUD', link: dhsudLink.value },
+].filter(s => s.link))
+const copyValue = computed(() => (source.value === 'dhsud' ? selected.value?.user?.name ?? '' : selected.value?.prc_number ?? ''))
+const copyWhat = computed(() => (source.value === 'dhsud' ? 'Full name' : selected.value && isBroker(selected.value) ? 'PRC no.' : 'Accreditation no.'))
+const GUIDE: Record<Exclude<Source, 'prc'>, { title: string; steps: string[] }> = {
+  backup: {
+    title: "PRC's older lookup",
+    steps: ['Open it in a new tab (the number is copied for you).', 'Paste the number into the search.', 'Check the name matches and the license is active.'],
+  },
+  dhsud: {
+    title: 'DHSUD registered brokers & salespersons',
+    steps: ['Open the list in a new tab (the full name is copied for you).', 'Paste the name into the “Full Name” filter above the table.', 'Check “Valid Until” has not passed, then record it below.'],
+  },
+}
+async function copyText(text: string, what: string) {
+  try { await navigator.clipboard.writeText(text); toast.success(`${what} copied`) } catch { /* shown on screen to copy by hand */ }
+}
+async function openSource(url: string) {
+  try { await navigator.clipboard.writeText(copyValue.value) } catch { /* shown on screen */ }
+  window.open(url, '_blank', 'noopener')
+}
+function pickSource(s: Source) {
+  source.value = s
+  if (s === 'prc') retryPrc()
+  else if (prcTimer) { clearTimeout(prcTimer); prcTimer = null }
+}
+
 async function openPrc() {
   if (!selected.value || !prcLink.value) return
   prcOpen.value = true
+  source.value = 'prc'
   prcFrameKey.value++
   startPrcTimer()
+  resetLicenseForm()
   try { await navigator.clipboard.writeText(selected.value.prc_number) } catch { /* the number is shown in the panel too */ }
 }
 watch(prcOpen, (o) => { if (!o && prcTimer) { clearTimeout(prcTimer); prcTimer = null } })
+
+/* ── Record what was found ── evidence behind the decision, saved with who and when. */
+const lc = reactive<{ result: LicenseCheckResult | null; until: string; note: string; saving: boolean; error: string | null }>({ result: null, until: '', note: '', saving: false, error: null })
+const today = new Date().toISOString().slice(0, 10)
+function resetLicenseForm() {
+  const c = selected.value?.license_check
+  lc.result = c?.result ?? (source.value === 'dhsud' ? 'dhsud_found' : null)
+  lc.until = c?.valid_until ?? ''
+  lc.note = c?.note ?? ''
+  lc.error = null
+}
+const LC_OPTIONS: Array<{ key: LicenseCheckResult; label: string; tone: string }> = [
+  { key: 'prc_found', label: 'Found on PRC', tone: 'emerald' },
+  { key: 'dhsud_found', label: 'Found on DHSUD', tone: 'emerald' },
+  { key: 'not_found', label: 'Not found / expired', tone: 'red' },
+]
+const LC_LABEL: Record<LicenseCheckResult, string> = { prc_found: 'Found on PRC', dhsud_found: 'Found on DHSUD', not_found: 'Not found / expired' }
+const lcReady = computed(() => !!lc.result && (lc.result !== 'dhsud_found' || (!!lc.until && lc.until >= today)))
+async function saveLicenseCheck() {
+  if (!selected.value || !lcReady.value || lc.saving) return
+  lc.saving = true
+  lc.error = null
+  try {
+    const res = await api.post<{ data: AgentProfile }>(`/admin/agent-applications/${selected.value.id}/license-check`, {
+      result: lc.result,
+      valid_until: lc.result === 'dhsud_found' ? lc.until : null,
+      note: lc.note.trim() || null,
+    })
+    const i = items.value.findIndex(a => a.id === res.data.id)
+    if (i >= 0) items.value[i] = { ...items.value[i]!, license_check: res.data.license_check }
+    checks.prc = licenseFound(res.data)
+    toast.success(`Saved: ${LC_LABEL[lc.result!]}`)
+  } catch (e: unknown) {
+    const d = (e as { data?: { message?: string; errors?: Record<string, string[]> } })?.data
+    lc.error = d?.errors ? Object.values(d.errors).flat()[0] ?? d.message ?? 'Couldn’t save. Please try again.' : d?.message ?? 'Couldn’t save. Please try again.'
+  } finally {
+    lc.saving = false
+  }
+}
+const longDay = (iso: string) => new Date(`${iso}T00:00:00`).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' })
 watch(selectedId, () => { prcOpen.value = false })
 onUnmounted(() => { if (prcTimer) clearTimeout(prcTimer) })
 
@@ -588,7 +667,7 @@ watch([selected, loading], () => nextTick(fitReview))
               @click="openPrc"
             >
               <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
-              Verify on {{ isBroker(selected) ? 'PRC' : 'site' }}
+              Verify license
             </button>
             <button
               v-if="!selected.on_hold"
@@ -648,6 +727,18 @@ watch([selected, loading], () => nextTick(fitReview))
                 <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M5.25 5.653c0-.856.917-1.398 1.667-.986l11.54 6.347a1.125 1.125 0 010 1.972l-11.54 6.347a1.125 1.125 0 01-1.667-.986V5.653z" /></svg>
                 Resume review
               </button>
+            </div>
+
+            <!-- License check the admin recorded (PRC / DHSUD) -->
+            <div v-if="tab === 'pending' && selected.license_check" class="flex flex-wrap items-center justify-between gap-2 rounded-2xl px-4 py-2.5 ring-1"
+                 :class="selected.license_check.result === 'not_found' ? 'bg-red-500/[0.05] ring-red-400/25' : 'bg-emerald-500/[0.06] ring-emerald-500/25'">
+              <p class="min-w-0 text-sm" :class="selected.license_check.result === 'not_found' ? 'text-red-700 dark:text-red-300' : 'text-emerald-800 dark:text-emerald-300'">
+                <span class="font-semibold">License check: {{ LC_LABEL[selected.license_check.result] }}</span><template v-if="selected.license_check.valid_until"> · valid until {{ longDay(selected.license_check.valid_until) }}</template>
+                <span class="block text-xs text-brand-navy/55 dark:text-white/50">
+                  {{ selected.license_check.by }}<template v-if="selected.license_check.at"> · {{ shortDate(selected.license_check.at) }}</template><template v-if="selected.license_check.note"> · “{{ selected.license_check.note }}”</template>
+                </span>
+              </p>
+              <button type="button" class="flex-none text-xs font-semibold text-brand-navy/60 hover:text-brand-navy underline-offset-4 hover:underline dark:text-white/55 dark:hover:text-white" @click="openPrc">Change</button>
             </div>
 
             <div v-if="tab !== 'pending'" class="rounded-2xl px-4 py-3 ring-1" :class="tab === 'approved' ? 'bg-emerald-500/[0.06] ring-emerald-500/25' : 'bg-red-500/[0.05] ring-red-400/25'">
@@ -861,48 +952,63 @@ watch([selected, loading], () => nextTick(fitReview))
       @done="onHoldDone"
     />
 
-    <!-- ── Verify on PRC: PRC's lookup beside the application, without leaving the dashboard ── -->
+    <!-- ── Verify license: pick an official source (PRC inside the panel; PRC backup and
+         DHSUD in a new tab, since they refuse to be framed), then record what was found ── -->
     <Teleport to="body">
       <Transition name="fade">
         <div v-if="prcOpen && selected && prcLink" class="fixed inset-0 z-[55] flex justify-end bg-black/30" @click.self="prcOpen = false">
-          <aside class="flex h-full w-[min(36rem,100vw)] flex-col bg-white dark:bg-[#0B1A35] shadow-2xl ring-1 ring-brand-navy/10 dark:ring-white/10" role="dialog" aria-modal="true" aria-label="Verify on PRC">
-            <div class="flex items-start justify-between gap-3 border-b border-brand-navy/[0.06] dark:border-white/[0.08] px-4 py-3">
+          <aside class="flex h-full w-[min(36rem,100vw)] flex-col bg-white dark:bg-[#0B1A35] shadow-2xl ring-1 ring-brand-navy/10 dark:ring-white/10" role="dialog" aria-modal="true" aria-label="Verify license">
+            <!-- Who + close -->
+            <div class="flex items-start justify-between gap-3 px-4 pt-3">
               <div class="min-w-0">
-                <p class="truncate text-sm font-bold text-brand-navy dark:text-white">{{ prcLink.label }}</p>
+                <p class="truncate text-sm font-bold text-brand-navy dark:text-white">Verify license</p>
                 <p class="mt-0.5 truncate text-xs text-brand-navy/55 dark:text-white/50">{{ selected.user?.name }} · {{ numberLabel(selected) }} <span class="font-semibold tabular-nums text-brand-navy dark:text-white">{{ selected.prc_number }}</span></p>
               </div>
-              <div class="flex flex-none items-center gap-1.5">
-                <button type="button" class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20 transition" @click="copyNumber(selected)">Copy number</button>
-                <a :href="prcLink.url" target="_blank" rel="noopener" class="inline-flex items-center gap-1 rounded-full px-3 py-1.5 text-xs font-semibold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20 transition">New tab</a>
-                <button type="button" class="h-8 w-8 rounded-full flex items-center justify-center text-brand-navy/60 hover:bg-brand-navy/[0.06] dark:text-white/60 dark:hover:bg-white/10" aria-label="Close" @click="prcOpen = false">
-                  <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
-                </button>
+              <button type="button" class="h-8 w-8 flex-none rounded-full flex items-center justify-center text-brand-navy/60 hover:bg-brand-navy/[0.06] dark:text-white/60 dark:hover:bg-white/10" aria-label="Close" @click="prcOpen = false">
+                <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 18L18 6M6 6l12 12" /></svg>
+              </button>
+            </div>
+
+            <!-- Source picker -->
+            <div class="px-4 pb-3 pt-2.5 border-b border-brand-navy/[0.06] dark:border-white/[0.08]">
+              <div class="grid gap-1 rounded-full p-1 bg-brand-navy/[0.05] dark:bg-white/[0.06]" :style="{ gridTemplateColumns: `repeat(${SOURCES.length}, minmax(0, 1fr))` }" role="tablist" aria-label="Where to verify">
+                <button
+                  v-for="s in SOURCES"
+                  :key="s.key"
+                  type="button"
+                  role="tab"
+                  :aria-selected="source === s.key"
+                  class="truncate rounded-full px-3 py-1.5 text-xs font-bold transition"
+                  :class="source === s.key ? 'bg-white text-brand-navy shadow-sm dark:bg-brand-gold dark:text-[#0B2A5C]' : 'text-brand-navy/60 hover:text-brand-navy dark:text-white/60 dark:hover:text-white'"
+                  @click="pickSource(s.key)"
+                >{{ s.label }}</button>
               </div>
             </div>
-            <div class="relative min-h-0 flex-1 bg-white">
+
+            <!-- PRC, inside the panel -->
+            <div v-if="source === 'prc'" class="relative min-h-0 flex-1 bg-white">
               <div v-if="prcState === 'loading'" class="absolute inset-0 flex flex-col items-center justify-center gap-2 px-6 text-center text-sm text-brand-navy/60">
                 <span class="h-5 w-5 rounded-full border-2 border-brand-gold/30 border-t-brand-gold animate-spin" aria-hidden="true" />
                 Opening PRC's lookup…
               </div>
 
               <!-- PRC didn't answer in time: say so plainly, and offer the ways forward -->
-              <div v-else-if="prcState === 'down'" class="absolute inset-0 z-10 overflow-y-auto bg-white dark:bg-[#0B1A35] px-5 py-8 text-center" role="status">
+              <div v-else-if="prcState === 'down'" class="absolute inset-0 z-10 overflow-y-auto bg-white dark:bg-[#0B1A35] px-5 py-7 text-center" role="status">
                 <span class="mx-auto flex h-12 w-12 items-center justify-center rounded-2xl bg-amber-500/15 text-amber-700 dark:text-amber-300">
                   <svg class="h-6 w-6" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
                 </span>
                 <p class="mt-3 font-display text-lg font-bold text-brand-navy dark:text-white">PRC's website isn't responding</p>
                 <p class="mx-auto mt-1.5 max-w-sm text-sm leading-relaxed text-brand-navy/65 dark:text-white/60">
-                  This is on PRC's side, not RealtyLink PH. You can try again, use another lookup, or put the application on hold so {{ selected.user?.name?.split(' ')[0] ?? 'the applicant' }} knows what's happening.
+                  This is on PRC's side, not RealtyLink PH. Check DHSUD's registry instead, try again, or put the application on hold so {{ selected.user?.name?.split(' ')[0] ?? 'the applicant' }} knows what's happening.
                 </p>
                 <div class="mx-auto mt-5 grid max-w-xs gap-2">
-                  <button type="button" class="rounded-full bg-brand-navy px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-navy/90 dark:bg-white/10 dark:hover:bg-white/15" @click="retryPrc">Try again</button>
-                  <a :href="prcLink.url" target="_blank" rel="noopener" class="rounded-full px-4 py-2.5 text-sm font-semibold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20">Open in a new tab</a>
-                  <a v-if="prcBackup" :href="prcBackup.url" target="_blank" rel="noopener" class="rounded-full px-4 py-2.5 text-sm font-semibold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20">Try PRC's backup site</a>
-                  <a v-if="dhsudLink" :href="dhsudLink.url" target="_blank" rel="noopener" class="rounded-full px-4 py-2.5 text-sm font-semibold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20">DHSUD registry</a>
+                  <button v-if="dhsudLink" type="button" class="rounded-full bg-brand-gold px-4 py-2.5 text-sm font-bold text-[#0B2A5C] shadow-[0_4px_14px_rgba(212,165,74,0.4)] hover:bg-brand-gold-light" @click="pickSource('dhsud')">Check on DHSUD instead</button>
+                  <button type="button" class="rounded-full px-4 py-2.5 text-sm font-semibold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20" @click="retryPrc">Try PRC again</button>
+                  <button v-if="prcBackup" type="button" class="rounded-full px-4 py-2.5 text-sm font-semibold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20" @click="pickSource('backup')">Try PRC's backup site</button>
                   <button
                     v-if="!selected.on_hold"
                     type="button"
-                    class="inline-flex items-center justify-center gap-1.5 rounded-full bg-amber-500 px-4 py-2.5 text-sm font-bold text-white hover:bg-amber-600"
+                    class="inline-flex items-center justify-center gap-1.5 rounded-full px-4 py-2.5 text-sm font-semibold text-amber-800 ring-1 ring-amber-400/50 hover:bg-amber-500/10 dark:text-amber-300"
                     @click="openHold('hold', [selected])"
                   >
                     <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.75 5.25v13.5m-7.5-13.5v13.5" /></svg>
@@ -913,10 +1019,76 @@ watch([selected, loading], () => nextTick(fitReview))
               </div>
 
               <iframe :key="prcFrameKey" :src="prcLink.url" title="PRC license verification" class="relative h-full w-full border-0" referrerpolicy="no-referrer" sandbox="allow-scripts allow-forms allow-same-origin allow-popups" @load="onPrcLoad" />
+              <a v-if="prcState === 'loaded'" :href="prcLink.url" target="_blank" rel="noopener" class="absolute right-3 top-3 rounded-full bg-white/95 px-3 py-1.5 text-xs font-semibold text-brand-navy shadow ring-1 ring-brand-navy/15 hover:ring-brand-gold">Page blank? Open in new tab</a>
             </div>
-            <p class="border-t border-brand-navy/[0.06] dark:border-white/[0.08] px-4 py-2 text-xs text-brand-navy/55 dark:text-white/50">
-              The number is copied: paste it into PRC's search. Page blank? Use "New tab" above.
-            </p>
+
+            <!-- PRC backup / DHSUD: they won't load inside other sites, so a short guide and a new tab -->
+            <div v-else class="min-h-0 flex-1 overflow-y-auto px-5 py-5">
+              <template v-for="link in [source === 'dhsud' ? dhsudLink : prcBackup]" :key="source">
+                <div v-if="link">
+                  <p class="font-display text-lg font-bold text-brand-navy dark:text-white">{{ GUIDE[source as 'backup' | 'dhsud'].title }}</p>
+                  <p class="mt-1 text-sm leading-relaxed text-brand-navy/65 dark:text-white/60">{{ link.note }}</p>
+
+                  <!-- What to paste there -->
+                  <div class="mt-4 flex items-center justify-between gap-3 rounded-2xl bg-brand-cream/80 dark:bg-white/[0.05] ring-1 ring-brand-navy/[0.06] dark:ring-white/10 px-4 py-3">
+                    <div class="min-w-0">
+                      <p class="text-[0.6875rem] font-bold uppercase tracking-[0.14em] text-brand-navy/45 dark:text-white/40">{{ copyWhat }}</p>
+                      <p class="truncate text-base font-semibold text-brand-navy dark:text-white" :class="source === 'dhsud' ? 'uppercase' : 'tabular-nums'">{{ copyValue }}</p>
+                    </div>
+                    <button type="button" class="flex-none rounded-full px-3 py-1.5 text-xs font-semibold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20" @click="copyText(copyValue, copyWhat)">Copy</button>
+                  </div>
+
+                  <ol class="mt-4 space-y-2">
+                    <li v-for="(s, i) in GUIDE[source as 'backup' | 'dhsud'].steps" :key="i" class="flex gap-3 text-sm text-brand-navy/80 dark:text-white/75">
+                      <span class="h-6 w-6 flex-none rounded-full bg-brand-navy/[0.06] dark:bg-white/10 flex items-center justify-center text-xs font-bold text-brand-navy/70 dark:text-white/70">{{ i + 1 }}</span>
+                      <span class="pt-0.5">{{ s }}</span>
+                    </li>
+                  </ol>
+
+                  <button type="button" class="mt-5 inline-flex w-full items-center justify-center gap-2 rounded-full bg-brand-navy px-5 py-3 text-sm font-bold text-white hover:bg-brand-navy/90 dark:bg-brand-gold dark:text-[#0B2A5C]" @click="openSource(link.url)">
+                    <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M13.5 6H5.25A2.25 2.25 0 003 8.25v10.5A2.25 2.25 0 005.25 21h10.5A2.25 2.25 0 0018 18.75V10.5m-10.5 6L21 3m0 0h-5.25M21 3v5.25" /></svg>
+                    Copy and open {{ source === 'dhsud' ? 'DHSUD list' : 'PRC backup' }}
+                  </button>
+                  <p class="mt-2 text-center text-xs text-brand-navy/50 dark:text-white/45">Opens in a new tab. This site can't be shown inside RealtyLink PH.</p>
+                </div>
+              </template>
+            </div>
+
+            <!-- Record what was found -->
+            <div class="border-t border-brand-navy/[0.06] dark:border-white/[0.08] px-4 py-3 bg-brand-cream/40 dark:bg-white/[0.02]">
+              <div class="flex flex-wrap items-center justify-between gap-2">
+                <p class="text-sm font-semibold text-brand-navy dark:text-white">What did you find?</p>
+                <p v-if="selected.license_check" class="text-[0.6875rem] text-brand-navy/50 dark:text-white/45">
+                  Saved: {{ LC_LABEL[selected.license_check.result] }}<template v-if="selected.license_check.by"> · {{ selected.license_check.by }}</template>
+                </p>
+              </div>
+              <div class="mt-2 flex flex-wrap gap-1.5" role="radiogroup" aria-label="What did you find?">
+                <button
+                  v-for="o in LC_OPTIONS"
+                  :key="o.key"
+                  type="button"
+                  role="radio"
+                  :aria-checked="lc.result === o.key"
+                  class="rounded-full px-3 py-1.5 text-xs font-semibold ring-1 transition"
+                  :class="lc.result === o.key
+                    ? (o.tone === 'red' ? 'bg-red-500/10 text-red-700 ring-red-400/50 dark:text-red-300' : 'bg-emerald-500/10 text-emerald-700 ring-emerald-500/40 dark:text-emerald-300')
+                    : 'text-brand-navy/75 ring-brand-navy/10 hover:ring-brand-gold dark:text-white/70 dark:ring-white/15'"
+                  @click="lc.result = o.key"
+                >{{ o.label }}</button>
+              </div>
+              <div class="mt-2 grid grid-cols-1 gap-2" :class="lc.result === 'dhsud_found' ? 'cw-sm:grid-cols-[11rem_minmax(0,1fr)] sm:grid-cols-[11rem_minmax(0,1fr)]' : ''">
+                <label v-if="lc.result === 'dhsud_found'" class="block">
+                  <span class="sr-only">Valid until</span>
+                  <input v-model="lc.until" type="date" :min="today" aria-label="Valid until (from DHSUD)" class="w-full rounded-xl border-0 bg-white dark:bg-white/[0.06] px-3 py-2 text-sm text-brand-navy dark:text-white ring-1 ring-brand-navy/10 dark:ring-white/10 focus:ring-2 focus:ring-brand-gold dark:[color-scheme:dark]" />
+                </label>
+                <input v-model="lc.note" type="text" maxlength="300" placeholder="Note (optional), e.g. PRC down, found on DHSUD" aria-label="Note" class="w-full rounded-xl border-0 bg-white dark:bg-white/[0.06] px-3 py-2 text-sm text-brand-navy dark:text-white placeholder-brand-navy/40 dark:placeholder-white/35 ring-1 ring-brand-navy/10 dark:ring-white/10 focus:ring-2 focus:ring-brand-gold" />
+              </div>
+              <p v-if="lc.result === 'dhsud_found'" class="mt-1 text-[0.6875rem] text-brand-navy/50 dark:text-white/45">Enter the “Valid Until” date shown on the DHSUD list.</p>
+              <p v-if="lc.error" class="mt-2 text-xs font-medium text-red-600 dark:text-red-400" role="alert">{{ lc.error }}</p>
+              <button type="button" class="mt-2.5 w-full rounded-full bg-brand-navy px-4 py-2.5 text-sm font-bold text-white hover:bg-brand-navy/90 disabled:opacity-40 dark:bg-brand-gold dark:text-[#0B2A5C]" :disabled="!lcReady || lc.saving" @click="saveLicenseCheck">
+                {{ lc.saving ? 'Saving…' : 'Save result' }}
+              </button>
+            </div>
           </aside>
         </div>
       </Transition>

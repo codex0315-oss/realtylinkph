@@ -2,6 +2,15 @@ import type { User } from './user'
 
 export type VerificationStatus = 'pending' | 'approved' | 'rejected'
 export type HoldReason = 'prc_unavailable' | 'documents' | 'other'
+export type LicenseCheckResult = 'prc_found' | 'dhsud_found' | 'not_found'
+export interface LicenseCheck {
+  result: LicenseCheckResult
+  /** "Valid Until" on DHSUD's list (YYYY-MM-DD). */
+  valid_until: string | null
+  note: string | null
+  by: string | null
+  at: string | null
+}
 export type ApplicantType = 'salesperson' | 'broker'
 
 export interface AgentProfile {
@@ -30,6 +39,8 @@ export interface AgentProfile {
   hold_reason?: HoldReason | null
   /** The notice the applicant was sent. */
   hold_message?: string | null
+  /** Admin-only: what the admin found on PRC / DHSUD. */
+  license_check?: LicenseCheck | null
   /** Admin-only. */
   hold_note?: string | null
   held_by?: string | null

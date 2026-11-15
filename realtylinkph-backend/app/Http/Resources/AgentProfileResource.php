@@ -43,6 +43,14 @@ class AgentProfileResource extends JsonResource
             'hold_reason'        => $this->when($isOwnerOrAdmin, $this->hold_reason),
             'hold_message'       => $this->when($isOwnerOrAdmin, $this->hold_message),
             'held_at'            => $this->when($isOwnerOrAdmin, fn () => $this->held_at?->toISOString()),
+            // What the admin found on PRC / DHSUD (admin-only).
+            'license_check'      => $this->when($isAdmin, fn () => $this->license_check === null ? null : [
+                'result'      => $this->license_check,
+                'valid_until' => $this->license_check_valid_until?->toDateString(),
+                'note'        => $this->license_check_note,
+                'by'          => $this->license_checked_by,
+                'at'          => $this->license_checked_at?->toISOString(),
+            ]),
             'hold_note'          => $this->when($isAdmin, $this->hold_note),
             'held_by'            => $this->when($isAdmin, $this->held_by),
             // Set by the admin Agents page's history tabs (from the audit trail).

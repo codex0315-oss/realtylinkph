@@ -24,7 +24,9 @@ const REASON_MIN = 10
 
 watch(() => props.open, (o) => {
   if (!o) return
-  Object.assign(checks, { prc: false, face: false, valid: false })
+  // A recorded "found on PRC / DHSUD" already answers the first question.
+  const lc = props.application?.license_check
+  Object.assign(checks, { prc: !!lc && lc.result !== 'not_found', face: false, valid: false })
   reason.value = ''
   failed.value = false
   sending.value = false
@@ -36,7 +38,7 @@ const isBroker = computed(() => props.application?.applicant_type === 'broker')
 const docName = computed(() => (isBroker.value ? 'PRC license' : 'accreditation'))
 
 const CHECKS = computed(() => [
-  { key: 'prc' as const,   label: `I looked up the ${isBroker.value ? 'PRC number' : 'accreditation'} on the official site` },
+  { key: 'prc' as const,   label: `I checked the license on an official site (PRC or DHSUD)` },
   { key: 'face' as const,  label: `The selfie matches the photo on the ${docName.value}` },
   { key: 'valid' as const, label: `The ${docName.value} is still valid and readable` },
 ])

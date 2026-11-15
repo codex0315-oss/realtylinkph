@@ -101,8 +101,10 @@ final class AgentCredentialReference
             ],
             [
                 'label' => 'DHSUD brokers & salespersons',
-                'url'   => 'https://dhsud.gov.ph/broker-agent/',
-                'note'  => 'DHSUD\'s registry for brokers and salespersons selling registered projects (renewed yearly).',
+                // The list itself (searchable by full name, with "Valid Until").
+                // It refuses to be framed, so the admin panel opens it in a new tab.
+                'url'   => 'https://dhsud.gov.ph/broker-agent/list-of-brokers-salespersons/',
+                'note'  => 'DHSUD\'s registry of brokers and salespersons (renewed yearly). Search by full name and check "Valid Until". A second official source, useful when PRC is down.',
             ],
             [
                 'label' => 'RA 9646 — Real Estate Service Act',

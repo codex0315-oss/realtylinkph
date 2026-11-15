@@ -16,6 +16,8 @@ class AdminAction extends Model
         'agent.approved'      => 'Approved agent application',
         'agent.rejected'      => 'Rejected agent application',
         'agent.held'          => 'Put agent application on hold',
+        'agent.resumed'       => 'Resumed agent application review',
+        'agent.license_checked' => 'Recorded a license check',
         'listing.unpublished' => 'Unpublished listing',
         'listing.deleted'     => 'Deleted listing',
         'review.hidden'       => 'Hid review',

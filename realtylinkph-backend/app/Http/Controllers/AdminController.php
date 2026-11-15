@@ -414,6 +414,42 @@ class AdminController extends Controller
         return ApiResponse::success($result, $result['resumed'] === 1 ? '1 review resumed.' : "{$result['resumed']} reviews resumed.", 200);
     }
 
+    /**
+     * Record what the admin found when checking the license on an official
+     * site. DHSUD's registry shows a "Valid Until" date, so a DHSUD match needs
+     * it (and it can't already be past). Saving again replaces the result.
+     */
+    public function recordLicenseCheck(Request $request, AgentProfile $profile): JsonResponse
+    {
+        abort_unless($profile->status === 'pending', 422, 'Only pending applications can be checked.');
+
+        $data = $request->validate([
+            'result'      => ['required', 'in:prc_found,dhsud_found,not_found'],
+            'valid_until' => ['nullable', 'required_if:result,dhsud_found', 'date', 'after_or_equal:today'],
+            'note'        => ['nullable', 'string', 'max:300'],
+        ], [
+            'valid_until.required_if'    => 'Enter the "Valid Until" date shown on the DHSUD list.',
+            'valid_until.after_or_equal' => 'That date has already passed, so the DHSUD registration has expired. Choose "Not found / expired" instead.',
+        ]);
+
+        $profile->forceFill([
+            'license_check'             => $data['result'],
+            'license_check_valid_until' => $data['result'] === 'not_found' ? null : ($data['valid_until'] ?? null),
+            'license_check_note'        => $data['note'] ?? null,
+            'license_checked_by'        => $request->user()->name,
+            'license_checked_at'        => now(),
+        ])->save();
+
+        $profile->loadMissing('user');
+        AdminAudit::log('agent.license_checked', $profile, "{$profile->user?->name} ({$profile->user?->email})", array_filter([
+            'result'      => $data['result'],
+            'valid_until' => $data['valid_until'] ?? null,
+            'note'        => $data['note'] ?? null,
+        ]));
+
+        return ApiResponse::success(AgentProfileResource::make($profile->fresh('user')), 'License check saved.', 200);
+    }
+
     /** @return array{reason: string, message: string, note?: ?string} */
     private function validateHold(Request $request, bool $bulk = false): array
     {

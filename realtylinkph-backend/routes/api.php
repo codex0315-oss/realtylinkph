@@ -258,6 +258,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
         // Hold / resume with a notice to the applicant — one at a time or in bulk.
         Route::post('/agent-applications/hold', [AdminController::class, 'holdApplications'])->middleware('throttle:10,1');
         Route::post('/agent-applications/resume', [AdminController::class, 'resumeApplications'])->middleware('throttle:10,1');
+        Route::post('/agent-applications/{profile}/license-check', [AdminController::class, 'recordLicenseCheck'])->middleware('throttle:30,1');
         Route::post('/agent-applications/{profile}/hold', [AdminController::class, 'holdApplication'])->middleware('throttle:30,1');
         Route::delete('/agent-applications/{profile}/hold', [AdminController::class, 'releaseApplication'])->middleware('throttle:30,1');
 
