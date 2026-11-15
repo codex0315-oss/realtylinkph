@@ -13,6 +13,11 @@ class UserResource extends JsonResource
 {
     public function toArray(Request $request): array
     {
+        $viewer = $request->user('sanctum');
+        // Account settings are for the owner (and an admin), not for everyone
+        // who sees this person as a listing's agent or a chat partner.
+        $ownerOrAdmin = $viewer !== null && ($viewer->id === $this->id || $viewer->isAdmin());
+
         return [
             'id'                 => $this->id,
             'name'               => $this->name,
@@ -22,12 +27,12 @@ class UserResource extends JsonResource
             'cover_url'          => Uploads::url($this->cover_photo),
             'cover_position'     => (int) ($this->cover_position ?? 50),
             'role_type'          => $this->role_type,
-            'theme'              => $this->theme ?? 'light',
-            'property_alerts'    => (bool) $this->property_alerts,
-            'has_gcal'           => $this->google_access_token !== null,
+            'theme'              => $this->when($ownerOrAdmin, fn () => $this->theme ?? 'light'),
+            'property_alerts'    => $this->when($ownerOrAdmin, fn () => (bool) $this->property_alerts),
+            'has_gcal'           => $this->when($ownerOrAdmin, fn () => $this->google_access_token !== null),
             // False for "Continue with Google" sign-ups who never set one.
             'password_set'       => $this->when($request->user('sanctum')?->id === $this->id, fn () => $this->password_set !== false),
-            'email_verified_at'  => $this->email_verified_at?->toISOString(),
+            'email_verified_at'  => $this->when($ownerOrAdmin, fn () => $this->email_verified_at?->toISOString()),
             'last_seen_at'       => $this->last_seen_at?->toISOString(),
             'is_online'          => $this->isOnline(),
             /*

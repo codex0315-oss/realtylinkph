@@ -73,6 +73,9 @@ export const useConversation = () => {
     } catch (e) {
       error.value = extractError(e)
       conversationStore.failPending(clientId)
+      // Rate limit: the bubble already says "Not sent"; say why, and how long to wait.
+      const status = (e as { status?: number; statusCode?: number })?.status ?? (e as { statusCode?: number })?.statusCode
+      if (status === 429) useToast().error(error.value)
       return null
     } finally {
       sending.value = false

@@ -46,6 +46,24 @@ return Application::configure(basePath: dirname(__DIR__))
             }
         });
 
+        // A rate limit was hit. Say it in plain words, and how long to wait.
+        $exceptions->render(function (\Illuminate\Http\Exceptions\ThrottleRequestsException $e, $request) {
+            if ($request->expectsJson() || $request->is('api/*')) {
+                $wait = (int) ($e->getHeaders()['Retry-After'] ?? 60);
+                $what = $request->is('api/conversations/*/messages')
+                    ? "You're sending messages too fast."
+                    : "You're doing that too often.";
+
+                return \App\Helpers\ApiResponse::error(
+                    "{$what} Please wait {$wait} second" . ($wait === 1 ? '' : 's') . ' and try again.',
+                    // No machine tags under `errors`: several screens show its
+                    // first entry as text. The wait is in Retry-After.
+                    [],
+                    429
+                )->withHeaders($e->getHeaders());
+            }
+        });
+
         $exceptions->render(function (\Illuminate\Validation\ValidationException $e, $request) {
             if ($request->expectsJson() || $request->is('api/*')) {
                 return \App\Helpers\ApiResponse::error('Validation failed.', $e->errors(), 422);

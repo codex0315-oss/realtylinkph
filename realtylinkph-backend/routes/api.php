@@ -195,7 +195,7 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::get('/conversations/{conversation}', [ConversationController::class, 'show']);
     Route::post('/properties/{property}/conversations', [ConversationController::class, 'startOrGet']);
     Route::get('/conversations/{conversation}/messages', [ConversationController::class, 'messages']);
-    Route::post('/conversations/{conversation}/messages', [ConversationController::class, 'sendMessage']);
+    Route::post('/conversations/{conversation}/messages', [ConversationController::class, 'sendMessage'])->middleware('throttle:30,1');
     Route::post('/conversations/{conversation}/read', [ConversationController::class, 'markRead']);
     Route::post('/conversations/{conversation}/delivered', [ConversationController::class, 'markDelivered']);
     Route::delete('/conversations/{conversation}', [ConversationController::class, 'destroy']);

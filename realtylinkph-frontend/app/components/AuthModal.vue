@@ -96,6 +96,9 @@ async function doGoogle() {
   googleLoading.value = true
   googleError.value = null
   error.value = null
+  // The "Remember me" tick applies to Google too; it rides along in this tab
+  // while the browser visits Google and comes back.
+  useAuthStore().setRemember(isLogin.value && remember.value)
   // Sign in only signs in. If the Google address has never registered here the
   // server refuses it, rather than quietly creating an account.
   const ok = await startGoogleSignIn(isLogin.value ? 'login' : 'register')
@@ -157,10 +160,12 @@ function validateRegister() {
 async function submit() {
   if (mode.value === 'login') {
     if (!validateLogin()) return
+    useAuthStore().setRemember(remember.value)
     await login({ email: form.email, password: form.password })
     if (twoFactor.value) return          // an admin: the code step is next, keep the modal open
   } else {
     if (!validateRegister()) return
+    useAuthStore().setRemember(false)
     // Every account registers as a default buyer — no role choice.
     await register({
       name:                  form.name,

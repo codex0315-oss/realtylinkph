@@ -67,6 +67,11 @@ RUN a2enmod rewrite \
 RUN printf 'upload_max_filesize = 12M\npost_max_size = 20M\nmemory_limit = 256M\n' \
         > /usr/local/etc/php/conf.d/uploads.ini
 
+# Don't advertise exact versions (X-Powered-By: PHP/8.4.x, Server: Apache/2.4.x)
+# — it only helps someone looking for a known hole.
+RUN printf 'expose_php = Off\n' > /usr/local/etc/php/conf.d/security.ini \
+    && sed -ri 's/^ServerTokens .*/ServerTokens Prod/; s/^ServerSignature .*/ServerSignature Off/' /etc/apache2/conf-available/security.conf
+
 COPY --from=composer:2 /usr/bin/composer /usr/bin/composer
 
 WORKDIR /var/www/html
