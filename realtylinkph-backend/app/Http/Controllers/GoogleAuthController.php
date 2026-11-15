@@ -134,8 +134,11 @@ class GoogleAuthController extends Controller
             return ApiResponse::error('Your Google account does not have a verified email.', [], 422);
         }
 
-        // 3) Link by verified email if the account already exists.
-        $user = User::where('email', $email)->first();
+        // 3) Link by verified email if the account already exists — matched without
+        //    regard to letter case, so an account created manually as "Juan@Gmail.com"
+        //    is found when Google returns "juan@gmail.com".
+        $email = mb_strtolower(trim($email));
+        $user  = User::whereRaw('lower(email) = ?', [$email])->first();
 
         if (! $user) {
             // Pressed "Continue with Google" on the sign-in form with an address

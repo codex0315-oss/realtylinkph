@@ -13,11 +13,11 @@ export const useAuth = () => {
   // Shared with the sign-in modal and the Google callback page.
   const twoFactor = useState<TwoFactorChallenge | null>('admin-two-factor', () => null)
 
-  // Role-aware landing after auth: admins → admin area, agents → their dashboard, buyers → appointments.
+  // Role-aware landing after auth: admins → admin area; agents and buyers → their dashboard.
+  // Every way in (email sign-in, sign-up, Google) lands on the same page.
   function landingFor(): string {
     if (authStore.isAdmin) return '/admin'
-    if (authStore.isAgent) return '/dashboard'
-    return '/dashboard/appointments'
+    return '/dashboard'
   }
 
   async function login(credentials: LoginRequest): Promise<void> {
@@ -93,7 +93,7 @@ export const useAuth = () => {
       )
       authStore.setToken(res.data.token)
       authStore.setUser(res.data.user)
-      await router.push('/dashboard/appointments')
+      await router.push(landingFor())
     } catch (e: unknown) {
       error.value = extractApiError(e)
     } finally {

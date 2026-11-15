@@ -68,6 +68,12 @@ class User extends Authenticatable implements MustVerifyEmail
         'google_refresh_token',
     ];
 
+    /** Emails are stored lowercase, so every way in (password, Google, reset) finds the same account. */
+    public function setEmailAttribute(?string $value): void
+    {
+        $this->attributes['email'] = $value === null ? null : mb_strtolower(trim($value));
+    }
+
     protected function casts(): array
     {
         return [
