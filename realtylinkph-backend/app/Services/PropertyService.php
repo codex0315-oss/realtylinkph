@@ -338,6 +338,11 @@ class PropertyService
             GeocodeProperty::dispatch($property->id);
         }
 
+        // Edits to a live listing are checked again.
+        if ($property->status === 'published') {
+            \App\Jobs\ScanListing::dispatch($property->id);
+        }
+
         return $property;
     }
 
@@ -402,6 +407,13 @@ class PropertyService
             ]);
         }
 
+        // RealtyLink AI paused it (payment request): only an admin can put it back.
+        if (app(\App\Services\ListingIntegrityService::class)->isPaused($property)) {
+            throw ValidationException::withMessages([
+                'listing' => 'This listing is paused while an administrator reviews it. You will be notified when it is checked.',
+            ]);
+        }
+
         $wasPublished = $property->status === 'published';
 
         // Re-publishing resolves an admin take-down, so clear the reason too.
@@ -415,6 +427,9 @@ class PropertyService
         if (! $wasPublished) {
             $this->notifyBuyersOfNewListing($property->fresh());
         }
+
+        // RealtyLink AI checks it in the background (duplicates, contact details, payment requests).
+        \App\Jobs\ScanListing::dispatch($property->id);
 
         return $property->fresh();
     }

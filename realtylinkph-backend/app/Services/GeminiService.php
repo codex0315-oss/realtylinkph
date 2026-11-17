@@ -750,6 +750,39 @@ TXT;
     }
 
     /**
+     * Read a listing's text for a payment-first scam ("send the reservation fee to
+     * my GCash before the viewing") or a push to move the deal off the platform.
+     * Only called after the pattern checks found something worth a second look,
+     * so ordinary listings never use AI quota. Null when the AI is unavailable.
+     *
+     * @return array{payment_request: bool, off_platform: bool, reason: string}|null
+     */
+    public function checkListingText(string $title, string $description): ?array
+    {
+        $system = 'You check real estate listings on RealtyLink PH, a Philippine property platform, for scams. '
+            . 'Read the listing and respond ONLY with JSON: {"payment_request": true if it asks buyers to send money, a deposit, '
+            . 'a reservation or viewing fee, or a bank/GCash/Maya transfer BEFORE meeting or viewing; false for normal price, payment terms, '
+            . 'financing or "reservation fee upon signing" information, "off_platform": true if it tells buyers to contact the agent outside '
+            . 'the platform (phone, Viber, WhatsApp, Telegram, Facebook, email or a link), "reason": one plain sentence an administrator can read}.';
+
+        $text = $this->call([
+            'systemInstruction' => ['parts' => [['text' => $system]]],
+            'contents'          => [['role' => 'user', 'parts' => [['text' => "Title: {$title}\n\nDescription:\n{$description}"]]]],
+            'generationConfig'  => ['responseMimeType' => 'application/json', 'temperature' => 0],
+        ], 10);
+        $data = json_decode($text ?? '', true);
+        if (! is_array($data)) {
+            return null;
+        }
+
+        return [
+            'payment_request' => ($data['payment_request'] ?? false) === true,
+            'off_platform'    => ($data['off_platform'] ?? false) === true,
+            'reason'          => is_string($data['reason'] ?? null) ? self::plainText($data['reason']) : '',
+        ];
+    }
+
+    /**
      * Explain to an admin WHY a property ranks (or doesn't) in the featured list —
      * grounded strictly in the provided score breakdown so it can't invent reasons.
      */

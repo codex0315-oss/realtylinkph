@@ -153,7 +153,7 @@ class AdminOverviewWorkflowTest extends TestCase
         $this->assertSame('Big house', $titles('sort=views')[0]);
 
         $this->getJson('/api/admin/properties/stats')->assertOk()
-            ->assertJsonPath('data.counts', ['all' => 5, 'published' => 3, 'unpublished' => 1, 'draft' => 1, 'sold' => 0])
+            ->assertJsonPath('data.counts', ['all' => 5, 'published' => 3, 'unpublished' => 1, 'draft' => 1, 'sold' => 0, 'review' => 0])
             ->assertJsonPath('data.top_agents.0.name', 'Agent Ana')
             ->assertJsonPath('data.top_agents.0.count', 3)
             ->assertJsonPath('data.flagged_total', 3);   // no photos on any test listing

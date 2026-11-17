@@ -212,6 +212,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
     Route::put('/reviews/{review}/reply', [ReviewController::class, 'reply']);
     Route::delete('/reviews/{review}/reply', [ReviewController::class, 'deleteReply']);
     Route::get('/me/reviews', [ReviewController::class, 'mine']);
+    // Buyers report a listing (sold, wrong details, scam, photos don't match).
+    Route::post('/properties/{property}/report', [\App\Http\Controllers\ListingReportController::class, 'store'])->middleware('throttle:10,60');
     Route::get('/agents/{agent}/reviewable', [ReviewController::class, 'reviewable']);
 
     // AI description generator (authenticated agents only)
@@ -253,6 +255,8 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/reviews/stats', [AdminController::class, 'reviewStats']);
         Route::post('/reviews/{review}/toggle-visibility', [ReviewController::class, 'toggleVisibility']);
         Route::post('/reviews/{review}/clear-flag', [AdminController::class, 'clearReviewFlag']);
+        Route::get('/listing-flags', [AdminController::class, 'listingFlags']);
+        Route::post('/listing-flags/{property}/clear', [AdminController::class, 'clearListingFlags']);
         Route::get('/users/{user}/agent-sanctions', [AdminController::class, 'agentSanctions']);
         Route::post('/users/{user}/agent-sanctions', [AdminController::class, 'sanctionAgent'])->middleware('throttle:20,1');
         Route::get('/agent-applications', [AgentVerificationController::class, 'pending']);

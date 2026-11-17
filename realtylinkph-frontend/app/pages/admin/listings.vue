@@ -18,21 +18,59 @@ if (!authStore.isAdmin) {
 
 const api = useApi()
 
-type Tab = '' | 'published' | 'unpublished' | 'draft' | 'sold'
+type Tab = '' | 'published' | 'unpublished' | 'draft' | 'sold' | 'flagged'
 type Sort = 'newest' | 'price_desc' | 'price_asc' | 'views' | 'featured'
+
+const route = useRoute()
+const toast = useToast()
 
 const properties = ref<Property[]>([])
 const pagination = ref<PaginatedResponse<Property>['meta'] | null>(null)
 const loading    = ref(false)
 const page       = ref(1)
-const tab        = ref<Tab>('')
+const tab        = ref<Tab>(route.query.tab === 'flagged' ? 'flagged' : '')
 const search     = ref('')
 const type       = ref('')
 const offer      = ref<'' | 'sale' | 'rent'>('')
 const sort       = ref<Sort>('newest')
 
+/* ── Flagged by RealtyLink AI or reported by buyers ── */
+interface ListingFlagItem {
+  property: Property
+  paused: boolean
+  reports: number
+  latest_at: string | null
+  flags: Array<{
+    id: number
+    source: 'ai' | 'report'
+    reasons: Array<{ code: string; label: string }>
+    details: {
+      duplicate_photos?: { property_id: number; title: string; agent: string | null; same_agent?: boolean }
+      duplicate_address?: { property_id: number; title: string; agent: string | null }
+      contact_info?: { found: string[] }
+      ai_reason?: string
+    } | null
+    note: string | null
+    reporter: string | null
+    paused: boolean
+    at: string | null
+  }>
+}
+const flagged = ref<ListingFlagItem[]>([])
+
 async function load() {
   loading.value = true
+  if (tab.value === 'flagged') {
+    try {
+      const res = await api.get<ApiResponse<ListingFlagItem[]>>('/admin/listing-flags')
+      flagged.value = res?.data ?? []
+    } catch {
+      flagged.value = []
+    } finally {
+      loading.value = false
+    }
+    return
+  }
   try {
     const params: Record<string, unknown> = { page: page.value }
     if (tab.value) params.status = tab.value
@@ -52,7 +90,7 @@ async function load() {
 
 /* ── Tab counts + side panel ── */
 interface Stats {
-  counts: Record<'all' | 'published' | 'unpublished' | 'draft' | 'sold', number>
+  counts: Record<'all' | 'published' | 'unpublished' | 'draft' | 'sold' | 'review', number>
   flagged: Array<{ id: number; title: string; agent: string | null; flags: string[] }>
   flagged_total: number
   top_agents: Array<{ id: number; name: string; avatar: string | null; count: number }>
@@ -72,6 +110,7 @@ const TABS: Array<{ key: Tab; label: string; count: () => number }> = [
   { key: 'unpublished', label: 'Unpublished', count: () => stats.value?.counts.unpublished ?? 0 },
   { key: 'draft',       label: 'Drafts',      count: () => stats.value?.counts.draft ?? 0 },
   { key: 'sold',        label: 'Sold',        count: () => stats.value?.counts.sold ?? 0 },
+  { key: 'flagged',     label: 'Flagged',     count: () => stats.value?.counts.review ?? 0 },
 ]
 const TYPES = [
   { value: '', label: 'All types' }, { value: 'house', label: 'House' }, { value: 'condo', label: 'Condo' },
@@ -82,7 +121,33 @@ const SORTS: Array<{ value: Sort; label: string }> = [
   { value: 'views', label: 'Most viewed' }, { value: 'featured', label: 'Featured score' },
 ]
 
-function setTab(t: Tab) { tab.value = t; page.value = 1; load() }
+function setTab(t: Tab) {
+  tab.value = t
+  page.value = 1
+  navigateTo({ query: { ...route.query, tab: t === 'flagged' ? 'flagged' : undefined } }, { replace: true })
+  load()
+}
+
+/* On a phone the tab bar scrolls sideways: bring the chosen tab into view (e.g. arriving on ?tab=flagged). */
+onMounted(() => nextTick(() => document.querySelector('[role=tablist] [aria-selected=true]')?.scrollIntoView({ inline: 'center', block: 'nearest' })))
+
+const when = (iso?: string | null) => (iso ? new Date(iso).toLocaleString('en-PH', { month: 'short', day: 'numeric', hour: 'numeric', minute: '2-digit' }) : '')
+const clearing = ref<number | null>(null)
+async function looksFine(item: ListingFlagItem) {
+  if (clearing.value) return
+  clearing.value = item.property.id
+  try {
+    await api.post(`/admin/listing-flags/${item.property.id}/clear`)
+    toast.success(item.paused ? 'Listing is live again' : 'Marked as fine', { description: item.paused ? 'The agent has been told.' : undefined })
+    await Promise.all([load(), loadStats()])
+  } catch {
+    toast.error('Couldn’t clear the flags. Please try again.')
+  } finally {
+    clearing.value = null
+  }
+}
+const sanctionTarget = ref<NonNullable<Property['agent']> | null>(null)
+async function onSanctioned() { sanctionTarget.value = null; await Promise.all([load(), loadStats()]) }
 function goPage(n: number) { page.value = n; load() }
 watch([type, offer, sort], () => { page.value = 1; load() })
 let searchTimer: ReturnType<typeof setTimeout> | undefined
@@ -218,7 +283,7 @@ const selectCls = 'appearance-none bg-none rounded-full border-0 bg-white dark:b
         >
           {{ t.label }}
           <span class="rounded-full px-1.5 text-xs tabular-nums"
-                :class="tab === t.key ? 'bg-white/20 dark:bg-[#0B2A5C]/15' : t.key === 'unpublished' && t.count() ? 'bg-amber-500/15 text-amber-700 dark:text-amber-400' : 'opacity-60'">{{ t.count() }}</span>
+                :class="tab === t.key ? 'bg-white/20 dark:bg-[#0B2A5C]/15' : (t.key === 'unpublished' || t.key === 'flagged') && t.count() ?'bg-amber-500/15 text-amber-700 dark:text-amber-400' : 'opacity-60'">{{ t.count() }}</span>
         </button>
       </div>
     </div>
@@ -226,7 +291,7 @@ const selectCls = 'appearance-none bg-none rounded-full border-0 bg-white dark:b
     <div class="grid grid-cols-1 gap-6 lg:grid-cols-[minmax(0,1fr)_19rem]">
       <div class="min-w-0">
         <!-- ── Search + filters ── -->
-        <div class="mb-4 flex flex-wrap items-center gap-2.5">
+        <div v-if="tab !== 'flagged'" class="mb-4 flex flex-wrap items-center gap-2.5">
           <div class="relative min-w-[13rem] flex-1">
             <svg class="pointer-events-none absolute left-3.5 top-1/2 -translate-y-1/2 h-4 w-4 text-brand-navy/40 dark:text-white/40" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" /></svg>
             <input
@@ -265,8 +330,83 @@ const selectCls = 'appearance-none bg-none rounded-full border-0 bg-white dark:b
           </label>
         </div>
 
+        <!-- ── Flagged: RealtyLink AI flags + buyer reports, one card per listing ── -->
+        <div v-if="tab === 'flagged'">
+          <p class="mb-4 flex items-start gap-2 rounded-2xl bg-brand-gold/[0.07] px-4 py-3 text-sm text-brand-navy/75 ring-1 ring-brand-gold/30 dark:text-white/70">
+            <svg class="mt-0.5 h-4 w-4 flex-none text-brand-gold-deep dark:text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.6" d="M9.813 15.904L9 18.75l-.813-2.846a4.5 4.5 0 00-3.09-3.09L2.25 12l2.846-.813a4.5 4.5 0 003.09-3.09L9 5.25l.813 2.846a4.5 4.5 0 003.09 3.09L15.75 12l-2.846.813a4.5 4.5 0 00-3.09 3.09z" /></svg>
+            <span>RealtyLink AI checks every listing when it is published or edited, and buyers can report one. Only a request for money before a viewing pauses a listing; everything else stays live until you decide.</span>
+          </p>
+
+          <div v-if="loading && !flagged.length" class="space-y-3">
+            <AppSkeleton v-for="i in 3" :key="i" width="100%" height="150px" />
+          </div>
+
+          <div v-else-if="!flagged.length" class="rounded-3xl bg-white px-6 py-14 text-center ring-1 ring-brand-navy/[0.07] dark:bg-[#0B1A35] dark:ring-white/[0.08]">
+            <p class="font-display text-lg font-bold text-brand-navy dark:text-white">Nothing to review</p>
+            <p class="mt-1 text-sm text-brand-text-secondary dark:text-white/55">No listing is flagged by RealtyLink AI or reported by buyers right now.</p>
+          </div>
+
+          <ul v-else class="space-y-3" :class="loading ? 'opacity-60 transition-opacity' : ''">
+            <li
+              v-for="item in flagged"
+              :key="item.property.id"
+              class="rounded-3xl bg-white p-4 sm:p-5 ring-1 dark:bg-[#0B1A35]"
+              :class="item.paused ? 'ring-red-400/40 dark:ring-red-400/30' : 'ring-brand-navy/[0.07] dark:ring-white/[0.08]'"
+            >
+              <div class="flex gap-3 sm:gap-4">
+                <button type="button" class="h-16 w-20 flex-none overflow-hidden rounded-xl bg-brand-navy/5 dark:bg-white/10" :aria-label="`View ${calm(item.property.title)}`" @click="openDetails(item.property)">
+                  <img v-if="thumb(item.property)" :src="thumb(item.property)!" alt="" class="h-full w-full object-cover" loading="lazy" />
+                </button>
+                <div class="min-w-0 flex-1">
+                  <div class="flex flex-wrap items-center gap-1.5">
+                    <span v-if="item.paused" class="rounded-full bg-red-500/10 px-2 py-0.5 text-[0.6875rem] font-bold text-red-600 dark:text-red-400">Paused</span>
+                    <span v-else class="rounded-full px-2 py-0.5 text-[0.6875rem] font-semibold" :class="statusOf(item.property).cls">{{ statusOf(item.property).label }}</span>
+                    <span v-if="item.reports" class="rounded-full bg-amber-500/10 px-2 py-0.5 text-[0.6875rem] font-semibold text-amber-700 dark:text-amber-400">{{ item.reports }} buyer {{ item.reports === 1 ? 'report' : 'reports' }}</span>
+                    <span class="text-[0.6875rem] text-brand-navy/45 dark:text-white/40">{{ when(item.latest_at) }}</span>
+                  </div>
+                  <button type="button" class="mt-1 block max-w-full truncate text-left font-semibold text-brand-navy hover:text-brand-gold-deep dark:text-white dark:hover:text-brand-gold" @click="openDetails(item.property)">{{ calm(item.property.title) }}</button>
+                  <p class="truncate text-xs text-brand-navy/55 dark:text-white/50">{{ price(item.property) }} · {{ item.property.agent?.name ?? 'Unknown agent' }}<template v-if="city(item.property.address)"> · {{ city(item.property.address) }}</template></p>
+                </div>
+              </div>
+
+              <!-- What was found -->
+              <ul class="mt-3 space-y-2">
+                <li v-for="f in item.flags" :key="f.id" class="rounded-2xl bg-brand-cream/70 px-3 py-2.5 text-sm dark:bg-white/[0.04]">
+                  <p class="flex items-center gap-1.5 text-[0.625rem] font-bold uppercase tracking-wide" :class="f.source === 'ai' ? 'text-brand-gold-deep dark:text-brand-gold' : 'text-amber-700 dark:text-amber-400'">
+                    {{ f.source === 'ai' ? 'RealtyLink AI' : `Reported by ${f.reporter ?? 'a user'}` }}
+                  </p>
+                  <ul class="mt-1 space-y-0.5">
+                    <li v-for="r in f.reasons" :key="r.code" class="font-semibold" :class="r.code === 'payment_request' ? 'text-red-600 dark:text-red-400' : 'text-brand-navy dark:text-white'">{{ r.label }}</li>
+                  </ul>
+                  <p v-if="f.details?.duplicate_photos" class="mt-1 text-xs text-brand-navy/65 dark:text-white/60">
+                    Same photo as <button type="button" class="font-semibold underline decoration-dotted hover:text-brand-gold-deep dark:hover:text-brand-gold" @click="openById(f.details.duplicate_photos.property_id)">{{ calm(f.details.duplicate_photos.title) }}</button>
+                    by {{ f.details.duplicate_photos.same_agent ? 'the same agent' : f.details.duplicate_photos.agent ?? 'another agent' }}
+                  </p>
+                  <p v-if="f.details?.duplicate_address" class="mt-1 text-xs text-brand-navy/65 dark:text-white/60">
+                    Same address and price as <button type="button" class="font-semibold underline decoration-dotted hover:text-brand-gold-deep dark:hover:text-brand-gold" @click="openById(f.details.duplicate_address.property_id)">{{ calm(f.details.duplicate_address.title) }}</button>
+                    by {{ f.details.duplicate_address.agent ?? 'another agent' }}
+                  </p>
+                  <p v-if="f.details?.contact_info?.found?.length" class="mt-1 text-xs text-brand-navy/65 dark:text-white/60">Found: {{ f.details.contact_info.found.join(', ') }}</p>
+                  <p v-if="f.details?.ai_reason" class="mt-1 text-xs italic text-brand-navy/65 dark:text-white/60">“{{ f.details.ai_reason }}”</p>
+                  <p v-if="f.note" class="mt-1 text-xs text-brand-navy/65 dark:text-white/60">“{{ f.note }}”</p>
+                </li>
+              </ul>
+
+              <!-- Decide -->
+              <div class="mt-3 flex flex-wrap gap-2">
+                <button type="button" :disabled="clearing === item.property.id" class="rounded-full px-4 py-1.5 text-xs font-semibold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold disabled:opacity-50 dark:text-white dark:ring-white/20 transition" @click="looksFine(item)">
+                  {{ clearing === item.property.id ? 'Saving…' : item.paused ? 'Looks fine, put it back live' : 'Looks fine' }}
+                </button>
+                <button v-if="item.property.status === 'published'" type="button" class="rounded-full px-4 py-1.5 text-xs font-semibold text-amber-700 ring-1 ring-amber-300 hover:bg-amber-500/10 dark:text-amber-400 dark:ring-amber-400/40 transition" @click="openModeration('unpublish', item.property)">Take down</button>
+                <button v-else type="button" class="rounded-full px-4 py-1.5 text-xs font-semibold text-red-600 ring-1 ring-red-300 hover:bg-red-500/10 dark:text-red-400 dark:ring-red-400/40 transition" @click="openModeration('delete', item.property)">Delete listing</button>
+                <button v-if="item.property.agent" type="button" class="rounded-full px-4 py-1.5 text-xs font-semibold text-red-600 ring-1 ring-red-300 hover:bg-red-500/10 dark:text-red-400 dark:ring-red-400/40 transition" @click="sanctionTarget = item.property.agent!">Take action on agent</button>
+              </div>
+            </li>
+          </ul>
+        </div>
+
         <!-- ── Rows ── -->
-        <div class="rounded-3xl bg-white dark:bg-[#0B1A35] ring-1 ring-brand-navy/[0.07] dark:ring-white/[0.08]">
+        <div v-else class="rounded-3xl bg-white dark:bg-[#0B1A35] ring-1 ring-brand-navy/[0.07] dark:ring-white/[0.08]">
           <div v-if="loading && !properties.length" class="p-4 space-y-2">
             <AppSkeleton v-for="i in 5" :key="i" width="100%" height="68px" />
           </div>
@@ -333,7 +473,7 @@ const selectCls = 'appearance-none bg-none rounded-full border-0 bg-white dark:b
         </div>
 
         <!-- Pagination -->
-        <div v-if="pagination && pagination.last_page > 1" class="flex items-center justify-center gap-3 mt-5">
+        <div v-if="tab !== 'flagged' && pagination && pagination.last_page > 1" class="flex items-center justify-center gap-3 mt-5">
           <button type="button" :disabled="pagination.current_page <= 1" class="h-9 w-9 flex items-center justify-center rounded-full ring-1 ring-brand-navy/15 text-brand-navy hover:ring-brand-gold dark:text-white dark:ring-white/20 disabled:opacity-40 disabled:cursor-not-allowed" aria-label="Previous page" @click="goPage(pagination.current_page - 1)">
             <svg class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M15 19l-7-7 7-7" /></svg>
           </button>
@@ -511,6 +651,7 @@ const selectCls = 'appearance-none bg-none rounded-full border-0 bg-white dark:b
       @close="moderate = null"
       @done="onModerated"
     />
+    <AgentSanctionDialog :open="!!sanctionTarget" :agent="sanctionTarget" @close="sanctionTarget = null" @done="onSanctioned" />
 
   </div>
 </template>

@@ -52,8 +52,8 @@ const greeting = computed(() => {
 const today = new Date().toLocaleDateString('en-PH', { weekday: 'long', month: 'long', day: 'numeric' })
 
 /* ── Needs your attention ── */
-const att = computed(() => ({ flagged_reviews: 0, ...(overview.value?.attention ?? { applications: 0, hidden_reviews: 0, unpublished: 0, support: 0, viewings: 0 }) }))
-const toDo = computed(() => att.value.applications + att.value.support + att.value.hidden_reviews + att.value.unpublished + att.value.viewings + (att.value.flagged_reviews ?? 0))
+const att = computed(() => ({ flagged_reviews: 0, flagged_listings: 0, ...(overview.value?.attention ?? { applications: 0, hidden_reviews: 0, unpublished: 0, support: 0, viewings: 0 }) }))
+const toDo = computed(() => att.value.applications + att.value.support + att.value.hidden_reviews + att.value.unpublished + att.value.viewings + (att.value.flagged_reviews ?? 0) + (att.value.flagged_listings ?? 0))
 const QUEUES = computed(() => [
   { label: 'Support tickets', hint: 'People waiting for a reply', count: att.value.support, href: '/admin/support', loud: true,
     icon: 'M18.364 5.636l-3.536 3.536m0 5.656l3.536 3.536M9.172 9.172L5.636 5.636m3.536 9.192l-3.536 3.536M21 12a9 9 0 11-18 0 9 9 0 0118 0zm-5 0a4 4 0 11-8 0 4 4 0 018 0z' },
@@ -61,6 +61,8 @@ const QUEUES = computed(() => [
     icon: 'M9 12.75L11.25 15 15 9.75m-3-7.036A11.959 11.959 0 013.598 6 11.99 11.99 0 003 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285z' },
   { label: 'Viewing behaviour', hint: 'Paused or close to the limit', count: att.value.viewings, href: '/admin/viewings', loud: false,
     icon: 'M6.75 3v2.25M17.25 3v2.25M3 18.75V7.5a2.25 2.25 0 012.25-2.25h13.5A2.25 2.25 0 0121 7.5v11.25m-18 0A2.25 2.25 0 005.25 21h13.5A2.25 2.25 0 0021 18.75m-18 0v-7.5A2.25 2.25 0 015.25 9h13.5A2.25 2.25 0 0121 11.25v7.5' },
+  { label: 'Flagged listings', hint: 'Found by RealtyLink AI or reported', count: att.value.flagged_listings ?? 0, href: '/admin/listings?tab=flagged', loud: true,
+    icon: 'M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z' },
   { label: 'Flagged reviews', hint: 'May come from fake accounts', count: att.value.flagged_reviews ?? 0, href: '/admin/reviews', loud: true,
     icon: 'M3 3v1.5M3 21v-6m0 0l2.77-.693a9 9 0 016.208.682l.108.054a9 9 0 006.086.71l3.114-.732a48.524 48.524 0 01-.005-10.499l-3.11.732a9 9 0 01-6.085-.711l-.108-.054a9 9 0 00-6.208-.682L3 4.5M3 15V4.5' },
   { label: 'Hidden reviews', hint: 'Taken off agent profiles', count: att.value.hidden_reviews, href: '/admin/reviews', loud: false,

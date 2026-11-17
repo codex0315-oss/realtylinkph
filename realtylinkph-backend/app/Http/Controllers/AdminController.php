@@ -138,6 +138,8 @@ class AdminController extends Controller
                 'unpublished' => Property::where('status', 'draft')->whereNotNull('unpublish_reason')->count(),
                 'draft'       => Property::where('status', 'draft')->whereNull('unpublish_reason')->count(),
                 'sold'        => Property::where('status', 'sold')->count(),
+                // Listings RealtyLink AI flagged or buyers reported, waiting for an admin.
+                'review'      => \App\Models\PropertyFlag::open()->distinct('property_id')->count('property_id'),
             ],
             'flagged'      => $flagged->take(6),
             'flagged_total' => $flagged->count(),
@@ -292,6 +294,7 @@ class AdminController extends Controller
                 'applications'   => AgentProfile::pending()->count(),
                 'hidden_reviews' => AgentReview::where('is_visible', false)->count(),
                 'flagged_reviews' => AgentReview::whereNotNull('flagged_at')->whereNull('flag_cleared_at')->count(),
+                'flagged_listings' => \App\Models\PropertyFlag::open()->distinct('property_id')->count('property_id'),
                 // An admin unpublish sends the listing back to draft with a reason.
                 'unpublished'    => Property::where('status', 'draft')->whereNotNull('unpublish_reason')->count(),
                 'support'        => \App\Models\SupportTicket::where('status', 'open')->count(),
@@ -499,6 +502,51 @@ class AdminController extends Controller
         return ApiResponse::success(AgentProfileResource::make($profile->load('user')), 'Re-checking the documents.', 202);
     }
 
+    /**
+     * Listings RealtyLink AI flagged or buyers reported: paused ones first, then
+     * the newest. Each with every open flag, so the admin sees all reasons at once.
+     */
+    public function listingFlags(): JsonResponse
+    {
+        $flags = \App\Models\PropertyFlag::with(['reporter:id,name'])->open()->latest()->get();
+        $properties = Property::with(['agent', 'photos'])->whereIn('id', $flags->pluck('property_id')->unique())->get()->keyBy('id');
+        $labels = \App\Services\ListingIntegrityService::LABELS;
+
+        $items = $flags->groupBy('property_id')->map(function ($group, $pid) use ($properties, $labels) {
+            $p = $properties[$pid] ?? null;
+            if (! $p) {
+                return null;
+            }
+
+            return [
+                'property'  => PropertyResource::make($p),
+                'paused'    => $group->contains('paused', true),
+                'reports'   => $group->where('source', 'report')->count(),
+                'latest_at' => $group->max('created_at')?->toISOString(),
+                'flags'     => $group->map(fn ($f) => [
+                    'id'       => $f->id,
+                    'source'   => $f->source,
+                    'reasons'  => collect($f->reasons)->map(fn ($r) => ['code' => $r, 'label' => $labels[$r] ?? $r])->values(),
+                    'details'  => $f->details,
+                    'note'     => $f->note,
+                    'reporter' => $f->reporter?->name,
+                    'paused'   => $f->paused,
+                    'at'       => $f->created_at?->toISOString(),
+                ])->values(),
+            ];
+        })->filter()->sortByDesc(fn ($i) => [$i['paused'] ? 1 : 0, $i['latest_at']])->values();
+
+        return ApiResponse::success($items, 'Flagged listings retrieved.');
+    }
+
+    /** "Looks fine": close the listing's flags (a paused listing goes live again). */
+    public function clearListingFlags(Request $request, Property $property, \App\Services\ListingIntegrityService $integrity): JsonResponse
+    {
+        $integrity->clear($property, $request->user());
+
+        return ApiResponse::success(null, 'Flags cleared.');
+    }
+
     /** "Looks fine": an admin checked a flagged review and is keeping it. */
     public function clearReviewFlag(Request $request, AgentReview $review): JsonResponse
     {
@@ -615,6 +663,7 @@ class AdminController extends Controller
             'unpublish_reason' => $data['reason'],
             'unpublished_at'   => now(),
         ]);
+        app(\App\Services\ListingIntegrityService::class)->markActioned($property, $request->user());
 
         $property->loadMissing('agent');
 
@@ -648,6 +697,7 @@ class AdminController extends Controller
         );
 
         $property->loadMissing('agent');
+        app(\App\Services\ListingIntegrityService::class)->markActioned($property, $request->user());
         $title = $property->title ?: "Untitled listing #{$property->id}";
         AdminAudit::log('listing.deleted', $property, $title, [
             'agent'  => $property->agent?->name,

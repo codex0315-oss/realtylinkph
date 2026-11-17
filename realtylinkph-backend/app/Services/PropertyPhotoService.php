@@ -30,7 +30,7 @@ class PropertyPhotoService
 
             $nextOrder = $property->photos()->max('sort_order') + 1;
 
-            return PropertyPhoto::create([
+            $photo = PropertyPhoto::create([
                 'property_id' => $property->id,
                 'url'         => $path,
                 'thumb_url'   => $thumbPath,
@@ -38,6 +38,17 @@ class PropertyPhotoService
                 'is_360'      => $is360,
                 'sort_order'  => $nextOrder,
             ]);
+            // Picture fingerprint, so the same photo on another listing is noticed.
+            if (! $is360) {
+                $photo->forceFill(['phash' => \App\Support\ImageHash::fromFile($file->getRealPath())])->saveQuietly();
+            }
+
+            // A new photo on a live listing is checked again.
+            if ($property->status === 'published') {
+                \App\Jobs\ScanListing::dispatch($property->id)->afterCommit();
+            }
+
+            return $photo;
         });
     }
 

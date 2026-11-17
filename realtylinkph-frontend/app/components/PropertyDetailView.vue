@@ -30,6 +30,7 @@ async function messageAgent() {
 }
 
 const showInquiry = ref(false)
+const showReport  = ref(false)
 const showBooking = ref(false)
 /* ?book=1 (Saved's "Book viewing") opens the booking dialog on arrival. */
 onMounted(() => {
@@ -574,6 +575,16 @@ onMounted(async () => {
                 <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M12 15v2m-6 4h12a2 2 0 002-2v-6a2 2 0 00-2-2H6a2 2 0 00-2 2v6a2 2 0 002 2zm10-10V7a4 4 0 00-8 0v4h8z" /></svg>
                 Sign in to view contact details
               </button>
+              <!-- Report: goes to the same admin queue as RealtyLink AI's flags -->
+              <button
+                v-if="!isOwner && property.status === 'published' && !authStore.isAdmin"
+                type="button"
+                class="mt-4 flex items-center gap-1.5 text-xs font-semibold text-brand-navy/50 hover:text-red-600 dark:text-white/45 dark:hover:text-red-400 transition-colors"
+                @click="authStore.isAuthenticated ? (showReport = true) : openAuth('login')"
+              >
+                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3v1.5M3 21v-6m0 0l2.77-.693a9 9 0 016.208.682l.108.054a9 9 0 006.086.71l3.114-.732a48.524 48.524 0 01-.005-10.499l-3.11.732a9 9 0 01-6.085-.711l-.108-.054a9 9 0 00-6.208-.682L3 4.5M3 15V4.5" /></svg>
+                Report this listing
+              </button>
               </div>
             </div>
           </div>
@@ -640,6 +651,7 @@ onMounted(async () => {
 
     <!-- Inquiry: form → sending → sent / error, all in one dialog -->
     <PropertyInquiryDialog v-if="property" :open="showInquiry" :property="property" @close="showInquiry = false" />
+    <ReportListingDialog v-if="property" :open="showReport" :property="property" @close="showReport = false" />
 
     <!-- Schedule a viewing: pick → review → sent / error, all in one dialog -->
     <ScheduleViewingDialog v-if="property" :open="showBooking" :property="property" @close="showBooking = false" />

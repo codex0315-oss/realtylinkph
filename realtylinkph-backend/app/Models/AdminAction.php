@@ -23,6 +23,7 @@ class AdminAction extends Model
         'agent.suspension_lifted' => 'Lifted agent suspension',
         'agent.revoked'       => 'Revoked agent verification',
         'review.flag_cleared' => 'Cleared a review flag',
+        'listing.flags_cleared' => 'Cleared listing flags',
         'listing.unpublished' => 'Unpublished listing',
         'listing.deleted'     => 'Deleted listing',
         'review.hidden'       => 'Hid review',

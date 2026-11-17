@@ -20,3 +20,6 @@ Schedule::command('agents:purge-rejected-documents')->hourly();
 // unlocks the buyer's review; unanswered requests → cancelled as expired).
 Schedule::command('appointments:send-reminders')->hourly();
 Schedule::command('appointments:complete-past')->hourly();
+
+// Daily email to admins: listings RealtyLink AI flagged or buyers reported (8:00 AM Manila).
+Schedule::command('listings:flag-digest')->dailyAt('08:00')->timezone('Asia/Manila');

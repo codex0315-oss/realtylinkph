@@ -121,6 +121,9 @@ async function sell(prop: Property) {
   await fetchMyListings()
 }
 
+/** RealtyLink AI paused it (money asked before a viewing): only an admin can put it back. */
+const isPaused = (prop: Property) => !!prop.unpublish_reason?.startsWith('Paused for review')
+
 async function publish(prop: Property) {
   const ok = await confirm({
     title:   'Publish this listing?',
@@ -350,9 +353,9 @@ function statusOf(p: Property) {
 
           <!-- Admin take-down: the reason stays here until the agent re-publishes -->
           <div v-if="prop.status === 'draft' && prop.unpublish_reason" class="mt-3 rounded-2xl bg-red-500/[0.07] ring-1 ring-red-500/20 px-3.5 py-2.5 text-xs leading-relaxed text-red-800 dark:text-red-300">
-            <p class="font-bold">Taken down by an admin</p>
-            <p class="mt-0.5">{{ prop.unpublish_reason }}</p>
-            <p class="mt-1 text-red-700/80 dark:text-red-300/80">Fix it, then publish again.</p>
+            <p class="font-bold">{{ isPaused(prop) ? 'Paused for review' : 'Taken down by an admin' }}</p>
+            <p class="mt-0.5">{{ isPaused(prop) ? 'This listing appears to ask buyers for money before a viewing.' : prop.unpublish_reason }}</p>
+            <p class="mt-1 text-red-700/80 dark:text-red-300/80">{{ isPaused(prop) ? 'An administrator will check it and you will be notified. Buyers should never pay before a viewing; remove any such request from the description.' : 'Fix it, then publish again.' }}</p>
           </div>
           <p v-else-if="prop.status === 'draft' && prop.is_complete === false" class="mt-3 rounded-2xl bg-amber-500/[0.08] ring-1 ring-amber-500/20 px-3.5 py-2.5 text-xs text-amber-800 dark:text-amber-300">
             Half-finished. It needs a title, price, address and a photo before it can go live.
@@ -369,11 +372,15 @@ function statusOf(p: Property) {
               class="flex-1 rounded-full bg-brand-gold py-2 text-center text-xs font-bold text-[#0B2A5C] shadow-[0_4px_14px_rgba(212,165,74,0.35)] hover:bg-brand-gold-light transition"
             >Continue</NuxtLink>
             <button
-              v-else-if="prop.status === 'draft'"
+              v-else-if="prop.status === 'draft' && !isPaused(prop)"
               type="button"
               class="flex-1 rounded-full bg-brand-gold py-2 text-xs font-bold text-[#0B2A5C] shadow-[0_4px_14px_rgba(212,165,74,0.35)] hover:bg-brand-gold-light transition"
               @click="publish(prop)"
             >Publish</button>
+            <span
+              v-else-if="isPaused(prop)"
+              class="flex-1 rounded-full bg-red-500/10 py-2 text-center text-xs font-bold text-red-700 dark:text-red-300"
+            >Waiting for review</span>
             <NuxtLink
               v-else
               :to="propertyHref(prop.id)"
