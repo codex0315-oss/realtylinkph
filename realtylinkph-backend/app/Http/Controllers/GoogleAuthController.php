@@ -181,7 +181,7 @@ class GoogleAuthController extends Controller
         $token = $user->createToken('api')->plainTextToken;
 
         return ApiResponse::success([
-            'user'  => UserResource::make($user->load('agentProfile')),
+            'user'  => UserResource::forOwner($user->load('agentProfile')),
             'token' => $token,
         ], 'Signed in with Google.', 200);
     }

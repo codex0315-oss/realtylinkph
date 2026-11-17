@@ -52,6 +52,16 @@ class AuthWorkflowTest extends TestCase
         $this->asGuest()->withToken($token)->getJson('/api/me')->assertUnauthorized();
     }
 
+    /** The sign-in response carries the user's own account fields, or the app nags "Verify your email". */
+    public function test_signing_in_returns_the_users_own_email_verified_status(): void
+    {
+        $this->buyer(['email' => 'verified@example.com', 'password' => bcrypt('Secret123')]);
+
+        $res = $this->postJson('/api/login', ['email' => 'verified@example.com', 'password' => 'Secret123'])->assertOk();
+        $this->assertNotNull($res->json('data.user.email_verified_at'));
+        $res->assertJsonPath('data.user.password_set', true);
+    }
+
     public function test_wrong_password_is_rejected_and_registration_is_validated(): void
     {
         $this->buyer(['email' => 'ana@example.com', 'password' => 'Correct123']);

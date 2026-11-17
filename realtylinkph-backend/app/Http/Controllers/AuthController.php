@@ -46,7 +46,7 @@ class AuthController extends Controller
         $token = $user->createToken('api')->plainTextToken;
 
         return ApiResponse::success([
-            'user'  => UserResource::make($user),
+            'user'  => UserResource::forOwner($user),
             'token' => $token,
         ], 'Registration successful. Please verify your email.', 201);
     }
@@ -94,7 +94,7 @@ class AuthController extends Controller
         $token = $user->createToken('api')->plainTextToken;
 
         return ApiResponse::success([
-            'user'  => UserResource::make($user->load('agentProfile')),
+            'user'  => UserResource::forOwner($user->load('agentProfile')),
             'token' => $token,
         ], 'Login successful.', 200);
     }
@@ -131,7 +131,7 @@ class AuthController extends Controller
         }
 
         return ApiResponse::success([
-            'user'  => UserResource::make($result->load('agentProfile')),
+            'user'  => UserResource::forOwner($result->load('agentProfile')),
             'token' => $result->createToken('api')->plainTextToken,
             // "Trust this device": the browser keeps this key and skips the code for a while.
             'device_token' => ! empty($data['remember']) ? $this->twoFactor->trustDevice($result, $request->userAgent()) : null,

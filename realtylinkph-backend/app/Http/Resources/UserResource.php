@@ -11,12 +11,31 @@ use Illuminate\Http\Resources\Json\JsonResource;
 
 class UserResource extends JsonResource
 {
+    /** Set by forOwner(): the response goes to this user themselves. */
+    private bool $owner = false;
+
+    /**
+     * The user's own account, for sign-in / register responses. Those requests
+     * carry no token yet, so without this the owner-only fields (email
+     * verified, password set, theme...) were left out and the app showed
+     * "Verify your email" to people who already had.
+     */
+    public static function forOwner(User $user): static
+    {
+        $resource = static::make($user);
+        $resource->owner = true;
+
+        return $resource;
+    }
+
     public function toArray(Request $request): array
     {
         $viewer = $request->user('sanctum');
+        $isSelf = $this->owner || ($viewer !== null && $viewer->id === $this->id);
+        $isAdmin = $viewer !== null && $viewer->isAdmin();
         // Account settings are for the owner (and an admin), not for everyone
         // who sees this person as a listing's agent or a chat partner.
-        $ownerOrAdmin = $viewer !== null && ($viewer->id === $this->id || $viewer->isAdmin());
+        $ownerOrAdmin = $isSelf || $isAdmin;
 
         return [
             'id'                 => $this->id,
@@ -31,7 +50,7 @@ class UserResource extends JsonResource
             'property_alerts'    => $this->when($ownerOrAdmin, fn () => (bool) $this->property_alerts),
             'has_gcal'           => $this->when($ownerOrAdmin, fn () => $this->google_access_token !== null),
             // False for "Continue with Google" sign-ups who never set one.
-            'password_set'       => $this->when($request->user('sanctum')?->id === $this->id, fn () => $this->password_set !== false),
+            'password_set'       => $this->when($isSelf, fn () => $this->password_set !== false),
             'email_verified_at'  => $this->when($ownerOrAdmin, fn () => $this->email_verified_at?->toISOString()),
             'last_seen_at'       => $this->last_seen_at?->toISOString(),
             'is_online'          => $this->isOnline(),
@@ -41,9 +60,7 @@ class UserResource extends JsonResource
              * but never published on a buyer's public identity.
              */
             'reliability'        => $this->when(
-                $request->user('sanctum')?->id === $this->id
-                    || $request->user('sanctum')?->isAdmin()
-                    || $request->user('sanctum')?->role_type === 'agent',
+                $ownerOrAdmin || $viewer?->role_type === 'agent',
                 fn () => $this->viewingReliability(),
             ),
             // Agent's listings suspended by an admin (AgentSanctionService): owner and admins.
@@ -52,12 +69,12 @@ class UserResource extends JsonResource
                 fn () => $this->listingSuspendedUntil()?->toISOString(),
             ),
             'booking_locked_until' => $this->when(
-                $request->user('sanctum')?->id === $this->id || $request->user('sanctum')?->isAdmin(),
+                $ownerOrAdmin,
                 fn () => $this->bookingLockedUntil()?->toISOString(),
             ),
             // Their own strike count, so they can see where they stand before it matters.
             'viewing_strikes'    => $this->when(
-                $request->user('sanctum')?->id === $this->id || $request->user('sanctum')?->isAdmin(),
+                $ownerOrAdmin,
                 fn () => ['count' => $this->recentStrikes(), 'limit' => User::STRIKE_LIMIT, 'window_days' => User::STRIKE_WINDOW_DAYS],
             ),
             'created_at'         => $this->created_at?->toISOString(),
