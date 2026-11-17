@@ -41,6 +41,7 @@ class AuthController extends Controller
         ]);
 
         event(new Registered($user));
+        \App\Support\AccountSignals::record($user, $request, 'register');
 
         $token = $user->createToken('api')->plainTextToken;
 
@@ -89,6 +90,7 @@ class AuthController extends Controller
             return $this->twoFactorChallenge($user);
         }
 
+        \App\Support\AccountSignals::record($user, $request, 'login');
         $token = $user->createToken('api')->plainTextToken;
 
         return ApiResponse::success([

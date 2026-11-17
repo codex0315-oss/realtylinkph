@@ -12,6 +12,11 @@ definePageMeta({ layout: 'dashboard', middleware: 'agent' })
 const { properties, loading, error, fetchMyListings, deleteProperty, publishProperty, unpublishProperty, markSold } = useProperty()
 const confirm = useConfirm()
 const toast   = useToast()
+// Listings suspended by an admin (e.g. for fake reviews): no new or published listings until then.
+const suspendedUntil = computed(() => {
+  const iso = useAuthStore().user?.listing_suspended_until
+  return iso ? new Date(iso).toLocaleDateString('en-PH', { month: 'long', day: 'numeric', year: 'numeric' }) : null
+})
 const propertyHref = usePropertyHref()
 
 /* Not awaited: the page opens at once (with placeholder cards) instead of
@@ -212,13 +217,22 @@ function statusOf(p: Property) {
           <template v-else>Manage the properties you've listed on RealtyLink PH.</template>
         </p>
       </div>
-      <DashCta to="/dashboard/listings/new">
+      <DashCta v-if="!suspendedUntil" to="/dashboard/listings/new">
         <svg class="h-4 w-4 transition-transform duration-300 group-hover:rotate-90" fill="none" viewBox="0 0 24 24" stroke="currentColor">
           <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M12 4v16m8-8H4" />
         </svg>
         New listing
       </DashCta>
     </header>
+
+    <!-- Suspended by an admin -->
+    <div v-if="suspendedUntil" class="mb-6 flex items-start gap-3 rounded-2xl bg-red-500/[0.07] ring-1 ring-red-500/20 px-4 py-3" role="status">
+      <svg class="mt-0.5 h-5 w-5 flex-none text-red-600 dark:text-red-400" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M12 9v3.75m-9.303 3.376c-.866 1.5.217 3.374 1.948 3.374h14.71c1.73 0 2.813-1.874 1.948-3.374L13.949 3.378c-.866-1.5-3.032-1.5-3.898 0L2.697 16.126zM12 15.75h.007v.008H12v-.008z" /></svg>
+      <div class="min-w-0 text-sm">
+        <p class="font-semibold text-red-800 dark:text-red-300">Your listings are suspended until {{ suspendedUntil }}</p>
+        <p class="mt-0.5 text-red-800/80 dark:text-red-300/80">An administrator took your listings down. The reason is shown on each listing and in your notifications. You can publish again after that date. Viewings and messages still work.</p>
+      </div>
+    </div>
 
     <!-- Toolbar -->
     <div v-if="properties.length" class="mb-6 flex flex-col gap-3 cw-lg:flex-row cw-lg:items-center">

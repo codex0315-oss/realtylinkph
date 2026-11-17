@@ -17,6 +17,13 @@ export interface AgentReview {
   /** When hidden: why (admin + the reviewer), who (admin only), and when. */
   hidden_reason?: string | null
   hidden_by?: string | null
+  /** Admin-only: why this review may come from a fake account (ReviewIntegrityService). */
+  flag?: {
+    reasons: Array<{ code: string; label: string }>
+    flagged_at: string | null
+    cleared_at: string | null
+    cleared_by: string | null
+  }
   hidden_at?: string | null
   /** "Verified viewing" badge — the review rests on a viewing that took place. */
   is_verified?: boolean
@@ -42,6 +49,10 @@ export interface ReviewEligibility {
   conversation_id: number | null
   /** The buyer's existing review of this agent, if any (→ offer Edit). */
   review: AgentReview | null
+  /** Has a viewing but can't review yet: unverified email, or account too new. */
+  blocked?: 'verify_email' | 'account_age' | null
+  /** When an account that's too new can review (ISO). */
+  available_at?: string | null
 }
 
 /** Homepage testimonial (GET /reviews/featured) — a public, contact-free shape. */

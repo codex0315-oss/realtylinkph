@@ -50,9 +50,15 @@ const basisText = computed(() => {
   switch (e.basis) {
     case 'viewing':         return `You viewed ${a?.property?.title ?? 'a property'} with ${agentFirst.value} on ${when}.`
     case 'agent_cancelled': return `Your viewing on ${when} was cancelled or never confirmed by ${agentFirst.value} — you can rate that experience.`
-    case 'conversation':    return `You've chatted with ${agentFirst.value}. Rate how they handled your enquiry.`
     default:                return ''
   }
+})
+/* Has a viewing but can't rate yet: unverified email, or an account a few days old (anti fake-account rule). */
+const blockedText = computed(() => {
+  const e = eligibility.value
+  if (e.blocked === 'verify_email') return `Verify your email address to rate ${agentFirst.value}. This keeps reviews from throwaway accounts off agents' profiles.`
+  if (e.blocked === 'account_age' && e.available_at) return `New accounts can leave reviews after 3 days. You can rate ${agentFirst.value} from ${new Date(e.available_at).toLocaleDateString('en-PH', { month: 'short', day: 'numeric' })}.`
+  return ''
 })
 const showRate   = ref(false)
 const submitting = ref(false)
@@ -454,8 +460,12 @@ function ago(iso: string): string {
                 {{ myReview ? '✎ Edit your review' : '★ Rate this agent' }}
               </button>
             </div>
+            <div v-else-if="blockedText" class="mt-6 rounded-2xl p-4 bg-amber-500/[0.08] ring-1 ring-amber-400/30">
+              <p class="text-sm text-brand-navy/80 dark:text-white/75">{{ blockedText }}</p>
+              <NuxtLink v-if="eligibility.blocked === 'verify_email'" to="/dashboard/profile" class="mt-2 inline-flex text-xs font-semibold text-brand-gold-deep hover:underline dark:text-brand-gold">Verify my email →</NuxtLink>
+            </div>
             <p v-else-if="authStore.isBuyer" class="mt-6 text-xs text-brand-text-secondary dark:text-white/45">
-              You can rate this agent after a viewing with them, or once they've replied to you in chat.
+              You can rate this agent after a viewing with them.
             </p>
             <p v-else class="mt-6 text-xs text-brand-text-secondary dark:text-white/45">
               Only buyers who actually dealt with {{ agentFirst }} can leave a review.

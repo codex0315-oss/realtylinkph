@@ -63,6 +63,10 @@ const META: Record<string, Meta> = {
   agent_application_rejected: { cat: 'account',   icon: ICON.shield,   action: () => ({ label: 'See reason', to: '/dashboard/profile' }) },
   agent_application_on_hold:  { cat: 'account',   icon: ICON.clock,    action: () => ({ label: 'View application', to: '/dashboard/profile' }) },
   agent_application_resumed:  { cat: 'account',   icon: ICON.check,    action: () => ({ label: 'View application', to: '/dashboard/profile' }) },
+  agent_warning:              { cat: 'account',   icon: ICON.shield,   action: () => ({ label: 'Open dashboard', to: '/dashboard' }) },
+  agent_suspended:            { cat: 'listings',  icon: ICON.x,        action: () => ({ label: 'My listings', to: '/dashboard/listings' }) },
+  agent_suspension_lifted:    { cat: 'listings',  icon: ICON.check,    action: () => ({ label: 'My listings', to: '/dashboard/listings' }) },
+  agent_verification_revoked: { cat: 'account',   icon: ICON.shield,   action: () => ({ label: 'View profile', to: '/dashboard/profile' }) },
   new_agent_application:      { cat: 'account',   icon: ICON.shield,   action: () => ({ label: 'Review', to: '/admin/agents' }) },
   cover_removed:              { cat: 'account',   icon: ICON.photo,    action: () => ({ label: 'Update cover', to: '/dashboard/profile' }) },
 }

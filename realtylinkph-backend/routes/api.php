@@ -252,6 +252,9 @@ Route::middleware('auth:sanctum')->group(function (): void {
         Route::get('/reviews', [AdminController::class, 'reviews']);
         Route::get('/reviews/stats', [AdminController::class, 'reviewStats']);
         Route::post('/reviews/{review}/toggle-visibility', [ReviewController::class, 'toggleVisibility']);
+        Route::post('/reviews/{review}/clear-flag', [AdminController::class, 'clearReviewFlag']);
+        Route::get('/users/{user}/agent-sanctions', [AdminController::class, 'agentSanctions']);
+        Route::post('/users/{user}/agent-sanctions', [AdminController::class, 'sanctionAgent'])->middleware('throttle:20,1');
         Route::get('/agent-applications', [AgentVerificationController::class, 'pending']);
         Route::post('/agent-applications/{profile}/review', [AgentVerificationController::class, 'review']);
         Route::post('/agent-applications/{profile}/recheck', [AdminController::class, 'recheckApplication'])->middleware('throttle:10,1');

@@ -114,10 +114,35 @@ async function openDetails(u: User) {
   drawerUser.value = u
   details.value = null
   detailsLoading.value = true
-  details.value = await fetchUser(u.id)
+  integrity.value = null
+  const [d] = await Promise.all([fetchUser(u.id), u.agent_profile ? loadIntegrity(u.id) : Promise.resolve()])
+  details.value = d
   detailsLoading.value = false
 }
 function closeDetails() { drawerUser.value = null }
+
+/* ── Agent integrity: warnings, listing suspensions, revoked verification ── */
+interface Integrity {
+  suspended_until: string | null
+  revoked: boolean
+  flagged_reviews: number
+  history: Array<{ id: number; type: 'warning' | 'suspension' | 'revocation' | 'lift'; reason: string; until: string | null; lifted_at: string | null; by: string | null; at: string | null }>
+}
+const integrity = ref<Integrity | null>(null)
+const sanctionOpen = ref(false)
+async function loadIntegrity(id: number) {
+  try { integrity.value = (await api.get<{ data: Integrity }>(`/admin/users/${id}/agent-sanctions`)).data } catch { integrity.value = null }
+}
+async function onSanctioned(summary: unknown) {
+  sanctionOpen.value = false
+  integrity.value = summary as Integrity
+  if (drawerUser.value) {
+    const fresh = await fetchUser(drawerUser.value.id)
+    if (fresh) { details.value = fresh; drawerUser.value = { ...drawerUser.value, ...fresh.user } }
+  }
+}
+const SANCTION_LABEL: Record<string, string> = { warning: 'Warning', suspension: 'Listings suspended', revocation: 'Verification revoked', lift: 'Suspension lifted' }
+const shortDay = (iso?: string | null) => (iso ? new Date(iso).toLocaleDateString('en-PH', { month: 'short', day: 'numeric', year: 'numeric' }) : '')
 const counts = computed(() => {
   const c = details.value?.counts
   const u = drawerUser.value
@@ -777,6 +802,31 @@ function since(iso: string): string {
                   <NuxtLink v-if="drawerUser.agent_profile.status === 'pending'" to="/admin/agents" class="mt-3 inline-flex rounded-full bg-brand-gold px-4 py-1.5 text-xs font-bold text-[#0B2A5C] hover:bg-brand-gold-light transition">Review application</NuxtLink>
                 </section>
 
+                <!-- Agent integrity -->
+                <section v-if="drawerUser.agent_profile && integrity" class="mt-4 rounded-2xl p-4 ring-1 ring-brand-navy/[0.08] dark:ring-white/10">
+                  <div class="flex flex-wrap items-center justify-between gap-2">
+                    <p class="text-sm font-bold text-brand-navy dark:text-white">Agent integrity</p>
+                    <span class="rounded-full px-2 py-0.5 text-[0.6875rem] font-semibold"
+                          :class="integrity.revoked ? 'bg-red-500/10 text-red-600 dark:text-red-400' : integrity.suspended_until ? 'bg-amber-500/10 text-amber-700 dark:text-amber-400' : 'bg-emerald-500/10 text-emerald-700 dark:text-emerald-400'">
+                      {{ integrity.revoked ? 'Verification revoked' : integrity.suspended_until ? `Suspended until ${shortDay(integrity.suspended_until)}` : 'Good standing' }}
+                    </span>
+                  </div>
+                  <NuxtLink v-if="integrity.flagged_reviews" to="/admin/reviews" class="mt-2 inline-flex items-center gap-1.5 text-xs font-semibold text-amber-700 hover:underline dark:text-amber-400">
+                    {{ integrity.flagged_reviews }} flagged {{ integrity.flagged_reviews === 1 ? 'review' : 'reviews' }} to check →
+                  </NuxtLink>
+                  <ul v-if="integrity.history.length" class="mt-3 space-y-2">
+                    <li v-for="h in integrity.history.slice(0, 4)" :key="h.id" class="text-xs">
+                      <p class="font-semibold text-brand-navy dark:text-white">
+                        {{ SANCTION_LABEL[h.type] }}<template v-if="h.type === 'suspension' && h.until"> until {{ shortDay(h.until) }}</template>
+                        <span class="font-normal text-brand-navy/50 dark:text-white/45"> · {{ shortDay(h.at) }}<template v-if="h.by"> · {{ h.by }}</template></span>
+                      </p>
+                      <p class="text-brand-navy/65 dark:text-white/60">“{{ h.reason }}”</p>
+                    </li>
+                  </ul>
+                  <p v-else class="mt-2 text-xs text-brand-navy/55 dark:text-white/50">No warnings or suspensions.</p>
+                  <button v-if="!integrity.revoked && drawerUser.role_type === 'agent'" type="button" class="mt-3 rounded-full px-4 py-1.5 text-xs font-semibold text-amber-800 ring-1 ring-amber-400/50 hover:bg-amber-500/10 dark:text-amber-300 transition" @click="sanctionOpen = true">Take action…</button>
+                </section>
+
                 <!-- Activity counts -->
                 <p class="mt-6 mb-2 text-[0.6875rem] font-bold uppercase tracking-[0.16em] text-brand-navy/45 dark:text-white/40">On RealtyLink</p>
                 <div v-if="detailsLoading" class="grid grid-cols-2 gap-2">
@@ -814,6 +864,7 @@ function since(iso: string): string {
       </Transition>
     </Teleport>
 
+    <AgentSanctionDialog :open="sanctionOpen" :agent="drawerUser" :suspended-until="integrity?.suspended_until" @close="sanctionOpen = false" @done="onSanctioned" />
   </div>
 </template>
 

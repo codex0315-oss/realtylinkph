@@ -163,6 +163,8 @@ class AdminController extends Controller
 
         $query = AgentReview::with(['agent', 'buyer', 'appointment.property.photos'])
             ->when($request->query('visible') !== null, fn ($q) => $q->where('is_visible', $request->boolean('visible')))
+            // Possible fake-account reviews still waiting for an admin to look at them.
+            ->when($request->boolean('flagged'), fn ($q) => $q->whereNotNull('flagged_at')->whereNull('flag_cleared_at'))
             ->when(in_array($stars, ['3', '4', '5'], true), fn ($q) => $q->where('rating', (int) $stars))
             ->when($stars === 'low', fn ($q) => $q->where('rating', '<=', 2))
             ->when($search !== '', fn ($q) => $q->where(fn ($w) => $w
@@ -213,6 +215,7 @@ class AdminController extends Controller
                 'all'     => AgentReview::count(),
                 'visible' => (clone $visible)->count(),
                 'hidden'  => AgentReview::where('is_visible', false)->count(),
+                'flagged' => AgentReview::whereNotNull('flagged_at')->whereNull('flag_cleared_at')->count(),
             ],
             'average' => round((float) (clone $visible)->avg('rating'), 1),
             'spread'  => collect([5, 4, 3, 2, 1])->mapWithKeys(fn ($n) => [$n => (int) ($spread[$n] ?? 0)]),
@@ -288,6 +291,7 @@ class AdminController extends Controller
             'attention' => [
                 'applications'   => AgentProfile::pending()->count(),
                 'hidden_reviews' => AgentReview::where('is_visible', false)->count(),
+                'flagged_reviews' => AgentReview::whereNotNull('flagged_at')->whereNull('flag_cleared_at')->count(),
                 // An admin unpublish sends the listing back to draft with a reason.
                 'unpublished'    => Property::where('status', 'draft')->whereNotNull('unpublish_reason')->count(),
                 'support'        => \App\Models\SupportTicket::where('status', 'open')->count(),
@@ -493,6 +497,62 @@ class AdminController extends Controller
         AssessAgentApplication::dispatch($profile->id);
 
         return ApiResponse::success(AgentProfileResource::make($profile->load('user')), 'Re-checking the documents.', 202);
+    }
+
+    /** "Looks fine": an admin checked a flagged review and is keeping it. */
+    public function clearReviewFlag(Request $request, AgentReview $review): JsonResponse
+    {
+        abort_if($review->flagged_at === null, 422, 'This review is not flagged.');
+        $review->forceFill(['flag_cleared_at' => now(), 'flag_cleared_by' => $request->user()->name])->saveQuietly();
+        $review->loadMissing(['agent', 'buyer']);
+        AdminAudit::log('review.flag_cleared', $review, "{$review->buyer?->name} → {$review->agent?->name}", ['reasons' => $review->flag_reasons]);
+
+        return ApiResponse::success(\App\Http\Resources\ReviewResource::make($review->load(['agent', 'buyer', 'appointment.property.photos'])), 'Flag cleared.');
+    }
+
+    /** An agent's integrity record: current suspension and every warning / suspension / revocation. */
+    public function agentSanctions(User $user): JsonResponse
+    {
+        return ApiResponse::success($this->sanctionSummary($user), 'Agent sanctions retrieved.');
+    }
+
+    /** Warn, suspend (7/14/30 days), revoke verification, or lift a suspension. */
+    public function sanctionAgent(Request $request, User $user, \App\Services\AgentSanctionService $sanctions): JsonResponse
+    {
+        $data = $request->validate([
+            'type'   => ['required', 'in:warning,suspension,revocation,lift'],
+            'reason' => ['required', 'string', 'min:10', 'max:1000'],
+            'days'   => ['required_if:type,suspension', 'nullable', 'integer', 'in:7,14,30'],
+        ], [
+            'reason.required' => 'Please give a reason. The agent will see it.',
+            'reason.min'      => 'Please give a reason the agent can understand (at least 10 characters).',
+        ]);
+        abort_if($user->is_system || $user->isAdmin(), 422, 'Only agents can be sanctioned here.');
+        abort_unless($user->isAgent() || $data['type'] === 'warning', 422, 'This account is not an agent.');
+
+        $admin = $request->user();
+        match ($data['type']) {
+            'warning'    => $sanctions->warn($user, $data['reason'], $admin),
+            'suspension' => $sanctions->suspend($user, (int) $data['days'], $data['reason'], $admin),
+            'revocation' => $sanctions->revoke($user, $data['reason'], $admin),
+            'lift'       => $sanctions->lift($user, $data['reason'], $admin),
+        };
+
+        $msg = ['warning' => 'Warning sent.', 'suspension' => 'Listings suspended.', 'revocation' => 'Verification revoked.', 'lift' => 'Suspension lifted.'][$data['type']];
+
+        return ApiResponse::success($this->sanctionSummary($user->fresh()), $msg . ' The agent has been notified.');
+    }
+
+    private function sanctionSummary(User $user): array
+    {
+        return [
+            'suspended_until' => $user->listingSuspendedUntil()?->toISOString(),
+            'revoked'         => $user->agentProfile?->revoked_at !== null,
+            'flagged_reviews' => AgentReview::where('agent_id', $user->id)->whereNotNull('flagged_at')->whereNull('flag_cleared_at')->count(),
+            'history'         => \App\Models\AgentSanction::where('user_id', $user->id)->latest()->orderByDesc('id')->take(20)->get()
+                ->map(fn ($s) => ['id' => $s->id, 'type' => $s->type, 'reason' => $s->reason, 'until' => $s->until?->toISOString(),
+                    'lifted_at' => $s->lifted_at?->toISOString(), 'by' => $s->admin_name, 'at' => $s->created_at?->toISOString()])->values(),
+        ];
     }
 
     /** Everything the Users page's details drawer shows about one person. */

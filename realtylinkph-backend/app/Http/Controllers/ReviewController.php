@@ -101,6 +101,9 @@ class ReviewController extends Controller
             'appointments'    => AppointmentResource::collection($e['appointments']),
             'conversation_id' => $e['conversation_id'],
             'review'          => $e['review'] ? ReviewResource::make($e['review']->load(['appointment.property'])) : null,
+            // Why a buyer with a viewing can't review yet (unverified email / new account).
+            'blocked'         => $e['blocked'],
+            'available_at'    => $e['available_at']?->toISOString(),
         ], 'Review eligibility retrieved.');
     }
 

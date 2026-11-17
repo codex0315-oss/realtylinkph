@@ -14,6 +14,9 @@ class AgentProfile extends Model
     /** Hours a rejected applicant must wait before re-applying. */
     public const REAPPLY_COOLDOWN_HOURS = 12;
 
+    /** Days a revoked agent (e.g. for fake reviews) waits before applying again. */
+    public const REVOKE_COOLDOWN_DAYS = 30;
+
     protected $fillable = [
         'user_id',
         'applicant_type',
@@ -48,6 +51,7 @@ class AgentProfile extends Model
             'ai_checks'               => 'array',
             'reviewed_at'             => 'datetime',
             'held_at'                 => 'datetime',
+            'revoked_at'              => 'datetime',
             'license_check_valid_until' => 'date',
             'license_checked_at'      => 'datetime',
         ];
@@ -58,6 +62,11 @@ class AgentProfile extends Model
     {
         if ($this->status !== 'rejected' || ! $this->reviewed_at) {
             return null;
+        }
+
+        // Verification revoked by an admin: a longer wait than an ordinary rejection.
+        if ($this->revoked_at !== null) {
+            return $this->revoked_at->toImmutable()->addDays(self::REVOKE_COOLDOWN_DAYS);
         }
 
         return $this->reviewed_at->toImmutable()->addHours(self::REAPPLY_COOLDOWN_HOURS);

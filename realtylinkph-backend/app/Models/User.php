@@ -259,6 +259,21 @@ class User extends Authenticatable implements MustVerifyEmail
         ];
     }
 
+    // ─── Agent integrity (see AgentSanctionService) ──────────────────────────
+
+    public function agentSanctions(): HasMany
+    {
+        return $this->hasMany(AgentSanction::class);
+    }
+
+    /** End of a listing suspension still running, or null. */
+    public function listingSuspendedUntil(): ?\Illuminate\Support\Carbon
+    {
+        $until = AgentSanction::where('user_id', $this->id)->activeSuspension()->max('until');
+
+        return $until ? \Illuminate\Support\Carbon::parse($until) : null;
+    }
+
     public function hasGoogleCalendar(): bool
     {
         return $this->google_access_token !== null;

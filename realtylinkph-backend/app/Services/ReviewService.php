@@ -54,28 +54,38 @@ class ReviewService
         $viewings  = $appointments->filter(fn (Appointment $a) => $a->isReviewable())->values();
         $cancelled = $appointments->filter(fn (Appointment $a) => $a->wasCancelledByAgent())->values();
 
-        $conversationId = Conversation::where('buyer_id', $buyer->id)
-            ->where('agent_id', $agent->id)
-            ->whereExists(fn ($q) => $q->select(DB::raw(1))->from('messages')
-                ->whereColumn('messages.conversation_id', 'conversations.id')
-                ->where('messages.sender_id', $agent->id)
-                ->where('messages.is_ai', false))
-            ->latest('last_message_at')
-            ->value('id');
+        // A chat alone is no longer enough: a fake buyer account only needed the
+        // agent to reply "hi" to leave a rating. Reviews rest on a viewing (or a
+        // viewing the agent cancelled, so buyers can still call that out).
+        $basis = $viewings->isNotEmpty() ? 'viewing' : ($cancelled->isNotEmpty() ? 'agent_cancelled' : null);
 
-        $basis = $viewings->isNotEmpty() ? 'viewing'
-            : ($cancelled->isNotEmpty() ? 'agent_cancelled'
-            : ($conversationId ? 'conversation' : null));
+        // Throwaway accounts: the reviewer must have a confirmed email address
+        // and an account at least a few days old.
+        $blocked = null;
+        $availableAt = null;
+        if ($basis !== null && $existing === null) {
+            if (! $buyer->hasVerifiedEmail()) {
+                $blocked = 'verify_email';
+            } elseif ($buyer->created_at && $buyer->created_at->gt(now()->subDays(self::MIN_ACCOUNT_DAYS))) {
+                $blocked = 'account_age';
+                $availableAt = $buyer->created_at->copy()->addDays(self::MIN_ACCOUNT_DAYS);
+            }
+        }
 
         return [
-            'eligible'        => $basis !== null,
+            'eligible'        => $basis !== null && $blocked === null,
             'basis'           => $basis,
             'verified'        => $basis === 'viewing',
             'appointments'    => $basis === 'viewing' ? $viewings : $cancelled,
-            'conversation_id' => $conversationId,
+            'conversation_id' => null,
             'review'          => $existing,
+            'blocked'         => $blocked,
+            'available_at'    => $availableAt,
         ];
     }
+
+    /** Days an account must exist before it can leave a review. */
+    public const MIN_ACCOUNT_DAYS = 3;
 
     /**
      * Create the buyer's review of this agent. `appointment_id` (optional)
@@ -89,11 +99,17 @@ class ReviewService
 
         $e = $this->eligibility($buyer, $agent);
 
-        if (! $e['eligible']) {
-            throw new \RuntimeException('You can review an agent after a viewing with them, or once they have replied to you in chat.');
-        }
         if ($e['review'] !== null) {
             throw new \RuntimeException('You have already reviewed this agent — you can edit your review instead.');
+        }
+        if ($e['blocked'] === 'verify_email') {
+            throw new \RuntimeException('Please verify your email address before leaving a review.');
+        }
+        if ($e['blocked'] === 'account_age') {
+            throw new \RuntimeException('New accounts can leave reviews after ' . self::MIN_ACCOUNT_DAYS . ' days. You can review this agent from ' . $e['available_at']->setTimezone('Asia/Manila')->format('M j, g:i A') . '.');
+        }
+        if (! $e['eligible']) {
+            throw new \RuntimeException('You can review an agent after a viewing with them.');
         }
 
         $appointmentId = $this->pickAppointment($e, $data['appointment_id'] ?? null);
@@ -107,6 +123,9 @@ class ReviewService
             'review_text'     => $data['review_text'] ?? null,
             'is_visible'      => true,
         ]);
+
+        // Flag it for an administrator if it looks like it came from a fake account.
+        app(ReviewIntegrityService::class)->assess($review);
 
         $review->load(['appointment.property', 'buyer', 'agent']);
         $this->notifyAgent($agent, $buyer, $review, isEdit: false);

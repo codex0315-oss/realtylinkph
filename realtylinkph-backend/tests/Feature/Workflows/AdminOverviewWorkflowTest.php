@@ -194,7 +194,7 @@ class AdminOverviewWorkflowTest extends TestCase
         $this->assertSame(1, $ratings('sort=lowest')[0]);
 
         $this->getJson('/api/admin/reviews/stats')->assertOk()
-            ->assertJsonPath('data.counts', ['all' => 4, 'visible' => 3, 'hidden' => 1])
+            ->assertJsonPath('data.counts', ['all' => 4, 'visible' => 3, 'hidden' => 1, 'flagged' => 0])
             ->assertJsonPath('data.average', 3.3)
             ->assertJsonPath('data.spread.5', 1)
             ->assertJsonPath('data.spread.2', 0)

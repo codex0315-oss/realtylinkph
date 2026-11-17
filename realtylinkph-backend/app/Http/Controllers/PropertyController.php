@@ -92,6 +92,7 @@ class PropertyController extends Controller
     public function store(StorePropertyRequest $request): JsonResponse
     {
         $this->authorize('create', Property::class);
+        $this->refuseWhileSuspended($request->user());
 
         $property = $this->service->create($request->user(), $request->validated());
 
@@ -124,9 +125,19 @@ class PropertyController extends Controller
         return ApiResponse::success(null, 'Property deleted.', 200);
     }
 
+    /** An agent whose listings are suspended (AgentSanctionService) can't add or publish listings. */
+    private function refuseWhileSuspended(?\App\Models\User $user): void
+    {
+        $until = $user?->listingSuspendedUntil();
+        if ($until) {
+            abort(403, 'Your listings are suspended until ' . $until->setTimezone('Asia/Manila')->format('F j, Y') . '. You can publish again after that date.');
+        }
+    }
+
     public function publish(Property $property): JsonResponse
     {
         $this->authorize('update', $property);
+        $this->refuseWhileSuspended(request()->user());
 
         return ApiResponse::success(
             PropertyResource::make($this->service->publish($property)),

@@ -46,6 +46,11 @@ class UserResource extends JsonResource
                     || $request->user('sanctum')?->role_type === 'agent',
                 fn () => $this->viewingReliability(),
             ),
+            // Agent's listings suspended by an admin (AgentSanctionService): owner and admins.
+            'listing_suspended_until' => $this->when(
+                $ownerOrAdmin && $this->role_type === 'agent',
+                fn () => $this->listingSuspendedUntil()?->toISOString(),
+            ),
             'booking_locked_until' => $this->when(
                 $request->user('sanctum')?->id === $this->id || $request->user('sanctum')?->isAdmin(),
                 fn () => $this->bookingLockedUntil()?->toISOString(),

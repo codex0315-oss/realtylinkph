@@ -27,6 +27,9 @@ class AgentReview extends Model
             'is_visible' => 'boolean',
             'hidden_at'  => 'datetime',
             'agent_replied_at' => 'datetime',
+            'flag_reasons'     => 'array',
+            'flagged_at'       => 'datetime',
+            'flag_cleared_at'  => 'datetime',
         ];
     }
 

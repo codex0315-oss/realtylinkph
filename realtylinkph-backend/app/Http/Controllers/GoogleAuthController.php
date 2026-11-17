@@ -177,6 +177,7 @@ class GoogleAuthController extends Controller
                 : ApiResponse::success(['two_factor' => $challenge], 'Enter the code we emailed you.', 200);
         }
 
+        \App\Support\AccountSignals::record($user, $request, 'google');
         $token = $user->createToken('api')->plainTextToken;
 
         return ApiResponse::success([

@@ -27,6 +27,13 @@ class ReviewResource extends JsonResource
             'hidden_reason'  => $this->when(! $this->is_visible && $this->canSeeModeration($request), $this->hidden_reason),
             'hidden_by'      => $this->when(! $this->is_visible && ($request->user('sanctum')?->isAdmin() ?? false), $this->hidden_by),
             'hidden_at'      => $this->when(! $this->is_visible && $this->canSeeModeration($request), fn () => $this->hidden_at?->toISOString()),
+            // Possible fake-account review (ReviewIntegrityService): admin only.
+            'flag'           => $this->when(($request->user('sanctum')?->isAdmin() ?? false) && $this->flagged_at !== null, fn () => [
+                'reasons'    => collect($this->flag_reasons ?? [])->map(fn ($r) => ['code' => $r, 'label' => \App\Services\ReviewIntegrityService::LABELS[$r] ?? $r])->values(),
+                'flagged_at' => $this->flagged_at?->toISOString(),
+                'cleared_at' => $this->flag_cleared_at?->toISOString(),
+                'cleared_by' => $this->flag_cleared_by,
+            ]),
             // "Verified viewing" badge: the review rests on a viewing that took place.
             'is_verified'    => $this->relationLoaded('appointment') && $this->isVerifiedViewing(),
             'property_title' => $this->whenLoaded('appointment', fn () => $this->appointment?->property?->title),

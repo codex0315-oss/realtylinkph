@@ -21,7 +21,7 @@ const ask = useConfirm()
 const toast = useToast()
 const { toggleVisibility } = useReview()
 
-type Tab = '' | '1' | '0'
+type Tab = '' | '1' | '0' | 'flagged'
 type Stars = '' | '5' | '4' | '3' | 'low'
 type Sort = 'newest' | 'oldest' | 'lowest'
 
@@ -38,7 +38,8 @@ async function load() {
   loading.value = true
   try {
     const params: Record<string, unknown> = { page: page.value }
-    if (tab.value) params.visible = tab.value
+    if (tab.value === 'flagged') params.flagged = 1
+    else if (tab.value) params.visible = tab.value
     if (stars.value) params.stars = stars.value
     if (search.value.trim()) params.search = search.value.trim()
     if (sort.value !== 'newest') params.sort = sort.value
@@ -53,7 +54,7 @@ async function load() {
 }
 
 interface Stats {
-  counts: { all: number; visible: number; hidden: number }
+  counts: { all: number; visible: number; hidden: number; flagged?: number }
   average: number
   spread: Record<'1' | '2' | '3' | '4' | '5', number>
   lowest_agents: Array<{ id: number; name: string; avatar: string | null; rating: number; count: number }>
@@ -70,6 +71,8 @@ const TABS = computed(() => [
   { key: '' as Tab,  label: 'All',     count: stats.value?.counts.all ?? 0 },
   { key: '1' as Tab, label: 'Visible', count: stats.value?.counts.visible ?? 0 },
   { key: '0' as Tab, label: 'Hidden',  count: stats.value?.counts.hidden ?? 0 },
+  // Possible fake-account reviews (same device as the agent, new single-agent accounts, bursts).
+  { key: 'flagged' as Tab, label: 'Flagged', count: stats.value?.counts.flagged ?? 0 },
 ])
 const STAR_FILTERS: Array<{ value: Stars; label: string }> = [
   { value: '', label: 'All' }, { value: '5', label: '5★' }, { value: '4', label: '4★' }, { value: '3', label: '3★' }, { value: 'low', label: '2★ & below' },
@@ -127,6 +130,20 @@ async function showAgain(r: AgentReview) {
   await refresh()
 }
 
+/* ── Possible fake-account reviews ── */
+const openFlag = (r: AgentReview) => !!r.flag && !r.flag.cleared_at
+async function clearFlag(r: AgentReview) {
+  try {
+    await api.post(`/admin/reviews/${r.id}/clear-flag`)
+    toast.success('Marked as fine')
+    await refresh()
+  } catch {
+    toast.error('Couldn’t clear the flag. Please try again.')
+  }
+}
+const sanctionTarget = ref<AgentReview['agent'] | null>(null)
+async function onSanctioned() { sanctionTarget.value = null; await refresh() }
+
 const STAR = 'M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h3.462c.969 0 1.371 1.24.588 1.81l-2.8 2.034a1 1 0 00-.364 1.118l1.07 3.292c.3.921-.755 1.688-1.54 1.118l-2.8-2.034a1 1 0 00-1.175 0l-2.8 2.034c-.784.57-1.838-.197-1.539-1.118l1.07-3.292a1 1 0 00-.364-1.118L2.98 8.72c-.783-.57-.38-1.81.588-1.81h3.461a1 1 0 00.951-.69l1.07-3.292z'
 </script>
 
@@ -144,14 +161,14 @@ const STAR = 'M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h
     </header>
 
     <!-- ── Tabs ── -->
-    <div class="mb-4 inline-flex items-center gap-1 rounded-full p-1 bg-white dark:bg-white/[0.05] ring-1 ring-brand-navy/10 dark:ring-white/10" role="tablist">
+    <div class="mb-4 inline-flex max-w-full items-center gap-1 overflow-x-auto rounded-full p-1 bg-white dark:bg-white/[0.05] ring-1 ring-brand-navy/10 dark:ring-white/10" role="tablist">
       <button
         v-for="t in TABS"
         :key="t.key"
         type="button"
         role="tab"
         :aria-selected="tab === t.key"
-        class="inline-flex items-center gap-1.5 whitespace-nowrap rounded-full px-4 py-1.5 text-sm font-semibold transition"
+        class="inline-flex flex-none items-center gap-1.5 whitespace-nowrap rounded-full px-3 cw-sm:px-4 py-1.5 text-sm font-semibold transition"
         :class="tab === t.key ? 'bg-brand-navy text-white dark:bg-brand-gold dark:text-[#0B2A5C]' : 'text-brand-navy/65 hover:text-brand-navy dark:text-white/60 dark:hover:text-white'"
         @click="setTab(t.key)"
       >
@@ -266,7 +283,22 @@ const STAR = 'M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h
                 <span v-if="r.viewed_at" class="block text-xs text-brand-navy/50 dark:text-white/45">Viewed {{ date(r.viewed_at) }}</span>
               </span>
             </a>
-            <p v-else class="mt-3 text-xs text-brand-navy/50 dark:text-white/45">Based on a chat with the agent, not a viewing.</p>
+            <p v-else class="mt-3 text-xs text-brand-navy/50 dark:text-white/45">Based on a chat with the agent (allowed before reviews required a viewing).</p>
+
+            <!-- Flagged: may come from a fake account; an admin decides -->
+            <div v-if="openFlag(r)" class="mt-3 rounded-2xl bg-amber-500/[0.07] ring-1 ring-amber-400/30 px-4 py-3">
+              <p class="flex items-center gap-1.5 text-xs font-bold uppercase tracking-wide text-amber-700 dark:text-amber-400">
+                <svg class="h-3.5 w-3.5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M3 3v1.5M3 21v-6m0 0l2.77-.693a9 9 0 016.208.682l.108.054a9 9 0 006.086.71l3.114-.732a48.524 48.524 0 01-.005-10.499l-3.11.732a9 9 0 01-6.085-.711l-.108-.054a9 9 0 00-6.208-.682L3 4.5M3 15V4.5" /></svg>
+                Possible fake account
+              </p>
+              <ul class="mt-1.5 space-y-0.5">
+                <li v-for="x in r.flag!.reasons" :key="x.code" class="flex gap-2 text-sm text-brand-navy/80 dark:text-white/75">
+                  <span class="mt-2 h-1.5 w-1.5 flex-none rounded-full bg-amber-500" aria-hidden="true" />{{ x.label }}
+                </li>
+              </ul>
+              <p class="mt-1.5 text-xs text-brand-navy/55 dark:text-white/50">These are signals, not proof: people can share a network. Check before acting.</p>
+            </div>
+            <p v-else-if="r.flag?.cleared_at" class="mt-3 text-xs text-brand-navy/50 dark:text-white/45">Flag checked<template v-if="r.flag.cleared_by"> by {{ r.flag.cleared_by }}</template> on {{ date(r.flag.cleared_at) }}: kept.</p>
 
             <!-- Hidden: why, by whom -->
             <div v-if="!r.is_visible" class="mt-3 rounded-2xl bg-red-500/[0.06] ring-1 ring-red-400/25 px-4 py-3">
@@ -276,7 +308,11 @@ const STAR = 'M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h
               <p class="mt-1 text-sm text-brand-navy/80 dark:text-white/75">{{ r.hidden_reason ? `“${r.hidden_reason}”` : 'No reason was recorded (hidden before reasons were required).' }}</p>
             </div>
 
-            <div class="mt-4 flex justify-end">
+            <div class="mt-4 flex flex-wrap justify-end gap-2">
+              <template v-if="openFlag(r)">
+                <button type="button" class="rounded-full px-4 py-1.5 text-xs font-semibold text-brand-navy ring-1 ring-brand-navy/15 hover:ring-brand-gold dark:text-white dark:ring-white/20 transition" @click="clearFlag(r)">Looks fine</button>
+                <button v-if="r.agent" type="button" class="rounded-full px-4 py-1.5 text-xs font-semibold text-amber-800 ring-1 ring-amber-400/50 hover:bg-amber-500/10 dark:text-amber-300 transition" @click="sanctionTarget = r.agent">Take action on agent…</button>
+              </template>
               <button
                 v-if="r.is_visible"
                 type="button"
@@ -357,5 +393,6 @@ const STAR = 'M9.049 2.927c.3-.921 1.603-.921 1.902 0l1.07 3.292a1 1 0 00.95.69h
     </div>
 
     <HideReviewDialog :open="!!hideTarget" :review="hideTarget" @close="hideTarget = null" @done="onHidden" />
+    <AgentSanctionDialog :open="!!sanctionTarget" :agent="sanctionTarget ?? null" :suspended-until="sanctionTarget?.listing_suspended_until" @close="sanctionTarget = null" @done="onSanctioned" />
   </div>
 </template>
