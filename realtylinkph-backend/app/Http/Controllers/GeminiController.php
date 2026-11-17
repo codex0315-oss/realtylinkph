@@ -32,6 +32,8 @@ class GeminiController extends Controller
             // them as they're added, so after a refresh there are no File
             // objects in the browser to send. Read them from storage instead.
             'property_id' => ['nullable', 'integer', 'exists:properties,id'],
+            // "emoji": a short intro plus a few highlight lines led by a property emoji.
+            'style'       => ['nullable', 'in:plain,emoji'],
         ]);
 
         $attributes = $request->only([
@@ -72,7 +74,7 @@ class GeminiController extends Controller
             return ApiResponse::error('Add a few photos or details first so the AI has something to work with.', [], 422);
         }
 
-        $description = $this->service->generatePropertyDescription($attributes, $images);
+        $description = $this->service->generatePropertyDescription($attributes, $images, $request->input('style') === 'emoji' ? 'emoji' : 'plain');
 
         return ApiResponse::success(['description' => $description], 'Description generated.', 200);
     }

@@ -142,9 +142,9 @@ class GeminiService
     /**
      * @param  array<int, array{mime:string,data:string}>  $images  optional property photos (base64)
      */
-    public function generatePropertyDescription(array $attributes, array $images = []): string
+    public function generatePropertyDescription(array $attributes, array $images = [], string $style = 'plain'): string
     {
-        $parts = [['text' => $this->buildDescriptionPrompt($attributes, ! empty($images))]];
+        $parts = [['text' => $this->buildDescriptionPrompt($attributes, ! empty($images), $style)]];
 
         foreach ($images as $img) {
             $parts[] = ['inline_data' => ['mime_type' => $img['mime'], 'data' => $img['data']]];
@@ -155,7 +155,39 @@ class GeminiService
             'generationConfig' => ['temperature' => 0.7],
         ]);
 
-        return $text ?? '';
+        return $style === 'emoji' ? self::tidyEmojiDescription((string) $text) : ($text ?? '');
+    }
+
+    /** Property-related emoji the "With emoji" style may use. */
+    public const DESCRIPTION_EMOJI = ['🏡', '🏠', '🏢', '🛏️', '🛁', '🚿', '📐', '📍', '🚗', '🌳', '🌅', '🏊', '🍳', '🛋️', '✨', '🔒', '🏫', '🏥', '🛒', '🚌', '💡', '🌊', '⛰️'];
+
+    public const DESCRIPTION_EMOJI_MAX = 5;
+
+    /**
+     * Keep the emoji style professional whatever the AI returns: only emoji from
+     * the list, at most five, no markdown bullets or bold, tidy blank lines.
+     */
+    public static function tidyEmojiDescription(string $text): string
+    {
+        $allowed = self::DESCRIPTION_EMOJI;
+        $count = 0;
+        // One pictograph plus any variation selector / joiner sequence.
+        $text = preg_replace_callback('/\p{Extended_Pictographic}(?:\x{FE0F}|\x{200D}\p{Extended_Pictographic}\x{FE0F}?)*/u', function ($m) use ($allowed, &$count) {
+            $bare = str_replace("\u{FE0F}", '', $m[0]);
+            $ok = in_array($m[0], $allowed, true) || in_array($bare, array_map(fn ($e) => str_replace("\u{FE0F}", '', $e), $allowed), true);
+
+            return $ok && ++$count <= self::DESCRIPTION_EMOJI_MAX ? $m[0] : '';
+        }, $text) ?? $text;
+
+        $lines = array_map(function (string $line) {
+            $line = preg_replace('/^\s*(?:[-*•]|\d+[.)])\s+/u', '', $line) ?? $line;   // markdown bullets
+            $line = str_replace(['**', '__'], '', $line);                                // bold markers
+            $line = preg_replace('/[ \t]{2,}/', ' ', $line) ?? $line;
+
+            return trim($line);
+        }, preg_split('/\R/u', trim($text)) ?: []);
+
+        return trim(preg_replace("/\n{3,}/", "\n\n", implode("\n", $lines)) ?? '');
     }
 
     public function answerPropertyQuestion(Property $property, string $question): string
@@ -1137,7 +1169,7 @@ TXT;
         };
     }
 
-    private function buildDescriptionPrompt(array $attributes, bool $hasPhotos = false): string
+    private function buildDescriptionPrompt(array $attributes, bool $hasPhotos = false, string $style = 'plain'): string
     {
         $facts = array_filter([
             ! empty($attributes['type'])              ? 'Type: ' . $attributes['type'] : null,
@@ -1163,7 +1195,17 @@ TXT;
         }
 
         $lines[] = '';
-        $lines[] = 'Write a CONCISE, direct description in 2-3 short sentences — straight to the key selling points. No fluff, clichés, or repetition. Do not invent specifics that contradict the details or photos. Return only the description text (no headings or markdown).';
+        if ($style === 'emoji') {
+            $lines[] = 'Format it for buyers skimming on a phone:';
+            $lines[] = '1. One or two short sentences introducing the property and its best selling point.';
+            $lines[] = '2. A blank line.';
+            $lines[] = '3. Three or four short highlight lines, each on its own line and starting with ONE emoji from this list only: ' . implode(' ', self::DESCRIPTION_EMOJI) . '.';
+            $lines[] = 'Do not repeat the price (the listing already shows it). Put rooms and size together on one highlight line.';
+            $lines[] = 'Use at most ' . self::DESCRIPTION_EMOJI_MAX . ' emoji in total, only at the start of highlight lines, never inside sentences. Keep it professional: no hype emoji, no exclamation marks in a row, no hashtags.';
+            $lines[] = 'Only mention features and amenities that appear in the details or photos; never assume a pool, gym or view that is not shown. Do not include phone numbers, emails, links or "message me" lines. Return only the description text (no headings, no markdown, no bullet symbols).';
+        } else {
+            $lines[] = 'Write a CONCISE, direct description in 2-3 short sentences — straight to the key selling points. No fluff, clichés, or repetition. Do not invent specifics that contradict the details or photos. Return only the description text (no headings or markdown).';
+        }
 
         return implode("\n", $lines);
     }

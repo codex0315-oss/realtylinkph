@@ -240,6 +240,7 @@ if (import.meta.client) {
 /* ── AI description (multimodal — scans the uploaded photos) ── */
 const aiLoading = ref(false)
 const aiError   = ref('')
+const aiStyle   = ref<'plain' | 'emoji'>('plain')
 async function doGenerateDescription() {
   const shots = [...gallery.value, ...panos.value]
   if (!shots.length && !form.address.trim()) {
@@ -260,6 +261,7 @@ async function doGenerateDescription() {
     lot_area:    form.lot_area,
     address:     form.address,
     property_id: draftId.value ?? undefined,
+    style:       aiStyle.value,
   },
   // Photos already uploaded to the draft are read on the server, so nothing is
   // re-sent (and a big photo can't trip the 5 MB limit for AI uploads). Only
@@ -635,6 +637,8 @@ onUnmounted(() => {
           <div>
             <div class="mb-1.5 flex flex-wrap items-center justify-between gap-2">
               <label for="nl-desc" class="text-sm font-semibold text-brand-navy dark:text-white/90">Description</label>
+              <div class="flex flex-wrap items-center gap-2">
+              <AiDescriptionStyle v-model="aiStyle" />
               <button
                 type="button"
                 :disabled="aiLoading"
@@ -644,6 +648,7 @@ onUnmounted(() => {
                 <img src="/ai/avatar-96.webp" alt="" class="h-5 w-5 rounded-full bg-white" />
                 {{ aiLoading ? 'Reading your photos…' : 'Write it with AI' }}
               </button>
+              </div>
             </div>
             <textarea id="nl-desc" v-model="form.description" rows="7" :class="[fieldCls, 'resize-y leading-relaxed']" placeholder="What makes this place special? Or let RealtyLink AI write it from your photos." />
             <p v-if="aiError" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ aiError }}</p>

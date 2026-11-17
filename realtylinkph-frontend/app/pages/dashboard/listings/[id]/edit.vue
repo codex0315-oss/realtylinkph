@@ -102,6 +102,7 @@ async function removeExisting(photoId: number) {
 
 const aiLoading = ref(false)
 const aiError   = ref('')
+const aiStyle   = ref<'plain' | 'emoji'>('plain')
 async function doGenerateDescription() {
   const newUploads = [...newPhotos.value, ...newPanoramas.value]
   if (!newUploads.length && !existingRegular.value.length && !form.address.trim()) {
@@ -122,6 +123,7 @@ async function doGenerateDescription() {
     lot_area:    form.lot_area,
     address:     form.address,
     property_id: id,
+    style:       aiStyle.value,
   }, newUploads.filter(f => f.size <= 5 * 1024 * 1024).slice(0, 6))
   aiLoading.value = false
   if (desc) form.description = desc
@@ -426,6 +428,8 @@ const labelCls = LISTING_LABEL_CLS
           <div>
             <div class="mb-1.5 flex flex-wrap items-center justify-between gap-2">
               <label for="el-desc" class="text-sm font-semibold text-brand-navy dark:text-white/90">Description</label>
+              <div class="flex flex-wrap items-center gap-2">
+              <AiDescriptionStyle v-model="aiStyle" />
               <button
                 type="button"
                 :disabled="aiLoading"
@@ -435,6 +439,7 @@ const labelCls = LISTING_LABEL_CLS
                 <img src="/ai/avatar-96.webp" alt="" class="h-5 w-5 rounded-full bg-white" />
                 {{ aiLoading ? 'Reading your photos…' : 'Rewrite it with AI' }}
               </button>
+              </div>
             </div>
             <textarea id="el-desc" v-model="form.description" rows="7" :class="[fieldCls, 'resize-y leading-relaxed']" />
             <p v-if="aiError" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ aiError }}</p>

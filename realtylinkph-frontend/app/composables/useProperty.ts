@@ -184,6 +184,8 @@ export const useProperty = () => {
       address?: string
       /** A draft whose photos are already on the server — the API reads them from storage. */
       property_id?: number
+      /** 'emoji': a short intro plus highlight lines led by a property emoji. */
+      style?: 'plain' | 'emoji'
     },
     photos: File[] = [],
   ): Promise<string | null> {
