@@ -62,9 +62,10 @@ RUN a2enmod rewrite \
     && a2enconf laravel
 
 # Uploads are gated by PHP before Laravel ever sees them; the app validates
-# photos at max:10240 (10 MB), so these must sit above that or large uploads
-# fail with an empty request instead of a validation message.
-RUN printf 'upload_max_filesize = 12M\npost_max_size = 20M\nmemory_limit = 256M\n' \
+# photos at 10 MB and chat videos at 25 MB (50 MB per message), so these must
+# sit above that or large uploads fail with an empty request instead of a
+# validation message.
+RUN printf 'upload_max_filesize = 26M\npost_max_size = 55M\nmax_file_uploads = 10\nmemory_limit = 256M\n' \
         > /usr/local/etc/php/conf.d/uploads.ini
 
 # Don't advertise exact versions (X-Powered-By: PHP/8.4.x, Server: Apache/2.4.x)

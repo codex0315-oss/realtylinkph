@@ -65,7 +65,12 @@ class ConversationController extends Controller
     {
         $this->authorize('sendMessage', $conversation);
 
-        $message = $this->service->sendMessage($request->user(), $conversation, $request->validated('body'));
+        $message = $this->service->sendMessage(
+            $request->user(),
+            $conversation,
+            trim((string) $request->validated('body')),
+            (array) $request->file('files', []),
+        );
 
         return ApiResponse::success(MessageResource::make($message), 'Message sent.', 201);
     }

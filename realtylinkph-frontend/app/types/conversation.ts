@@ -30,6 +30,24 @@ export interface Message {
   local_status?: 'sending' | 'failed'
   /** Client-only key that ties an optimistic bubble to the retry action. */
   client_id?: string
+  /** Photos, videos and files sent with the message (empty once unsent). */
+  attachments?: MessageAttachment[]
+  /** "📷 2 photos" — for previews when there is no text. */
+  attachment_summary?: string | null
+  /** Client-only: upload progress (0–100) while files are being sent. */
+  upload_progress?: number
+}
+
+export interface MessageAttachment {
+  id: number
+  kind: 'image' | 'video' | 'file'
+  name: string
+  mime: string
+  size: number
+  width?: number | null
+  height?: number | null
+  url: string | null
+  thumb_url?: string | null
 }
 
 /** Server-sent receipt for the caller's own messages (MessagesReceipt event). */

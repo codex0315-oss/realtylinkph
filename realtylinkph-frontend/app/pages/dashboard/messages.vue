@@ -59,6 +59,10 @@ onMounted(async () => {
 
 const newMessage = ref('')
 const search     = ref('')
+/* Photos, videos and files for the next message (📎, drag and drop, paste). */
+const cf = useChatComposerFiles()
+const chatAccept = CHAT_ACCEPT
+const fileInput = cf.input
 const otherTyping = ref(false)
 
 /*
@@ -244,6 +248,8 @@ async function openConv(id: number) {
   if (convStore.activeId && convStore.activeId !== id) {
     stopListeningToConversation(convStore.activeId)
   }
+  // Picked files belong to the chat they were picked in (re-opening the same one keeps them).
+  if (convStore.activeId !== id) cf.clear()
   convStore.setActive(id)
   showEmoji.value = false
   await fetchMessages(id)
@@ -324,7 +330,8 @@ function jumpTo(id: number) {
 }
 
 async function send() {
-  if (!newMessage.value.trim() || !convStore.activeId) return
+  const files = cf.files.value
+  if ((!newMessage.value.trim() && (!files.length || editing.value)) || !convStore.activeId) return
   const body = newMessage.value.trim()
   if (editing.value) {
     const m = editing.value
@@ -336,7 +343,8 @@ async function send() {
   // Clear the box and show the bubble immediately; the request runs behind it.
   newMessage.value = ''
   showEmoji.value = false
-  const p = sendMessage(convStore.activeId, body)
+  cf.clear()
+  const p = sendMessage(convStore.activeId, body, undefined, files)
   scrollToBottom()
   await p
 }
@@ -498,7 +506,7 @@ if (convStore.conversations.length) {
             <div class="flex items-center justify-between gap-2 mt-0.5">
               <p class="text-xs truncate" :class="conv.unread_count ? 'text-brand-navy dark:text-white font-medium' : 'text-gray-400 dark:text-white/40'">
                 <span v-if="conv.latest_message?.is_ai" class="text-brand-gold-deep dark:text-brand-gold font-semibold">AI:</span>
-                {{ conv.latest_message?.unsent ? (conv.latest_message.sender_id === me ? 'You unsent a message' : 'Message unsent') : (conv.latest_message?.body ?? 'Start a conversation') }}
+                {{ conv.latest_message?.unsent ? (conv.latest_message.sender_id === me ? 'You unsent a message' : 'Message unsent') : (conv.latest_message?.body || conv.latest_message?.attachment_summary || 'Start a conversation') }}
               </p>
               <span v-if="conv.unread_count" class="flex-shrink-0 bg-brand-gold text-brand-navy text-[0.625rem] font-bold rounded-full h-4.5 min-w-[18px] px-1 flex items-center justify-center" style="height:18px">
                 {{ conv.unread_count }}
@@ -588,9 +596,17 @@ if (convStore.conversations.length) {
         <!-- Messages -->
         <div
           ref="threadEl"
-          class="flex-1 overflow-y-auto px-5 py-4 space-y-1"
+          class="relative flex-1 overflow-y-auto px-3 cw-sm:px-5 py-4 space-y-1"
           style="background-image: radial-gradient(rgba(212,165,74,0.04) 1px, transparent 1px); background-size: 22px 22px;"
+          @dragenter.prevent="cf.onDragEnter"
+          @dragover.prevent
+          @dragleave="cf.onDragLeave"
+          @drop.prevent="cf.onDrop"
         >
+          <!-- Drop files here -->
+          <div v-if="cf.dragging.value" class="pointer-events-none sticky top-0 z-20 -mx-3 cw-sm:-mx-5 -mt-4 mb-2 flex h-full min-h-[12rem] items-center justify-center bg-brand-gold/10 ring-2 ring-dashed ring-brand-gold/60 backdrop-blur-[1px]">
+            <p class="rounded-full bg-white px-4 py-2 text-sm font-semibold text-brand-navy shadow dark:bg-[#0d1f3c] dark:text-white">Drop photos, videos or files to send</p>
+          </div>
           <template v-for="item in feed" :key="item.id">
             <!-- Date separator -->
             <div v-if="item.kind === 'date'" class="flex items-center justify-center my-4">
@@ -646,8 +662,15 @@ if (convStore.conversations.length) {
                     class="px-4 py-2.5 text-sm italic text-gray-400 dark:text-white/40 rounded-2xl ring-1 ring-gray-200 dark:ring-white/15"
                     :class="isMine(item.message) ? 'rounded-br-md' : 'rounded-bl-md'"
                   >{{ unsentLabel(item.message) }}</div>
+                  <ChatAttachments
+                    v-if="!item.message.unsent && item.message.attachments?.length"
+                    :attachments="item.message.attachments"
+                    :mine="isMine(item.message)"
+                    :progress="item.message.local_status === 'sending' ? item.message.upload_progress : undefined"
+                    :class="item.message.body ? 'mb-1' : ''"
+                  />
                   <div
-                    v-else
+                    v-if="!item.message.unsent && item.message.body"
                     class="px-4 py-2.5 text-sm leading-relaxed break-words shadow-sm"
                     :class="isMine(item.message)
                       ? 'text-white rounded-2xl rounded-br-md'
@@ -769,7 +792,9 @@ if (convStore.conversations.length) {
           <span class="min-w-0 flex-1 truncate"><b class="text-brand-navy dark:text-white">Editing message</b> <span class="text-gray-500 dark:text-white/50">· {{ editing.body }}</span></span>
           <button type="button" class="font-semibold text-gray-500 hover:text-brand-navy dark:text-white/60 dark:hover:text-white" @click="cancelEdit">Cancel</button>
         </div>
-        <div class="px-4 py-3 border-t border-gray-100 dark:border-white/10">
+        <div class="px-3 cw-sm:px-4 py-3 border-t border-gray-100 dark:border-white/10">
+          <ChatFileTray v-if="!editing" :files="cf.files.value" class="mb-2 px-1" @remove="cf.remove" />
+          <input ref="fileInput" type="file" multiple :accept="chatAccept" class="hidden" @change="cf.onPicked" />
           <div v-if="showEmoji" class="flex gap-1.5 mb-2 px-1">
             <button v-for="e in ['😀','😎','👍','🔥','❤️','🎉','🙏','🏡','✅','😂']" :key="e" class="text-lg hover:scale-125 transition-transform" @click="addEmoji(e)">{{ e }}</button>
           </div>
@@ -777,7 +802,14 @@ if (convStore.conversations.length) {
             <button class="p-2 flex-shrink-0 text-gray-400 hover:text-brand-gold transition-colors" @click="showEmoji = !showEmoji">
               <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M14.828 14.828a4 4 0 01-5.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
             </button>
-            <button class="p-2 flex-shrink-0 text-gray-400 hover:text-brand-gold transition-colors" title="Attachments coming soon">
+            <button
+              type="button"
+              class="p-2 flex-shrink-0 text-gray-400 hover:text-brand-gold transition-colors disabled:opacity-40"
+              title="Send photos, videos or files"
+              aria-label="Attach photos, videos or files"
+              :disabled="!!editing"
+              @click="cf.pick"
+            >
               <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.8" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
             </button>
             <input
@@ -787,13 +819,15 @@ if (convStore.conversations.length) {
               placeholder="Type your message…"
               class="flex-1 min-w-0 w-full bg-transparent text-sm text-brand-navy dark:text-white placeholder-gray-400 outline-none py-2"
               @input="onType"
+              @paste="cf.onPaste"
               @keydown.enter.prevent="send"
               @keydown.esc="editing && cancelEdit()"
             />
             <button
               class="h-9 w-9 rounded-full flex items-center justify-center text-white transition-all disabled:opacity-40 flex-shrink-0"
               style="background: linear-gradient(100deg, #D4A54A 0%, #F4E0A6 50%, #D4A54A 100%)"
-              :disabled="!newMessage.trim()"
+              :disabled="!newMessage.trim() && (!cf.files.value.length || !!editing)"
+              :aria-label="cf.files.value.length ? 'Send with files' : 'Send'"
               @click="send"
             >
               <!-- Never a spinner here: the send is optimistic, the bubble's own tick shows progress. -->

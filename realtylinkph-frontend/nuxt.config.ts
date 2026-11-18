@@ -35,7 +35,8 @@ const csp = [
   // blob: — the 360° tour hands the viewer a panorama the page already
   // downloaded in the background (utils/panorama.ts); the viewer reads it back.
   `connect-src 'self' blob: ${apiOrigins} ${storageOrigin} https://api.geoapify.com https://*.pusher.com wss://*.pusher.com https://*.tile.openstreetmap.org${devSockets}`,
-  "media-src 'self' blob:",
+  // Chat videos play straight from storage (or the API in local dev).
+  `media-src 'self' blob: ${apiOrigins} ${storageOrigin}`,
   "worker-src 'self' blob:",
   // PRC's licence lookup, shown inside the admin's "Verify on PRC" panel.
   "frame-src 'self' https://verification.prc.gov.ph",

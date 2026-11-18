@@ -55,15 +55,45 @@ class ConversationService
         }
     }
 
-    public function sendMessage(User $sender, Conversation $conversation, string $body): Message
+    /**
+     * @param  array<int, \Illuminate\Http\UploadedFile>  $files  already checked by SendMessageRequest
+     */
+    public function sendMessage(User $sender, Conversation $conversation, string $body, array $files = []): Message
     {
-        return DB::transaction(function () use ($sender, $conversation, $body): Message {
+        // Files are stored first (slow, outside the transaction); if saving the
+        // message then fails, they are removed again.
+        $stored = [];
+        try {
+            foreach ($files as $file) {
+                $check = \App\Support\ChatFiles::check($file);
+                if (is_array($check)) {
+                    $stored[] = \App\Support\ChatFiles::store($conversation->id, $file, $check['kind'], $check['mime']);
+                }
+            }
+
+            return $this->saveMessage($sender, $conversation, $body, $stored);
+        } catch (\Throwable $e) {
+            foreach ($stored as $s) {
+                \App\Support\ChatFiles::delete($s['path'], $s['thumb_path']);
+            }
+            throw $e;
+        }
+    }
+
+    private function saveMessage(User $sender, Conversation $conversation, string $body, array $stored): Message
+    {
+        return DB::transaction(function () use ($sender, $conversation, $body, $stored): Message {
             $message = Message::create([
                 'conversation_id' => $conversation->id,
                 'sender_id'       => $sender->id,
                 'body'            => $body,
                 'is_read'         => false,
             ]);
+            foreach ($stored as $s) {
+                $message->attachments()->create($s);
+            }
+            $message->load('attachments');
+            $preview = $body !== '' ? mb_substr($body, 0, 80) : (string) $message->attachmentSummary();
 
             // A new message resurfaces the thread for anyone who had removed it.
             $conversation->update([
@@ -93,7 +123,7 @@ class ConversationService
                 $this->notificationService->send($recipient, 'new_message', [
                     'conversation_id' => $conversation->id,
                     'sender_name'     => $sender->name,
-                    'preview'         => mb_substr($body, 0, 80),
+                    'preview'         => $preview,
                 ]);
             }
 
@@ -103,7 +133,7 @@ class ConversationService
                 $this->handleAgentAway($conversation, $recipient, $message);
             }
 
-            return $message->load('sender');
+            return $message->load(['sender', 'attachments']);
         });
     }
 
@@ -212,7 +242,7 @@ class ConversationService
             // The relation already orders oldest-first, so a bare latest() only
             // appended a second ORDER BY and kept returning the OLDEST message.
             // Skip messages this user removed for themselves.
-            $q->visibleTo($user)->reorder()->orderByDesc('created_at')->orderByDesc('id')->limit(1);
+            $q->visibleTo($user)->reorder()->orderByDesc('created_at')->orderByDesc('id')->limit(1)->with('attachments');
         }])
             ->where(function ($q) use ($user): void {
                 // Mine, and not removed from my side of the inbox.
@@ -225,10 +255,12 @@ class ConversationService
 
     public function getMessages(Conversation $conversation, ?User $viewer = null, int $perPage = 30): LengthAwarePaginator
     {
-        return Message::with('sender')
+        return Message::with(['sender', 'attachments'])
             ->where('conversation_id', $conversation->id)
             ->when($viewer, fn ($q) => $q->visibleTo($viewer))
-            ->latest()
+            // id breaks ties: two messages sent in the same second (text, then
+            // a file) came back in random order without it.
+            ->latest()->orderByDesc('id')
             ->paginate($perPage);
     }
 
@@ -247,6 +279,12 @@ class ConversationService
         if (! $message->isUnsent()) {
             // An unsent message can't stay pinned.
             $message->forceFill(['unsent_at' => now(), 'pinned_at' => null, 'pinned_by_id' => null])->save();
+            // Its photos, videos and files are deleted for both people.
+            foreach ($message->attachments as $a) {
+                \App\Support\ChatFiles::delete($a->path, $a->thumb_path);
+            }
+            $message->attachments()->delete();
+            $message->setRelation('attachments', collect());
             try {
                 broadcast(new MessageUnsent($message))->toOthers();
             } catch (\Throwable $e) {

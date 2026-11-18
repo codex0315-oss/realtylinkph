@@ -1,4 +1,14 @@
-import type { ApiResponse, Conversation, Message, PaginatedResponse } from '~/types'
+import type { ApiResponse, Conversation, Message, MessageAttachment, PaginatedResponse } from '~/types'
+
+/** Files of messages still sending (or failed), kept for Retry. Shared by the page and the docked panel. */
+const pendingFiles = new Map<string, File[]>()
+let localSeq = 0
+
+/** A not-yet-uploaded file as an attachment the bubble can show. */
+function localAttachment(f: File): MessageAttachment {
+  const kind = chatFileKind(f) ?? 'file'
+  return { id: -(++localSeq), kind, name: f.name, mime: f.type, size: f.size, url: kind === 'file' ? null : URL.createObjectURL(f) }
+}
 
 export const useConversation = () => {
   const api               = useApi()
@@ -52,30 +62,42 @@ export const useConversation = () => {
    * the server row replaces it; on failure it stays with a "Not sent" state
    * and can be retried (which reuses the same bubble).
    */
-  async function sendMessage(conversationId: number, body: string, retryClientId?: string): Promise<Message | null> {
+  async function sendMessage(conversationId: number, body: string, retryClientId?: string, files: File[] = []): Promise<Message | null> {
     const me = useAuthStore().user?.id ?? 0
     let clientId = retryClientId
     if (clientId) {
       const m = conversationStore.activeMessages.find(m => m.client_id === clientId)
       if (m) m.local_status = 'sending'
+      files = pendingFiles.get(clientId) ?? files
     } else {
-      clientId = conversationStore.addPending(conversationId, me, body).client_id!
+      // Local previews so the photos show in the bubble while they upload.
+      clientId = conversationStore.addPending(conversationId, me, body, files.map(localAttachment)).client_id!
+      if (files.length) pendingFiles.set(clientId, files)
     }
 
     sending.value = true
     try {
-      const res = await api.post<ApiResponse<Message>>(
-        `/conversations/${conversationId}/messages`,
-        { body }
-      )
+      let res: ApiResponse<Message>
+      if (files.length) {
+        const fd = new FormData()
+        if (body) fd.append('body', body)
+        files.forEach(f => fd.append('files[]', f))
+        res = await api.postFormWithProgress<ApiResponse<Message>>(`/conversations/${conversationId}/messages`, fd, (pct) => {
+          const m = conversationStore.activeMessages.find(x => x.client_id === clientId)
+          if (m) m.upload_progress = pct
+        })
+      } else {
+        res = await api.post<ApiResponse<Message>>(`/conversations/${conversationId}/messages`, { body })
+      }
+      dropLocal(clientId)
       conversationStore.resolvePending(clientId, res.data)
       return res.data
     } catch (e) {
       error.value = extractError(e)
       conversationStore.failPending(clientId)
-      // Rate limit: the bubble already says "Not sent"; say why, and how long to wait.
+      // The bubble already says "Not sent"; say why (rate limit, a refused or too-big file).
       const status = (e as { status?: number; statusCode?: number })?.status ?? (e as { statusCode?: number })?.statusCode
-      if (status === 429) useToast().error(error.value)
+      if (status === 429 || status === 422 || files.length) useToast().error(error.value ?? 'Couldn’t send your files. Please try again.')
       return null
     } finally {
       sending.value = false
@@ -83,7 +105,15 @@ export const useConversation = () => {
   }
 
   function discardFailed(clientId: string): void {
+    dropLocal(clientId)
     conversationStore.removePending(clientId)
+  }
+
+  /** Free the browser's local previews of a pending message's files. */
+  function dropLocal(clientId: string): void {
+    pendingFiles.delete(clientId)
+    const m = conversationStore.activeMessages.find(x => x.client_id === clientId)
+    m?.attachments?.forEach(a => { if (a.url?.startsWith('blob:')) URL.revokeObjectURL(a.url) })
   }
 
   /** Tell the server (and, via it, the sender) that we received these messages. */

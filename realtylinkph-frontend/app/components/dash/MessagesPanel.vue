@@ -60,7 +60,7 @@ function preview(c: Conversation): string {
   const m = c.latest_message
   if (!m) return 'Say hello 👋'
   if (m.unsent) return m.sender_id === me.value ? 'You unsent a message' : 'Message unsent'
-  return `${m.sender_id === me.value ? 'You: ' : ''}${m.body}`
+  return `${m.sender_id === me.value ? 'You: ' : ''}${m.body || m.attachment_summary || ''}`
 }
 
 /* ── Inquiries (agents): questions sent from a listing's contact form ── */
@@ -126,6 +126,10 @@ onUnmounted(() => { clearInterval(presenceTimer); clearInterval(listTimer) })
 function backToList() { closeThread(); fetchConversations() }
 const threadEl = ref<HTMLElement | null>(null)
 const draft = ref('')
+/* Photos, videos and files for the next reply. */
+const cf = useChatComposerFiles()
+const fileInput = cf.input
+const chatAccept = CHAT_ACCEPT
 const inputEl = ref<HTMLTextAreaElement | null>(null)
 const otherTyping = ref(false)
 const aiTyping = ref(false)
@@ -186,6 +190,7 @@ function closeThread() {
   otherTyping.value = false
   aiTyping.value = false
   draft.value = ''
+  cf.clear()
 }
 onUnmounted(closeThread)
 
@@ -206,7 +211,8 @@ function autosize() {
 }
 async function send() {
   const body = draft.value.trim()
-  if (!body || !openId.value) return
+  const files = cf.files.value
+  if ((!body && (!files.length || editing.value)) || !openId.value) return
   if (editing.value) {
     const m = editing.value
     if (body === m.body) { cancelEdit(); return }
@@ -215,8 +221,9 @@ async function send() {
     return
   }
   draft.value = ''
+  cf.clear()
   nextTick(autosize)
-  const p = sendMessage(openId.value, body)
+  const p = sendMessage(openId.value, body, undefined, files)
   scrollToBottom()
   await p
 }
@@ -683,15 +690,26 @@ async function removeChat(c: Conversation) {
                   class="min-w-0 rounded-2xl px-3.5 py-2 text-sm italic text-brand-navy/50 ring-1 ring-brand-navy/15 dark:text-white/45 dark:ring-white/15"
                   :class="item.m.sender_id === me ? 'rounded-br-md' : 'rounded-bl-md'"
                 >{{ unsentLabel(item.m) }}</div>
-                <div
-                  v-else
-                  class="min-w-0 rounded-2xl px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words"
-                  :class="item.m.sender_id === me
-                    ? 'bg-brand-navy text-white rounded-br-md dark:bg-brand-gold dark:text-brand-navy'
-                    : item.m.is_ai
-                      ? 'bg-brand-gold/15 text-brand-navy ring-1 ring-brand-gold/30 rounded-bl-md dark:text-white'
-                      : 'bg-white text-brand-navy ring-1 ring-brand-navy/[0.06] rounded-bl-md dark:bg-white/[0.08] dark:text-white dark:ring-white/10'"
-                >{{ item.m.body }}</div>
+                <!-- Photos / files above the text, stacked (the actions row is horizontal). -->
+                <div v-if="!item.m.unsent" class="flex min-w-0 flex-col" :class="item.m.sender_id === me ? 'items-end' : 'items-start'">
+                  <ChatAttachments
+                    v-if="item.m.attachments?.length"
+                    compact
+                    :attachments="item.m.attachments"
+                    :mine="item.m.sender_id === me"
+                    :progress="item.m.local_status === 'sending' ? item.m.upload_progress : undefined"
+                    :class="item.m.body ? 'mb-1' : ''"
+                  />
+                  <div
+                    v-if="item.m.body"
+                    class="min-w-0 rounded-2xl px-3.5 py-2 text-sm leading-relaxed whitespace-pre-wrap break-words"
+                    :class="item.m.sender_id === me
+                      ? 'bg-brand-navy text-white rounded-br-md dark:bg-brand-gold dark:text-brand-navy'
+                      : item.m.is_ai
+                        ? 'bg-brand-gold/15 text-brand-navy ring-1 ring-brand-gold/30 rounded-bl-md dark:text-white'
+                        : 'bg-white text-brand-navy ring-1 ring-brand-navy/[0.06] rounded-bl-md dark:bg-white/[0.08] dark:text-white dark:ring-white/10'"
+                  >{{ item.m.body }}</div>
+                </div>
               </MessageActions>
               <p class="mt-0.5 flex items-center gap-1 text-[0.625rem] text-brand-navy/40 dark:text-white/40">
                 <span v-if="item.m.pinned_at && !item.m.unsent" class="font-semibold text-brand-gold-deep dark:text-brand-gold">📌 Pinned ·</span>
@@ -720,7 +738,27 @@ async function removeChat(c: Conversation) {
           <span class="min-w-0 flex-1 truncate"><b class="text-brand-navy dark:text-white">Editing message</b> <span class="text-brand-navy/50 dark:text-white/50">· {{ editing.body }}</span></span>
           <button type="button" class="font-semibold text-brand-navy/60 hover:text-brand-navy dark:text-white/60 dark:hover:text-white" @click="cancelEdit">Cancel</button>
         </div>
-        <form class="flex items-end gap-2 px-3 py-3 border-t border-brand-navy/[0.06] dark:border-white/10" @submit.prevent="send">
+        <ChatFileTray v-if="!editing" :files="cf.files.value" class="border-t border-brand-navy/[0.06] px-3 pt-2 dark:border-white/10" @remove="cf.remove" />
+        <form
+          class="flex items-end gap-2 px-3 py-3 border-t border-brand-navy/[0.06] dark:border-white/10"
+          :class="cf.dragging.value ? 'bg-brand-gold/10' : ''"
+          @submit.prevent="send"
+          @dragenter.prevent="cf.onDragEnter"
+          @dragover.prevent
+          @dragleave="cf.onDragLeave"
+          @drop.prevent="cf.onDrop"
+        >
+          <input ref="fileInput" type="file" multiple :accept="chatAccept" class="hidden" @change="cf.onPicked" />
+          <button
+            type="button"
+            class="flex-none h-10 w-10 rounded-full flex items-center justify-center text-brand-navy/50 hover:text-brand-gold-deep hover:bg-brand-navy/[0.05] dark:text-white/50 dark:hover:text-brand-gold dark:hover:bg-white/[0.07] disabled:opacity-40 transition"
+            aria-label="Attach photos, videos or files"
+            title="Send photos, videos or files"
+            :disabled="!!editing"
+            @click="cf.pick"
+          >
+            <svg class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="1.8" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M15.172 7l-6.586 6.586a2 2 0 102.828 2.828l6.414-6.586a4 4 0 00-5.656-5.656l-6.415 6.585a6 6 0 108.486 8.486L20.5 13" /></svg>
+          </button>
           <textarea
             ref="inputEl"
             v-model="draft"
@@ -731,11 +769,12 @@ async function removeChat(c: Conversation) {
             class="flex-1 resize-none rounded-2xl border-0 bg-brand-navy/[0.05] dark:bg-white/[0.07] px-4 py-2.5 text-sm text-brand-navy dark:text-white placeholder-brand-navy/45 dark:placeholder-white/40 focus:ring-2 focus:ring-brand-gold"
             @input="onType"
             @keydown="onKeydown"
+            @paste="cf.onPaste"
           />
           <button
             type="submit"
             class="flex-none h-10 w-10 rounded-full bg-brand-gold text-brand-navy flex items-center justify-center shadow-[0_4px_14px_rgba(212,165,74,0.45)] hover:bg-brand-gold-light disabled:opacity-40 disabled:shadow-none transition"
-            :disabled="!draft.trim()"
+            :disabled="!draft.trim() && (!cf.files.value.length || !!editing)"
             aria-label="Send"
           >
             <svg class="h-[1.125rem] w-[1.125rem]" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2.2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M6 12L3.269 3.126A59.768 59.768 0 0121.485 12 59.77 59.77 0 013.27 20.876L5.999 12zm0 0h7.5" /></svg>

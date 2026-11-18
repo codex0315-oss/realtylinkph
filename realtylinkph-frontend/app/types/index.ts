@@ -14,7 +14,7 @@ export type {
 } from './property'
 export { PROPERTY_TYPES, OFFER_TYPES } from './property'
 export type { Appointment, AppointmentStatus, BookAppointmentRequest } from './appointment'
-export type { Conversation, Message, MessagesReceiptEvent } from './conversation'
+export type { Conversation, Message, MessageAttachment, MessagesReceiptEvent } from './conversation'
 export type { Inquiry } from './inquiry'
 export type { AgentReview, ReviewEligibility, FeaturedReview } from './review'
 

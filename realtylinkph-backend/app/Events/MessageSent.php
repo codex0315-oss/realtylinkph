@@ -37,6 +37,8 @@ class MessageSent implements ShouldBroadcastNow
 
     public function broadcastWith(): array
     {
+        $this->message->loadMissing('attachments');
+
         return [
             'id'              => $this->message->id,
             'conversation_id' => $this->message->conversation_id,
@@ -47,6 +49,8 @@ class MessageSent implements ShouldBroadcastNow
             'delivered_at'    => null,
             'read_at'         => null,
             'created_at'      => $this->message->created_at?->toISOString(),
+            'attachments'     => $this->message->attachments->map(fn ($a) => \App\Http\Resources\MessageAttachmentResource::shape($a))->values()->all(),
+            'attachment_summary' => $this->message->attachmentSummary(),
         ];
     }
 }

@@ -65,4 +65,27 @@ class Message extends Model
     {
         return $this->belongsTo(User::class, 'sender_id');
     }
+
+    /** Photos, videos and files sent with this message. */
+    public function attachments(): \Illuminate\Database\Eloquent\Relations\HasMany
+    {
+        return $this->hasMany(MessageAttachment::class)->orderBy('id');
+    }
+
+    /** "📷 2 photos" style summary for previews and notifications. */
+    public function attachmentSummary(): ?string
+    {
+        $kinds = $this->attachments->countBy('kind');
+        if ($kinds->isEmpty()) {
+            return null;
+        }
+        $parts = [];
+        foreach ([MessageAttachment::IMAGE => ['📷', 'photo'], MessageAttachment::VIDEO => ['🎥', 'video'], MessageAttachment::FILE => ['📄', 'file']] as $kind => [$icon, $word]) {
+            if ($n = $kinds->get($kind)) {
+                $parts[] = "{$icon} " . ($n === 1 ? ucfirst($word) : "{$n} {$word}s");
+            }
+        }
+
+        return implode(', ', $parts);
+    }
 }

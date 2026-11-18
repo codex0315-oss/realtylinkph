@@ -28,6 +28,10 @@ class MessageResource extends JsonResource
             'read_at'         => $this->read_at?->toISOString(),
             'created_at'      => $this->created_at?->toISOString(),
             'sender'          => UserResource::make($this->whenLoaded('sender')),
+            // Gone once unsent (the files are deleted too).
+            // Loaded here when a caller didn't, so an edit or pin response never drops them.
+            'attachments'     => $this->unsent_at ? [] : MessageAttachmentResource::collection($this->resource->loadMissing('attachments')->attachments),
+            'attachment_summary' => $this->unsent_at ? null : $this->attachmentSummary(),
         ];
     }
 }

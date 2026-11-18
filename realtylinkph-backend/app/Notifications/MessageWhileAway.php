@@ -35,7 +35,8 @@ class MessageWhileAway extends Notification implements ShouldQueue
     {
         $c        = $this->conversation->loadMissing(['property', 'buyer']);
         $frontend = config('app.frontend_url');
-        $preview  = mb_substr($this->message->body, 0, 300);
+        $summary  = $this->message->loadMissing('attachments')->attachmentSummary();
+        $preview  = trim(mb_substr($this->message->body, 0, 300) . ($summary ? " ({$summary})" : ''));
 
         return (new MailMessage())
             ->subject('New message from ' . $c->buyer->name . ' — ' . $c->property->title)

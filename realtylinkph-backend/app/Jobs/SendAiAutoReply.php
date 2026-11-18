@@ -59,10 +59,12 @@ class SendAiAutoReply implements ShouldQueue
         // Last 12 messages, oldest first, as a chat history. AI turns are "assistant".
         $history = Message::where('conversation_id', $conversation->id)
             ->whereNull('unsent_at')   // unsent messages are not part of the conversation any more
-            ->latest('id')->limit(12)->get()->reverse()->values()
+            ->with('attachments')->latest('id')->limit(12)->get()->reverse()->values()
             ->map(fn (Message $m) => [
                 'role'    => $m->is_ai ? 'assistant' : ($m->sender_id === $conversation->buyer_id ? 'user' : 'assistant'),
-                'content' => $m->body,
+                // The AI can't open photos, videos or files: it is told one was
+                // sent, so it can say the agent will see it when they're back.
+                'content' => trim($m->body . (($s = $m->attachmentSummary()) ? " [Sent {$s}. You cannot see attachments: tell them the agent will see it when they are back.]" : '')),
             ])->all();
 
         // Groq first (fast Llama), Gemini if Groq is unconfigured or fails —

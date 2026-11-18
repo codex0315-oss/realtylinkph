@@ -64,7 +64,7 @@ function preview(c: Conversation): string {
   if (!m) return 'Start a conversation'
   const mine = m.sender_id === me.value
   if (m.unsent) return mine ? 'You unsent a message' : 'Message unsent'
-  return `${mine ? 'You: ' : ''}${m.body}`
+  return `${mine ? 'You: ' : ''}${m.body || m.attachment_summary || ''}`
 }
 
 async function refresh() {

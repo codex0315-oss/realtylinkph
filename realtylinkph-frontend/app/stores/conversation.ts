@@ -47,8 +47,10 @@ export const useConversationStore = defineStore('conversation', () => {
    * Philippines to Oregon) before showing anything, which read as "lag". */
   let tempSeq = 0
 
-  function addPending(conversationId: number, senderId: number, body: string): Message {
+  function addPending(conversationId: number, senderId: number, body: string, attachments: Message['attachments'] = []): Message {
     const msg: Message = {
+      attachments,
+      upload_progress: attachments?.length ? 0 : undefined,
       id: -(++tempSeq),
       client_id: `c${Date.now()}-${tempSeq}`,
       conversation_id: conversationId,
@@ -125,7 +127,7 @@ export const useConversationStore = defineStore('conversation', () => {
   /** A message was unsent for everyone (by us, or the other side live). */
   function applyUnsent(id: number, conversationId: number): void {
     for (const m of activeMessages.value) {
-      if (m.id === id) { m.unsent = true; m.body = ''; m.pinned_at = null }
+      if (m.id === id) { m.unsent = true; m.body = ''; m.pinned_at = null; m.attachments = []; m.attachment_summary = null }
     }
     pinned.value = pinned.value.filter(m => m.id !== id)
     const conv = conversations.value.find(c => c.id === conversationId)

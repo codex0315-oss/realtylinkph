@@ -45,6 +45,7 @@ class MessageUpdated implements ShouldBroadcastNow
             'edited_at'       => $m->edited_at?->toISOString(),
             'pinned_at'       => $m->pinned_at?->toISOString(),
             'pinned_by_id'    => $m->pinned_by_id,
+            'attachments'     => $m->unsent_at ? [] : $m->loadMissing('attachments')->attachments->map(fn ($a) => \App\Http\Resources\MessageAttachmentResource::shape($a))->values()->all(),
         ];
     }
 }
