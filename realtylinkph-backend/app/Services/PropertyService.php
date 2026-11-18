@@ -428,7 +428,7 @@ class PropertyService
             $this->notifyBuyersOfNewListing($property->fresh());
         }
 
-        // RealtyLink AI checks it in the background (duplicates, contact details, payment requests).
+        // RealtyLink AI checks it in the background (contact details, payment requests).
         \App\Jobs\ScanListing::dispatch($property->id);
 
         return $property->fresh();

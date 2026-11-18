@@ -18,8 +18,8 @@ use Tests\Concerns\BuildsActors;
 use Tests\TestCase;
 
 /**
- * RealtyLink AI checks listings (duplicate photos/address, contact details,
- * payment requests); buyers can report them; an admin decides.
+ * RealtyLink AI checks listings (contact details, payment requests); buyers
+ * can report them; an admin decides. Duplicates are not flagged (PKS).
  */
 class ListingIntegrityWorkflowTest extends TestCase
 {
@@ -72,32 +72,21 @@ class ListingIntegrityWorkflowTest extends TestCase
         Http::assertNothingSent();
     }
 
-    public function test_photos_already_used_on_another_listing_are_flagged_and_admins_notified(): void
+    /**
+     * Agents from the same developer seminar (PKS) post the same project with the
+     * developer's photos, address and price. That is normal, so it is not flagged.
+     */
+    public function test_the_same_project_posted_by_several_agents_is_not_flagged(): void
     {
-        $owner = $this->agent();
-        $this->publish($owner, $this->draft($owner, [], 'abcdef0123456789'))->assertOk();
+        Http::fake();
+        $attrs = ['address' => 'Amaia Steps Mandaue, Mandaue City', 'price' => 4_500_000];
+        foreach (range(1, 3) as $_) {
+            $agent = $this->agent();
+            $this->publish($agent, $this->draft($agent, $attrs, 'abcdef0123456789'))->assertOk();
+        }
 
-        $copycat = $this->agent();
-        // One bit different: a re-saved copy of the same photo.
-        $copy = $this->draft($copycat, ['address' => 'Somewhere else, Mandaue City'], 'abcdef0123456788');
-        $this->publish($copycat, $copy)->assertOk();
-
-        $flag = PropertyFlag::where('property_id', $copy->id)->first();
-        $this->assertSame(['duplicate_photos'], $flag->reasons);
-        $this->assertFalse($flag->paused, 'advice only: the listing stays live');
-        $this->assertSame('published', $copy->fresh()->status);
-        $this->assertSame(1, $this->adminBells());
-    }
-
-    public function test_the_same_address_and_price_under_another_agent_is_flagged(): void
-    {
-        $a = $this->agent();
-        $this->publish($a, $this->draft($a, ['address' => 'Unit 5B, Solinea Tower 3, Cebu Business Park'], '0000000000000001'))->assertOk();
-        $b = $this->agent();
-        $dup = $this->draft($b, ['address' => 'unit 5b solinea tower 3 cebu business park', 'price' => 4_600_000], 'f0f0f0f0f0f0f0f0');
-        $this->publish($b, $dup)->assertOk();
-
-        $this->assertContains('duplicate_address', PropertyFlag::where('property_id', $dup->id)->value('reasons'));
+        $this->assertSame(0, PropertyFlag::count());
+        $this->assertSame(0, $this->adminBells());
     }
 
     public function test_contact_details_are_flagged_but_the_listing_stays_live(): void

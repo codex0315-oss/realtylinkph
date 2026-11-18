@@ -6,21 +6,22 @@ namespace App\Services;
 
 use App\Models\Property;
 use App\Models\PropertyFlag;
-use App\Models\PropertyPhoto;
 use App\Models\User;
 use App\Support\AdminAudit;
-use App\Support\ImageHash;
-use App\Support\Uploads;
 use Illuminate\Support\Facades\DB;
 
 /**
  * RealtyLink AI's listing checks. It finds, an administrator decides.
  *
- *   duplicate_photos   a photo already used on another listing (picture fingerprint)
- *   duplicate_address  same address and a similar price under another agent
  *   contact_info       phone numbers, emails or links in the description
  *   payment_request    the description asks buyers to send money first — the one
  *                      case that pauses the listing, because that's where buyers lose money
+ *
+ * Duplicate checks (same photos, same address) were taken out on purpose:
+ * agents from the same developer seminar (PKS) post the same project with
+ * the developer's photos, so they flagged honest agents. Photo fingerprints
+ * are still saved on upload (property_photos.phash) for a future, narrower
+ * check.
  *
  * Buyers can also report a listing (sold, wrong details, scam, photos don't
  * match). Every flag lands in the admin's Flagged tab and notifies admins.
@@ -28,6 +29,7 @@ use Illuminate\Support\Facades\DB;
 class ListingIntegrityService
 {
     public const LABELS = [
+        // No longer detected; kept so older flags still read properly.
         'duplicate_photos'     => 'Uses the same photos as another listing',
         'duplicate_address'    => 'Same address and a similar price as another agent\'s listing',
         'contact_info'         => 'Description has phone numbers, emails or outside links',
@@ -56,18 +58,9 @@ class ListingIntegrityService
     /** Check a listing (on publish and on edits) and open, update or close its AI flag. */
     public function scan(Property $property): ?PropertyFlag
     {
-        $property->loadMissing(['photos', 'agent']);
+        $property->loadMissing('agent');
         $reasons = [];
         $details = [];
-
-        if ($match = $this->duplicatePhotos($property)) {
-            $reasons[] = 'duplicate_photos';
-            $details['duplicate_photos'] = $match;
-        }
-        if ($match = $this->duplicateAddress($property)) {
-            $reasons[] = 'duplicate_address';
-            $details['duplicate_address'] = $match;
-        }
 
         $text = trim(($property->title ?? '') . "\n" . ($property->description ?? ''));
         $contacts = $this->contactDetails($text);
@@ -91,80 +84,6 @@ class ListingIntegrityService
         }
 
         return $this->saveAiFlag($property, $reasons, $details);
-    }
-
-    /** First photo on this listing that matches a photo on another listing. */
-    private function duplicatePhotos(Property $property): ?array
-    {
-        $mine = $property->photos->where('is_360', false);
-        foreach ($mine as $photo) {
-            $this->ensureHash($photo);
-        }
-        $mine = $mine->filter(fn ($p) => $p->phash);
-        if ($mine->isEmpty()) {
-            return null;
-        }
-
-        $match = null;
-        PropertyPhoto::whereNotNull('phash')->where('property_id', '!=', $property->id)->where('is_360', false)
-            ->select(['id', 'property_id', 'phash'])
-            ->chunkById(500, function ($others) use ($mine, &$match) {
-                foreach ($others as $other) {
-                    foreach ($mine as $p) {
-                        if (ImageHash::distance($p->phash, $other->phash) <= ImageHash::SAME_PHOTO_BITS) {
-                            $match = $other->property_id;
-
-                            return false;
-                        }
-                    }
-                }
-            });
-
-        if (! $match) {
-            return null;
-        }
-        $other = Property::with('agent')->find($match);
-
-        return $other ? ['property_id' => $other->id, 'title' => $other->title, 'agent' => $other->agent?->name, 'same_agent' => $other->agent_id === $property->agent_id] : null;
-    }
-
-    /** Fingerprint a photo that was uploaded before fingerprints existed. */
-    private function ensureHash(PropertyPhoto $photo): void
-    {
-        if ($photo->phash) {
-            return;
-        }
-        try {
-            $bytes = Uploads::disk()->get($photo->thumb_url ?: $photo->url);
-            if ($bytes && ($hash = ImageHash::fromBytes($bytes))) {
-                $photo->forceFill(['phash' => $hash])->saveQuietly();
-            }
-        } catch (\Throwable $e) {
-            report($e);
-        }
-    }
-
-    private function duplicateAddress(Property $property): ?array
-    {
-        $norm = self::normaliseAddress((string) $property->address);
-        if (mb_strlen($norm) < 8 || ! $property->price) {
-            return null;
-        }
-        $price = (float) $property->price;
-        $other = Property::with('agent')
-            ->where('id', '!=', $property->id)
-            ->where('agent_id', '!=', $property->agent_id)
-            ->where('status', 'published')
-            ->whereBetween('price', [$price * 0.9, $price * 1.1])
-            ->get(['id', 'title', 'address', 'price', 'agent_id'])
-            ->first(fn ($p) => self::normaliseAddress((string) $p->address) === $norm);
-
-        return $other ? ['property_id' => $other->id, 'title' => $other->title, 'agent' => $other->agent?->name] : null;
-    }
-
-    public static function normaliseAddress(string $a): string
-    {
-        return trim(preg_replace('/\s+/', ' ', preg_replace('/[^a-z0-9 ]/', ' ', mb_strtolower($a))));
     }
 
     /** Phone numbers, emails and links, partly masked so the admin sees what kind without the full number. */

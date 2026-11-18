@@ -38,14 +38,10 @@ class PropertyPhotoService
                 'is_360'      => $is360,
                 'sort_order'  => $nextOrder,
             ]);
-            // Picture fingerprint, so the same photo on another listing is noticed.
+            // Picture fingerprint. The duplicate-photo check is switched off for
+            // now (PKS agents share developer photos); kept for a future check.
             if (! $is360) {
                 $photo->forceFill(['phash' => \App\Support\ImageHash::fromFile($file->getRealPath())])->saveQuietly();
-            }
-
-            // A new photo on a live listing is checked again.
-            if ($property->status === 'published') {
-                \App\Jobs\ScanListing::dispatch($property->id)->afterCommit();
             }
 
             return $photo;
