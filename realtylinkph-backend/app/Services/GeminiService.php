@@ -142,20 +142,116 @@ class GeminiService
     /**
      * @param  array<int, array{mime:string,data:string}>  $images  optional property photos (base64)
      */
-    public function generatePropertyDescription(array $attributes, array $images = [], string $style = 'plain'): string
+    /**
+     * "Write it with AI", built to survive the free tier. Gemini's free plan
+     * often answers 429 (limit reached) or 503 (overloaded), and photo requests
+     * have no Groq equivalent, so a plain call failed far too often. Here:
+     *   1. the same request within 10 minutes is answered from cache;
+     *   2. at most 3 descriptions are written at once, the rest wait their turn;
+     *   3. photos go to Gemini with "thinking" off (faster, lighter on quota),
+     *      retried once on the lighter model if Gemini is busy;
+     *   4. if photos still can't be read, the description is written from the
+     *      details alone (Gemini lite, then Groq), and the agent is told so.
+     *
+     * @param  array<int, array{mime:string,data:string}>  $images
+     * @return array{description: string, used_photos: bool}|null  null only when every route failed
+     */
+    public function describeProperty(array $attributes, array $images = [], string $style = 'plain'): ?array
     {
-        $parts = [['text' => $this->buildDescriptionPrompt($attributes, ! empty($images), $style)]];
-
-        foreach ($images as $img) {
-            $parts[] = ['inline_data' => ['mime_type' => $img['mime'], 'data' => $img['data']]];
+        $key = 'ai-desc:' . md5(json_encode([$attributes, $style, array_map(fn ($i) => md5($i['data']), $images)]));
+        if (is_array($cached = \Illuminate\Support\Facades\Cache::get($key))) {
+            return $cached;
         }
 
-        $text = $this->call([
-            'contents'         => [['parts' => $parts]],
-            'generationConfig' => ['temperature' => 0.7],
-        ]);
+        $result = $this->withAiSlot(function () use ($attributes, $images, $style) {
+            $tidy = fn (?string $t) => $t === null || trim($t) === '' ? null
+                : ($style === 'emoji' ? self::tidyEmojiDescription($t) : trim($t));
+            $config = ['temperature' => 0.7, 'thinkingConfig' => ['thinkingBudget' => 0]];
 
-        return $style === 'emoji' ? self::tidyEmojiDescription((string) $text) : ($text ?? '');
+            if ($images !== []) {
+                $parts = [['text' => $this->buildDescriptionPrompt($attributes, true, $style)]];
+                foreach ($images as $img) {
+                    $parts[] = ['inline_data' => ['mime_type' => $img['mime'], 'data' => $img['data']]];
+                }
+                $payload = ['contents' => [['parts' => $parts]], 'generationConfig' => $config];
+
+                $first = $this->callModel('gemini-2.5-flash', $payload, 15);
+                if ($first['text'] === null && in_array($first['status'], [0, 429, 503], true)) {
+                    usleep(1_000_000);   // a busy model often frees up within a second
+                    $first = $this->callModel('gemini-2.5-flash-lite', $payload, 15);
+                }
+                if ($text = $tidy($first['text'])) {
+                    return ['description' => $text, 'used_photos' => true];
+                }
+            }
+
+            // From the details only: Gemini lite, then Groq (text works there).
+            $hasDetails = array_filter($attributes, static fn ($v) => $v !== null && $v !== '') !== [];
+            if (! $hasDetails) {
+                return null;
+            }
+            $payload = ['contents' => [['parts' => [['text' => $this->buildDescriptionPrompt($attributes, false, $style)]]]], 'generationConfig' => $config];
+            $text = $tidy($this->callModel('gemini-2.5-flash-lite', $payload, 10)['text'] ?? null)
+                ?? $tidy($this->viaGroq($payload));
+
+            return $text ? ['description' => $text, 'used_photos' => false] : null;
+        });
+
+        if ($result !== null) {
+            \Illuminate\Support\Facades\Cache::put($key, $result, now()->addMinutes(10));
+        }
+
+        return $result;
+    }
+
+    /** One Gemini model, one try. Status 0 = timeout or network error. */
+    private function callModel(string $model, array $payload, int $timeout): array
+    {
+        try {
+            $response = Http::withQueryParameters(['key' => config('services.gemini.api_key')])
+                ->timeout($timeout)
+                ->post($this->endpoint($model), $payload);
+            $text = $response->successful() ? $response->json('candidates.0.content.parts.0.text') : null;
+            if (! is_string($text) || $text === '') {
+                Log::warning('Gemini call failed', ['model' => $model, 'status' => $response->status()]);
+
+                return ['text' => null, 'status' => $response->status()];
+            }
+
+            return ['text' => $text, 'status' => $response->status()];
+        } catch (\Throwable $e) {
+            Log::warning('Gemini call exception', ['model' => $model, 'error' => $e->getMessage()]);
+
+            return ['text' => null, 'status' => 0];
+        }
+    }
+
+    /** At most this many heavy AI requests run at once; the rest wait their turn. */
+    public const AI_SLOTS = 3;
+
+    /**
+     * Take turns: a burst of clicks would otherwise hit Gemini's per-minute
+     * limit together. Waits up to 20 seconds for a free slot, then goes ahead
+     * anyway (better a try than an error).
+     */
+    private function withAiSlot(callable $work): mixed
+    {
+        $deadline = microtime(true) + 20;
+        do {
+            for ($i = 0; $i < self::AI_SLOTS; $i++) {
+                $lock = \Illuminate\Support\Facades\Cache::lock("ai-slot:{$i}", 90);
+                if ($lock->get()) {
+                    try {
+                        return $work();
+                    } finally {
+                        $lock->release();
+                    }
+                }
+            }
+            usleep(500_000);
+        } while (microtime(true) < $deadline);
+
+        return $work();
     }
 
     /** Property-related emoji the "With emoji" style may use. */

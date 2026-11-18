@@ -36,6 +36,46 @@ class DescriptionStyleWorkflowTest extends TestCase
         Http::assertSent(fn ($r) => str_contains(json_encode($r->data(), JSON_UNESCAPED_UNICODE), 'highlight lines'));
     }
 
+    /** Gemini busy on photos → written from the details instead, and the agent is told. */
+    public function test_when_photos_cannot_be_read_it_writes_from_the_details(): void
+    {
+        Http::fake(function ($request) {
+            if (str_contains($request->url(), 'api.groq.com')) {
+                return Http::response([], 500);
+            }
+
+            return str_contains($request->body(), 'inline_data')
+                ? Http::response(['error' => 'overloaded'], 503)
+                : Http::response(['candidates' => [['content' => ['parts' => [['text' => 'A bright two-bedroom condo near IT Park.']]]]]]);
+        });
+
+        $photo = \Illuminate\Http\UploadedFile::fake()->image('living.jpg', 1200, 800);
+        $this->actingAsUser($this->agent())
+            ->post('/api/ai/generate-description', ['type' => 'condo', 'address' => 'IT Park', 'photos' => [$photo]], ['Accept' => 'application/json'])
+            ->assertOk()
+            ->assertJsonPath('data.description', 'A bright two-bedroom condo near IT Park.')
+            ->assertJsonPath('data.used_photos', false);
+
+        // Photos tried on both models (busy → retry on the lighter one), then the details.
+        Http::assertSentCount(3);
+    }
+
+    public function test_a_clear_busy_answer_when_every_route_fails(): void
+    {
+        Http::fake(['*' => Http::response(['error' => 'quota'], 429)]);
+        $this->actingAsUser($this->agent())->postJson('/api/ai/generate-description', ['type' => 'condo', 'address' => 'IT Park'])
+            ->assertStatus(503)->assertJsonPath('message', 'RealtyLink AI is busy right now. Please try again in 30 seconds.');
+    }
+
+    public function test_repeat_clicks_with_the_same_details_use_the_cache(): void
+    {
+        $this->aiReturns('A bright two-bedroom condo near IT Park.');
+        $this->actingAsUser($this->agent())->postJson('/api/ai/generate-description', ['type' => 'condo', 'address' => 'Mabolo'])->assertOk();
+        $this->postJson('/api/ai/generate-description', ['type' => 'condo', 'address' => 'Mabolo'])->assertOk()
+            ->assertJsonPath('data.description', 'A bright two-bedroom condo near IT Park.');
+        Http::assertSentCount(1);   // the second click came from the 10-minute cache
+    }
+
     public function test_plain_is_the_default_and_unknown_styles_are_refused(): void
     {
         $this->aiReturns('A bright two-bedroom condo near IT Park.');

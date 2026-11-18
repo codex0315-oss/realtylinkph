@@ -188,15 +188,16 @@ export const useProperty = () => {
       style?: 'plain' | 'emoji'
     },
     photos: File[] = [],
-  ): Promise<string | null> {
+  ): Promise<{ description: string; used_photos: boolean } | null> {
     try {
       const fd = new FormData()
       for (const [k, v] of Object.entries(payload)) {
         if (v !== undefined && v !== null && v !== '') fd.append(k, String(v))
       }
-      photos.slice(0, 6).forEach(f => fd.append('photos[]', f))
-      const res = await api.postForm<ApiResponse<{ description: string }>>('/ai/generate-description', fd)
-      return res.data.description
+      // The server reads three small photos; sending more only slows the upload.
+      photos.slice(0, 3).forEach(f => fd.append('photos[]', f))
+      const res = await api.postForm<ApiResponse<{ description: string; used_photos: boolean }>>('/ai/generate-description', fd)
+      return res.data
     } catch (e) {
       error.value = extractError(e)
       return null

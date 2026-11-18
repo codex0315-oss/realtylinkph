@@ -100,20 +100,16 @@ async function removeExisting(photoId: number) {
   await fetchProperty(id)
 }
 
-const aiLoading = ref(false)
-const aiError   = ref('')
-const aiStyle   = ref<'plain' | 'emoji'>('plain')
+const { aiLoading, aiError, aiNote, aiStyle, waitLeft, run: runAi, buttonLabel } = useAiDescription()
 async function doGenerateDescription() {
   const newUploads = [...newPhotos.value, ...newPanoramas.value]
   if (!newUploads.length && !existingRegular.value.length && !form.address.trim()) {
     aiError.value = 'Add photos or fill in the address first.'
     return
   }
-  aiLoading.value = true
-  aiError.value   = ''
   // Not-yet-saved photos go along (each under the AI's 5 MB limit); without
   // any, the server reads the listing's saved photos instead.
-  const desc = await generateDescription({
+  const desc = await runAi(() => generateDescription({
     type:        form.type,
     offer_type:  form.offer_type,
     price:       form.price || undefined,
@@ -124,10 +120,8 @@ async function doGenerateDescription() {
     address:     form.address,
     property_id: id,
     style:       aiStyle.value,
-  }, newUploads.filter(f => f.size <= 5 * 1024 * 1024).slice(0, 6))
-  aiLoading.value = false
+  }, newUploads.filter(f => f.size <= 5 * 1024 * 1024).slice(0, 3)), newUploads.length + existingRegular.value.length > 0)
   if (desc) form.description = desc
-  else aiError.value = 'Could not generate a description. The AI may be busy — try again.'
 }
 
 async function submit() {
@@ -432,17 +426,18 @@ const labelCls = LISTING_LABEL_CLS
               <AiDescriptionStyle v-model="aiStyle" />
               <button
                 type="button"
-                :disabled="aiLoading"
+                :disabled="aiLoading || waitLeft > 0"
                 class="inline-flex items-center gap-1.5 rounded-full bg-brand-gold/15 py-1 pl-1 pr-3 text-xs font-bold text-brand-gold-deep ring-1 ring-brand-gold/40 hover:bg-brand-gold/25 dark:text-brand-gold disabled:opacity-50 transition"
                 @click="doGenerateDescription"
               >
                 <img src="/ai/avatar-96.webp" alt="" class="h-5 w-5 rounded-full bg-white" />
-                {{ aiLoading ? 'Reading your photos…' : 'Rewrite it with AI' }}
+                {{ buttonLabel('Rewrite it with AI') }}
               </button>
               </div>
             </div>
             <textarea id="el-desc" v-model="form.description" rows="7" :class="[fieldCls, 'resize-y leading-relaxed']" />
             <p v-if="aiError" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ aiError }}</p>
+            <p v-else-if="aiNote" class="mt-1 text-xs text-amber-700 dark:text-amber-400">{{ aiNote }}</p>
             <p v-else class="mt-1 text-xs text-brand-navy/45 dark:text-white/40">RealtyLink AI reads this listing's photos and details to draft it. You can edit it after.</p>
           </div>
         </section>

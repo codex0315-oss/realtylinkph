@@ -12,6 +12,9 @@ use Illuminate\Http\Request;
 
 class GeminiController extends Controller
 {
+    /** Photos sent to the AI for a description (small thumbnails). */
+    private const AI_PHOTOS = 3;
+
     public function __construct(private readonly GeminiService $service) {}
 
     public function generateDescription(Request $request): JsonResponse
@@ -40,32 +43,36 @@ class GeminiController extends Controller
             'type', 'offer_type', 'price', 'bedrooms', 'bathrooms', 'floor_area', 'lot_area', 'address',
         ]);
 
+        // Three small photos are plenty for a description: six full-size photos
+        // made the request slow and used up the free AI quota far faster.
         $images = [];
-        foreach ((array) $request->file('photos', []) as $file) {
+        foreach (array_slice((array) $request->file('photos', []), 0, self::AI_PHOTOS) as $file) {
+            $small = null;
+            try {
+                $small = \App\Support\ListingImage::process($file->getRealPath())['thumb'] ?? null;
+            } catch (\Throwable $e) {
+                report($e);
+            }
             $images[] = [
-                'mime' => $file->getMimeType() ?: 'image/jpeg',
-                'data' => base64_encode((string) file_get_contents($file->getRealPath())),
+                'mime' => $small ? 'image/jpeg' : ($file->getMimeType() ?: 'image/jpeg'),
+                'data' => base64_encode($small ?? (string) file_get_contents($file->getRealPath())),
             ];
         }
 
         if (empty($images) && $request->filled('property_id')) {
             $property = \App\Models\Property::with('photos')->find($request->integer('property_id'));
             if ($property && $property->agent_id === $request->user()->id) {
-                foreach ($property->photos->take(6) as $photo) {
+                foreach ($property->photos->where('is_360', false)->take(self::AI_PHOTOS) as $photo) {
                     // A photo storage can't hand back is skipped, not fatal:
                     // the description can still be written from the details.
                     try {
-                        $bytes = \App\Support\Uploads::disk()->get($photo->url);
+                        $bytes = \App\Support\Uploads::disk()->get($photo->thumb_url ?: $photo->url);
                     } catch (\Throwable $e) {
                         report($e);
                         continue;
                     }
                     if ($bytes === null || $bytes === '') continue;
-                    $ext = strtolower(pathinfo($photo->url, PATHINFO_EXTENSION));
-                    $images[] = [
-                        'mime' => $ext === 'png' ? 'image/png' : ($ext === 'webp' ? 'image/webp' : 'image/jpeg'),
-                        'data' => base64_encode($bytes),
-                    ];
+                    $images[] = ['mime' => 'image/jpeg', 'data' => base64_encode($bytes)];
                 }
             }
         }
@@ -74,9 +81,19 @@ class GeminiController extends Controller
             return ApiResponse::error('Add a few photos or details first so the AI has something to work with.', [], 422);
         }
 
-        $description = $this->service->generatePropertyDescription($attributes, $images, $request->input('style') === 'emoji' ? 'emoji' : 'plain');
+        @set_time_limit(90);   // worst case: photos, one retry, then the details-only route
+        $result = $this->service->describeProperty($attributes, $images, $request->input('style') === 'emoji' ? 'emoji' : 'plain');
 
-        return ApiResponse::success(['description' => $description], 'Description generated.', 200);
+        if ($result === null) {
+            // Was a 200 with an empty description, which the app showed as "busy" with no way to tell.
+            return ApiResponse::error('RealtyLink AI is busy right now. Please try again in 30 seconds.', [], 503);
+        }
+
+        return ApiResponse::success([
+            'description' => $result['description'],
+            // False when the photos couldn't be read and only the details were used.
+            'used_photos' => $result['used_photos'],
+        ], 'Description generated.', 200);
     }
 
     public function askQuestion(Request $request, Property $property): JsonResponse

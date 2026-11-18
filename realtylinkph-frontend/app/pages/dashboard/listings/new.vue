@@ -238,20 +238,16 @@ if (import.meta.client) {
 }
 
 /* ── AI description (multimodal — scans the uploaded photos) ── */
-const aiLoading = ref(false)
-const aiError   = ref('')
-const aiStyle   = ref<'plain' | 'emoji'>('plain')
+const { aiLoading, aiError, aiNote, aiStyle, waitLeft, run: runAi, buttonLabel } = useAiDescription()
 async function doGenerateDescription() {
   const shots = [...gallery.value, ...panos.value]
   if (!shots.length && !form.address.trim()) {
     aiError.value = 'Add a few photos (step 1) or fill in the address first.'
     return
   }
-  aiLoading.value = true
-  aiError.value   = ''
   // Files are still in memory during this visit; after a resume the API reads
   // the draft's photos from storage via property_id instead.
-  const desc = await generateDescription({
+  const desc = await runAi(() => generateDescription({
     type:        form.type,
     offer_type:  form.offer_type,
     price:       form.price || undefined,
@@ -266,10 +262,8 @@ async function doGenerateDescription() {
   // Photos already uploaded to the draft are read on the server, so nothing is
   // re-sent (and a big photo can't trip the 5 MB limit for AI uploads). Only
   // without a draft do the files go along: up to 6, each under 5 MB.
-  draftId.value ? [] : shots.map(s => s.file).filter((f): f is File => !!f && f.size <= 5 * 1024 * 1024).slice(0, 6))
-  aiLoading.value = false
+  draftId.value ? [] : shots.map(s => s.file).filter((f): f is File => !!f && f.size <= 5 * 1024 * 1024).slice(0, 3)), shots.length > 0)
   if (desc) form.description = desc
-  else aiError.value = 'Could not generate a description. The AI may be busy — try again.'
 }
 
 /* ── Finish ── */
@@ -641,17 +635,18 @@ onUnmounted(() => {
               <AiDescriptionStyle v-model="aiStyle" />
               <button
                 type="button"
-                :disabled="aiLoading"
+                :disabled="aiLoading || waitLeft > 0"
                 class="inline-flex items-center gap-1.5 rounded-full bg-brand-gold/15 py-1 pl-1 pr-3 text-xs font-bold text-brand-gold-deep ring-1 ring-brand-gold/40 hover:bg-brand-gold/25 dark:text-brand-gold disabled:opacity-50 transition"
                 @click="doGenerateDescription"
               >
                 <img src="/ai/avatar-96.webp" alt="" class="h-5 w-5 rounded-full bg-white" />
-                {{ aiLoading ? 'Reading your photos…' : 'Write it with AI' }}
+                {{ buttonLabel('Write it with AI') }}
               </button>
               </div>
             </div>
             <textarea id="nl-desc" v-model="form.description" rows="7" :class="[fieldCls, 'resize-y leading-relaxed']" placeholder="What makes this place special? Or let RealtyLink AI write it from your photos." />
             <p v-if="aiError" class="mt-1 text-xs text-red-600 dark:text-red-400">{{ aiError }}</p>
+            <p v-else-if="aiNote" class="mt-1 text-xs text-amber-700 dark:text-amber-400">{{ aiNote }}</p>
             <p v-else class="mt-1 text-xs text-brand-navy/45 dark:text-white/40">RealtyLink AI reads your {{ gallery.length + panos.length }} {{ gallery.length + panos.length === 1 ? 'photo' : 'photos' }} and these details to draft it. You can edit it after.</p>
           </div>
         </section>
