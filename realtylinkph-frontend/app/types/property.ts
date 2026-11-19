@@ -74,6 +74,8 @@ export interface PropertyFilters {
   lat?: number
   lng?: number
   radius?: number
+  /** "Search this area": "south,west,north,east". */
+  bounds?: string
   agent_id?: number
   page?: number
   /** Browse sort menu; the API falls back to newest. */

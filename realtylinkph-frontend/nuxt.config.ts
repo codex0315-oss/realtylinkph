@@ -31,10 +31,11 @@ const csp = [
   "script-src 'self' 'unsafe-inline'",
   "style-src 'self' 'unsafe-inline' https://fonts.googleapis.com",
   "font-src 'self' data: https://fonts.gstatic.com",
-  `img-src 'self' data: blob: ${apiOrigins} ${storageOrigin} https://*.tile.openstreetmap.org https://*.googleusercontent.com`,
+  // Map tiles, sprites and fonts: MapTiler (with a key) or OpenFreeMap (without).
+  `img-src 'self' data: blob: ${apiOrigins} ${storageOrigin} https://tiles.openfreemap.org https://api.maptiler.com https://*.googleusercontent.com`,
   // blob: — the 360° tour hands the viewer a panorama the page already
   // downloaded in the background (utils/panorama.ts); the viewer reads it back.
-  `connect-src 'self' blob: ${apiOrigins} ${storageOrigin} https://api.geoapify.com https://*.pusher.com wss://*.pusher.com https://*.tile.openstreetmap.org${devSockets}`,
+  `connect-src 'self' blob: ${apiOrigins} ${storageOrigin} https://api.geoapify.com https://*.pusher.com wss://*.pusher.com https://tiles.openfreemap.org https://api.maptiler.com${devSockets}`,
   // Chat videos play straight from storage (or the API in local dev).
   `media-src 'self' blob: ${apiOrigins} ${storageOrigin}`,
   "worker-src 'self' blob:",
@@ -158,6 +159,8 @@ export default defineNuxtConfig({
       apiBase:    process.env.NUXT_PUBLIC_API_BASE    || 'http://127.0.0.1:8000/api',
       appUrl:     process.env.NUXT_PUBLIC_APP_URL     || 'http://localhost:3000',
       geoapifyKey: process.env.NUXT_PUBLIC_GEOAPIFY_KEY || '',
+      // MapTiler map styles + satellite. Without it the maps use OpenFreeMap (no satellite).
+      maptilerKey: process.env.NUXT_PUBLIC_MAPTILER_KEY || '',
       reverbHost: process.env.NUXT_PUBLIC_REVERB_HOST || '127.0.0.1',
       reverbPort: process.env.NUXT_PUBLIC_REVERB_PORT || '8080',
       reverbKey:  process.env.NUXT_PUBLIC_REVERB_KEY  || '',

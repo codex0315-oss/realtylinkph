@@ -82,6 +82,24 @@ function fromQuery(q: typeof route.query): Filters {
 const filters = reactive<Filters>(fromQuery(route.query))
 const page = ref(Number(route.query.page ?? 1))
 
+/* ── Map area ("Search this area") and hover ↔ pin ── */
+const area = ref<import('~/components/PropertyMap.vue').MapBounds | null>(null)
+const hoverId = ref<number | null>(null)
+function onListHover(e: MouseEvent) {
+  const el = (e.target as HTMLElement).closest('[data-pid]') as HTMLElement | null
+  hoverId.value = el ? Number(el.dataset.pid) : null
+}
+function searchArea(b: import('~/components/PropertyMap.vue').MapBounds) {
+  area.value = b
+  page.value = 1
+  load()
+}
+function clearArea() {
+  area.value = null
+  page.value = 1
+  load()
+}
+
 /*
  * Map/List lives in the URL (`?view=map`), not component state. A buyer who
  * opens the map, taps a pin, reads the listing and presses Back should land
@@ -120,6 +138,7 @@ async function load() {
     bedrooms:   filters.bedrooms,
     has_360:    filters.has_360 ? 1 : undefined,
     sort:       filters.sort === 'newest' ? undefined : filters.sort,
+    bounds:     area.value ? [area.value.south, area.value.west, area.value.north, area.value.east].map(n => n.toFixed(5)).join(',') : undefined,
   })
 }
 
@@ -774,7 +793,15 @@ const segBtn = (on: boolean) =>
         <div
           :class="[showMap ? 'hidden lg:block lg:w-1/2 min-w-0' : 'w-full', loading && properties.length ? 'opacity-50 pointer-events-none' : '']"
           class="transition-opacity duration-200"
+          @mouseover="onListHover"
+          @mouseleave="hoverId = null"
         >
+          <!-- Results limited to the map area -->
+          <div v-if="area" class="mb-3 flex items-center gap-2 rounded-2xl bg-brand-gold/10 px-4 py-2.5 text-sm text-brand-navy ring-1 ring-brand-gold/30 dark:text-white">
+            <svg class="h-4 w-4 flex-none text-brand-gold-deep dark:text-brand-gold" fill="none" viewBox="0 0 24 24" stroke="currentColor" stroke-width="2" aria-hidden="true"><path stroke-linecap="round" stroke-linejoin="round" d="M9 6.75V15m6-6v8.25m.503 3.498l4.875-2.437c.381-.19.622-.58.622-1.006V4.82c0-.836-.88-1.38-1.628-1.006l-3.869 1.934c-.317.159-.69.159-1.006 0L9.503 3.252a1.125 1.125 0 00-1.006 0L3.622 5.689C3.24 5.88 3 6.27 3 6.695V19.18c0 .836.88 1.38 1.628 1.006l3.869-1.934c.317-.159.69-.159 1.006 0l4.994 2.497c.317.158.69.158 1.006 0z" /></svg>
+            <span class="min-w-0 flex-1">Showing listings in the map area</span>
+            <button type="button" class="flex-none font-semibold text-brand-gold-deep hover:underline dark:text-brand-gold" @click="clearArea">Show all</button>
+          </div>
           <PropertyGrid
             :properties="properties"
             :loading="loading && !properties.length"
@@ -861,7 +888,9 @@ const segBtn = (on: boolean) =>
               Show list<template v-if="pagination"> ({{ pagination.total }})</template>
             </button>
             <ClientOnly>
-              <PropertyMap :properties="properties" />
+              <PropertyMap :properties="properties" :highlight-id="hoverId" :area-active="!!area" @search-area="searchArea" />
+              <!-- Phones: the list is hidden behind the map, so say the area filter is on here. -->
+              <button v-if="area" type="button" class="lg:hidden absolute bottom-20 left-1/2 z-[500] -translate-x-1/2 rounded-full bg-white px-4 py-2 text-xs font-semibold text-brand-navy shadow-md ring-1 ring-black/5" @click="clearArea">Map area only · Show all</button>
               <template #fallback>
                 <div class="w-full h-full bg-gray-100 dark:bg-white/5 animate-pulse" />
               </template>

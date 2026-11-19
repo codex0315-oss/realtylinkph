@@ -40,7 +40,11 @@ const form = reactive({
   floor_area:  Number(property.value?.floor_area ?? 0) || undefined as number | undefined,
   lot_area:    Number(property.value?.lot_area ?? 0) || undefined as number | undefined,
   address:     property.value?.address     ?? '',
+  lat:         property.value?.lat ? Number(property.value.lat) : null as number | null,
+  lng:         property.value?.lng ? Number(property.value.lng) : null as number | null,
 })
+/** The agent dragged the pin (or tapped the map): save these coordinates as given. */
+const pinned = ref(false)
 
 const existingRegular = computed(() => property.value?.photos?.filter(p => !p.is_360) ?? [])
 const existing360     = computed(() => property.value?.photos?.filter(p => p.is_360) ?? [])
@@ -139,6 +143,8 @@ async function submit() {
     floor_area:  form.floor_area,
     lot_area:    form.lot_area,
     address:     form.address,
+    // Only a hand-placed pin is sent; otherwise the server looks a changed address up again.
+    ...(pinned.value && form.lat && form.lng ? { lat: form.lat, lng: form.lng } : {}),
   })
   if (!updated) { saving.value = false; return }
 
@@ -392,6 +398,9 @@ const labelCls = LISTING_LABEL_CLS
             <div>
               <label for="el-address" :class="labelCls">Address <span class="text-red-500">*</span></label>
               <input id="el-address" v-model="form.address" type="text" :class="fieldCls" />
+              <ClientOnly>
+                <LocationPicker v-model:lat="form.lat" v-model:lng="form.lng" v-model:pinned="pinned" :address="form.address" class="mt-3" />
+              </ClientOnly>
             </div>
             <div>
               <label for="el-price" :class="labelCls">{{ form.offer_type === 'rent' ? 'Monthly rent' : 'Price' }} <span class="text-red-500">*</span></label>

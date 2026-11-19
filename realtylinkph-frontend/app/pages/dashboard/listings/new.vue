@@ -27,7 +27,11 @@ const form = reactive({
   floor_area:  undefined as number | undefined,
   lot_area:    undefined as number | undefined,
   address:     '',
+  lat:         null as number | null,
+  lng:         null as number | null,
 })
+/** The agent dragged the pin (or tapped the map): save these coordinates as given. */
+const pinned = ref(false)
 
 /* ── Draft ──────────────────────────────────────────────────────────────────
  * Nothing lives only in the browser. The moment the agent adds a photo or
@@ -62,6 +66,8 @@ function payload() {
     floor_area:  form.floor_area,
     lot_area:    form.lot_area,
     address:     form.address,
+    // Only a hand-placed pin is sent; otherwise the server looks the address up.
+    ...(pinned.value && form.lat && form.lng ? { lat: form.lat, lng: form.lng } : {}),
   }
 }
 
@@ -197,6 +203,8 @@ async function resume(id: number): Promise<boolean> {
       floor_area:  p.floor_area != null ? Number(p.floor_area) : undefined,
       lot_area:    p.lot_area   != null ? Number(p.lot_area)   : undefined,
       address:     p.address ?? '',
+      lat:         p.lat ? Number(p.lat) : null,
+      lng:         p.lng ? Number(p.lng) : null,
     })
     const photos = p.photos ?? []
     gallery.value = photos.filter(ph => !ph.is_360).map(ph => ({ id: ph.id, url: ph.url, is360: false }))
@@ -222,7 +230,8 @@ function startFresh() {
   draftId.value = null
   resumed.value = false
   hydrating = true
-  Object.assign(form, { title: '', description: '', price: 0, type: 'house', offer_type: 'sale', bedrooms: undefined, bathrooms: undefined, floor_area: undefined, lot_area: undefined, address: '' })
+  Object.assign(form, { title: '', description: '', price: 0, type: 'house', offer_type: 'sale', bedrooms: undefined, bathrooms: undefined, floor_area: undefined, lot_area: undefined, address: '', lat: null, lng: null })
+  pinned.value = false
   gallery.value = []; panos.value = []
   nextTick(() => { hydrating = false; dirty = false; saveState.value = 'idle' })
   step.value = 1
@@ -599,6 +608,9 @@ onUnmounted(() => {
             <div>
               <label for="nl-address" :class="labelCls">Address <span class="text-red-500">*</span></label>
               <input id="nl-address" v-model="form.address" type="text" placeholder="123 Main St, Barangay, City" :class="fieldCls" />
+              <ClientOnly>
+                <LocationPicker v-model:lat="form.lat" v-model:lng="form.lng" v-model:pinned="pinned" :address="form.address" class="mt-3" />
+              </ClientOnly>
             </div>
             <div>
               <label for="nl-price" :class="labelCls">{{ form.offer_type === 'rent' ? 'Monthly rent' : 'Price' }} <span class="text-red-500">*</span></label>

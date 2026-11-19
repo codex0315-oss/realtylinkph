@@ -48,6 +48,7 @@ watch(() => props.properties, () => { batch.value++ })
         <div
           v-for="(p, i) in properties"
           :key="`${batch}-${p.id}`"
+          :data-pid="p.id"
           class="relative grid-card-in"
           :style="{ animationDelay: `${Math.min(i, 8) * 50}ms` }"
         >
@@ -57,7 +58,7 @@ watch(() => props.properties, () => { batch.value++ })
         </div>
       </template>
       <template v-else>
-        <PropertyCard v-for="p in properties" :key="p.id" :property="p" :quiet-toggle="quietToggle" @toggle="$emit('toggle', $event)" />
+        <PropertyCard v-for="p in properties" :key="p.id" :data-pid="p.id" :property="p" :quiet-toggle="quietToggle" @toggle="$emit('toggle', $event)" />
       </template>
     </div>
   </div>

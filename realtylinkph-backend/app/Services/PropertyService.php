@@ -137,6 +137,21 @@ class PropertyService
 
         return ucwords(strtolower(end($parts)));
     }
+    /** "10.25,123.85,10.36,123.95" → [south, west, north, east], or null if it isn't a sensible box. */
+    public static function parseBounds(string $raw): ?array
+    {
+        $parts = explode(',', $raw);
+        if (count($parts) !== 4 || array_filter($parts, fn ($p) => ! is_numeric(trim($p)))) {
+            return null;
+        }
+        [$s, $w, $n, $e] = array_map(fn ($p) => (float) $p, $parts);
+        if ($s < -90 || $n > 90 || $w < -180 || $e > 180 || $s >= $n || $w >= $e) {
+            return null;
+        }
+
+        return [$s, $w, $n, $e];
+    }
+
     public function list(array $filters = [], int $perPage = 15): LengthAwarePaginator
     {
         // agentProfile is needed for the "Verified" badge on property cards —
@@ -185,6 +200,11 @@ class PropertyService
         }
 
         // Browse's "Has 360° tour" quick filter.
+        // "Search this area" on the browse map: "south,west,north,east".
+        if (is_string($filters['bounds'] ?? null) && ($b = self::parseBounds($filters['bounds']))) {
+            $query->whereBetween('lat', [$b[0], $b[2]])->whereBetween('lng', [$b[1], $b[3]]);
+        }
+
         if (filter_var($filters['has_360'] ?? false, FILTER_VALIDATE_BOOLEAN)) {
             $query->whereHas('photos', fn ($q) => $q->where('is_360', true));
         }

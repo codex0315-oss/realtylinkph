@@ -617,7 +617,7 @@ onMounted(async () => {
           <h2 class="font-heading text-xl font-semibold text-brand-navy dark:text-white">Location</h2>
           <p class="mt-1 mb-4 text-sm text-brand-text-secondary dark:text-white/60">{{ property.address }}</p>
           <div class="overflow-hidden rounded-2xl ring-1 ring-brand-navy/[0.06] dark:ring-white/10">
-            <PropertyLocationMap :lat="property.lat" :lng="property.lng" :address="property.address" />
+            <PropertyLocationMap :lat="property.lat" :lng="property.lng" :address="property.address" :property-id="property.status === 'published' && property.lat && property.lng ? property.id : undefined" />
           </div>
         </section>
 
